@@ -279,12 +279,12 @@ Notation "t --> t'" := (red t t') (at level 68).
 
 (** Goal is to prove preservation and progress *)
 
-Definition preservation := forall E t t' T,
-  E |= t ~: T ->
+Definition preservation := forall K E t t' T,
+  K ; E |= t ~: T ->
   t --> t' ->
-  E |= t' ~: T.
+  K ; E |= t' ~: T.
 
-Definition progress := forall t T, 
-  empty |= t ~: T ->
+Definition progress := forall K t T, 
+  K ; empty |= t ~: T ->
      value t 
   \/ exists t', t --> t'.
