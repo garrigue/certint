@@ -29,6 +29,9 @@ Definition typ_fv_list :=
 
 (** Variants looking up a kinding environment *)
 
+Definition kind_fv k :=
+  typ_fv_list (kind_types k).
+
 Fixpoint close_fvars (n:nat)(K:kenv)(VK:vars)(Vs:vars) {struct n} : vars :=
   match n with
   | 0 => Vs
@@ -40,7 +43,7 @@ Fixpoint close_fvars (n:nat)(K:kenv)(VK:vars)(Vs:vars) {struct n} : vars :=
         match get x K with
         | None => Vs
         | Some k =>
-          close_fvars n' K VK' (Vs \u typ_fv_list (kind_types k))
+          close_fvars n' K VK' (Vs \u kind_fv k)
         end
     end
   end.
@@ -141,7 +144,9 @@ Ltac gather_vars :=
   let F := gather_vars_with (fun x : list typ => typ_fv_list x) in
   let G := gather_vars_with (fun x : env => env_fv x) in
   let H := gather_vars_with (fun x : sch => sch_fv x) in
-  constr:(A \u B \u C \u D \u E \u F \u G \u H).
+  let I := gather_vars_with (fun x : kenv => dom x) in
+  let J := gather_vars_with (fun x : kenv => fv_in kind_fv x) in
+  constr:(A \u B \u C \u D \u E \u F \u G \u H \u I \u J).
 
 Tactic Notation "pick_fresh" ident(x) :=
   let L := gather_vars in (pick_fresh_gen L x).
@@ -530,6 +535,41 @@ Proof.
   rewrite* <- typ_subst_open_vars.
 Qed.
 
+(* Extra properties *)
+
+Lemma list_forall_map(A B:Set)(f:A->B)(PA:A->Prop)(PB:B->Prop)(l:list A):
+  (forall x, In x l -> PA x -> PB (f x)) ->
+  list_forall PA l ->
+  list_forall PB (List.map f l).
+Proof.
+  intros; induction l.
+    simpl*.
+  inversion H0.
+  simpl; constructor; auto.
+Qed.
+
+Lemma list_for_n_map(A B:Set)(f:A->B)(PA:A->Prop)(PB:B->Prop)(n:nat)(l:list A):
+  (forall x, In x l -> PA x -> PB (f x)) ->
+  list_for_n PA n l ->
+  list_for_n PB n (List.map f l).
+Proof.
+  intros.
+  destruct H0; split. rewrite* map_length.
+  apply* list_forall_map.
+Qed.
+
+Lemma All_kind_types_map (f:typ->typ) (P : typ -> Prop) k:
+  (forall x, P x -> P (f x)) ->
+  All_kind_types P k -> All_kind_types P (kind_map f k).
+Proof.
+  intros. unfold All_kind_types in *.
+  unfold kind_types in *.
+  simpl.
+  induction* (kind_rel k).
+  destruct a; simpl in *.
+  destruct H0; split; auto.
+Qed.
+
 (** Schemes are stable by type substitution. *)
 
 Lemma sch_subst_type : forall Z U M,
@@ -537,14 +577,12 @@ Lemma sch_subst_type : forall Z U M,
 Proof.
   unfold scheme, sch_subst. intros Z U [n T Ks] TU S.
   simpls. destruct S as [L K]. exists (L \u {{Z}}).
-  introv Fr. destruct* (K Xs). split.
+  introv Fr. destruct* (K Xs); clear K. split.
     rewrite* typ_subst_open_vars.
-  destruct H0. constructor.
-    unfold kinds_subst; simpl. rewrite* map_length.
-  clear K; generalize n H0 H1; clear n H0 H1 Fr; induction Ks. auto.
-  simpl; intros. constructor.
-    case n; try discriminate.
-    eapply IHKs.
+  unfold kinds_subst. apply* list_for_n_map.
+  clear H0; intros.
+  apply* All_kind_types_map.
+  intros; rewrite* typ_subst_open_vars.
 Qed.
 
 Hint Resolve sch_subst_type.
@@ -564,7 +602,7 @@ Lemma sch_open_types : forall M Us,
   types (sch_arity M) Us ->
   type (sch_open M Us).
 Proof. 
-  unfold scheme, sch_open. intros [n T] Us WB [Ar TU].
+  unfold scheme, sch_open. intros [n T K] Us WB [Ar TU].
   simpls. subst n. apply* typ_open_types.
 Qed.
 
@@ -579,17 +617,18 @@ Hint Resolve sch_open_types.
 
 (** A typing relation is restricted to well-formed objects. *)
 
-Lemma typing_regular : forall E e T,
-  typing E e T -> ok E /\ term e /\ type T.
+Lemma typing_regular : forall K E e T,
+  typing K E e T -> ok E /\ term e /\ type T.
 Proof.
   split3; induction* H.
   (* ok *)
-  pick_fresh y. forward~ (H1 y) as K. inversions* K.
-  pick_fresh y. forward~ (H2 y) as K. inversions* K.
+  pick_fresh y. forward~ (H1 y) as G. inversions* G.
+  pick_fresh y. forward~ (H2 y) as G. inversions* G.
   (* term *) 
   apply_fresh* term_let as y.
     pick_freshes (sch_arity M) Xs.
-    forward~ (H0 Xs) as K.
+    forward~ (H0 Xs) as G.
+    unfold proper_instance in H2
   (* type *)
   pick_fresh y. forward~ (H1 y). 
   pick_fresh y. forward~ (H2 y).   
