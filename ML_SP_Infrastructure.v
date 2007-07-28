@@ -15,17 +15,19 @@ Require Import List Metatheory ML_SP_Definitions.
 
 (** Computing free variables of a type. *)
 
-Fixpoint typ_fv0 (T : typ) {struct T} : vars :=
+Fixpoint typ_fv (T : typ) {struct T} : vars :=
   match T with
   | typ_bvar i      => {}
   | typ_fvar x      => {{x}}
-  | typ_arrow T1 T2 => (typ_fv0 T1) \u (typ_fv0 T2)
+  | typ_arrow T1 T2 => (typ_fv T1) \u (typ_fv T2)
   end.
 
 (** Computing free variables of a list of terms. *)
 
-Definition typ_fv0_list :=
-  List.fold_right (fun t acc => typ_fv0 t \u acc) {}.
+Definition typ_fv_list :=
+  List.fold_right (fun t acc => typ_fv t \u acc) {}.
+
+(** Variants looking up a kinding environment *)
 
 Fixpoint close_fvars (n:nat)(K:kenv)(VK:vars)(Vs:vars) {struct n} : vars :=
   match n with
@@ -38,26 +40,26 @@ Fixpoint close_fvars (n:nat)(K:kenv)(VK:vars)(Vs:vars) {struct n} : vars :=
         match get x K with
         | None => Vs
         | Some k =>
-          close_fvars n' K VK' (Vs \u typ_fv0_list (kind_types k))
+          close_fvars n' K VK' (Vs \u typ_fv_list (kind_types k))
         end
     end
   end.
     
-Definition typ_fv K T :=
-  close_fvars (length K) K (dom K) (typ_fv0 T).
+Definition typ_fvk K T :=
+  close_fvars (length K) K (dom K) (typ_fv T).
 
-Definition typ_fv_list K Ts :=
-  close_fvars (length K) K (dom K) (typ_fv0_list Ts).
+Definition typ_fvk_list K Ts :=
+  close_fvars (length K) K (dom K) (typ_fv_list Ts).
 
 (** Computing free variables of a type scheme. *)
 
-Definition sch_fv K M := 
-  typ_fv_list K (sch_type M :: flat_map kind_types (sch_kinds M)).
+Definition sch_fv M := 
+  typ_fv_list (sch_type M :: flat_map kind_types (sch_kinds M)).
 
 (** Computing free type variables of the values of an environment. *)
 
-Definition env_fv K := 
-  fv_in (sch_fv K).
+Definition env_fv := 
+  fv_in sch_fv.
 
 (** Computing free variables of a term. *)
 
@@ -97,9 +99,12 @@ Definition kind_map f K :=
   Kind (kind_cstr K)
     (List.map (fun XT:var*typ => (fst XT, f (snd XT))) (kind_rel K)).
 
+Definition kinds_subst Z U K :=
+  List.map (kind_map (typ_subst Z U)) K.
+
 Definition sch_subst Z U M := 
   Sch (sch_arity M) (typ_subst Z U (sch_type M))
-      (List.map (kind_map (typ_subst Z U)) (sch_kinds M)).
+      (kinds_subst Z U (sch_kinds M)).
 
 (** Iterated substitution for schemes. *)
 
@@ -448,14 +453,15 @@ Qed.
 
 (** ** Opening a body with a list of types gives a type *)
 
-Lemma typ_open_types : forall T Us,
-  typ_body (length Us) T ->
+Lemma typ_open_types : forall T Us Ks,
+  typ_body (length Us) T Ks ->
   types (length Us) Us -> 
   type (typ_open T Us).
 Proof. 
   introv [L K] WT. pick_freshes (length Us) Xs. poses Fr' Fr.
   rewrite (fresh_length _ _ _  Fr) in WT, Fr'.
   rewrite* (@typ_substs_intro Xs). apply* typ_substs_types.
+  destruct* (K Xs).
 Qed.
 
 
@@ -464,18 +470,39 @@ Qed.
 
 (** Substitution for a fresh name is identity. *)
 
+Lemma kind_subst_fresh : forall X U K,
+  X \notin typ_fv_list (kind_types K) ->
+  kind_map (typ_subst X U) K = K.
+Proof.
+  intros. destruct K as [C R].
+  unfold kind_map. simpl. apply (f_equal (Kind C)).
+  unfold kind_types in H. simpl in H.
+  induction* R.
+  destruct a; simpl in H.
+  simpl; rewrite* IHR.
+  rewrite* typ_subst_fresh.
+Qed.
+
 Lemma sch_subst_fresh : forall X U M, 
   X \notin sch_fv M -> 
   sch_subst X U M = M.
 Proof.
-  intros. destruct M as [n T]. unfold sch_subst.
+  intros. destruct M as [n T K]. unfold sch_subst.
   rewrite* typ_subst_fresh.
+    simpl. apply (f_equal (Sch n T)).
+    induction* K. unfold sch_fv in *; simpl in *; rewrite* IHK.
+      rewrite* kind_subst_fresh.
+      rewrite fv_list_map in H; auto*.
+    intro nu; elim H.
+    destruct (proj1 (in_union _ _ _) nu); auto with sets.
+    rewrite fv_list_map; auto with sets.
+  unfold sch_fv in H; simpl in *. auto.
 Qed.
 
 (** Trivial lemma to unfolding definition of [sch_subst] by rewriting. *)
 
-Lemma sch_subst_fold : forall Z U T n,
-  Sch n (typ_subst Z U T) = sch_subst Z U (Sch n T).
+Lemma sch_subst_fold : forall Z U T n K,
+  Sch n (typ_subst Z U T) (kinds_subst Z U K) = sch_subst Z U (Sch n T K).
 Proof.
   auto.
 Qed. 
@@ -508,9 +535,16 @@ Qed.
 Lemma sch_subst_type : forall Z U M,
   type U -> scheme M -> scheme (sch_subst Z U M).
 Proof.
-  unfold scheme, sch_subst. intros Z U [n T] TU S.
+  unfold scheme, sch_subst. intros Z U [n T Ks] TU S.
   simpls. destruct S as [L K]. exists (L \u {{Z}}).
-  introv Fr. rewrite* typ_subst_open_vars.
+  introv Fr. destruct* (K Xs). split.
+    rewrite* typ_subst_open_vars.
+  destruct H0. constructor.
+    unfold kinds_subst; simpl. rewrite* map_length.
+  clear K; generalize n H0 H1; clear n H0 H1 Fr; induction Ks. auto.
+  simpl; intros. constructor.
+    case n; try discriminate.
+    eapply IHKs.
 Qed.
 
 Hint Resolve sch_subst_type.
