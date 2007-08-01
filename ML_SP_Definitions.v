@@ -198,8 +198,8 @@ Fixpoint For_all2(A B:Set)(P:A->B->Prop)(l1:list A)(l2:list B) {struct l1}
   end.
 
 Definition proper_instance K M Us :=
-  types (sch_arity M) Us ->
-  scheme M ->
+  types (sch_arity M) Us /\
+  scheme M /\
   For_all2 (well_kinded K Us) (sch_kinds M) Us.
 
 (** Definition of typing environments *)

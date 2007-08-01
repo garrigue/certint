@@ -628,7 +628,7 @@ Proof.
   apply_fresh* term_let as y.
     pick_freshes (sch_arity M) Xs.
     forward~ (H0 Xs) as G.
-    unfold proper_instance in H2
+    unfold proper_instance in H2. auto*.
   (* type *)
   pick_fresh y. forward~ (H1 y). 
   pick_fresh y. forward~ (H2 y).   
