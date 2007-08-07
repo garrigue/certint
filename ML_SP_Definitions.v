@@ -24,11 +24,12 @@ Definition typ_def := typ_bvar 0.
 
 Parameter cstr : Set.
 Parameter cstr_entails : cstr -> cstr -> Prop.
-Parameter KU : cstr.
 
-Record kind : Set := Kind {
+Record ckind : Set := Kind {
   kind_cstr : cstr;
   kind_rel  : list (var*typ) }.
+
+Definition kind := option ckind.
 
 Definition entails K K' :=
   cstr_entails (kind_cstr K) (kind_cstr K') /\
@@ -91,7 +92,10 @@ Definition types := list_for_n type.
 (** Iterating and opening kinds *)
 
 Definition kind_types K :=
-  List.map (fun (x:var*typ) => snd x) (kind_rel K).
+  match K with
+  | None => nil
+  | Some k => List.map (fun (x:var*typ) => snd x) (kind_rel k)
+  end.
 
 Fixpoint For_all(A:Set)(P:A->Prop)(l:list A) {struct l} : Prop :=
   match l with
@@ -103,8 +107,13 @@ Definition All_kind_types (P:typ->Prop) K :=
   For_all P (kind_types K).
 
 Definition kind_open K Vs :=
-  Kind (kind_cstr K)
-       (List.map (fun F:var*typ => (fst F, typ_open (snd F) Vs)) (kind_rel K)).
+  match K with
+  | None => None
+  | Some k =>
+    Some (Kind (kind_cstr k)
+               (List.map (fun F:var*typ => (fst F, typ_open (snd F) Vs))
+                 (kind_rel k)))
+  end.
 
 (** Body of a scheme *)
 
@@ -181,13 +190,13 @@ Definition kenv := env kind.
 
 (** Proper instanciation *)
 
-Inductive well_kinded : kenv -> list typ -> kind -> typ -> Prop :=
-  | wk_any : forall K Us T,
-      well_kinded K Us (Kind KU nil) T
-  | wk_kind : forall K Us k x k',
-      binds x k' K ->
-      entails k' (kind_open k Us) ->
-      well_kinded K Us k (typ_fvar x).
+Inductive well_kinded : kenv -> kind -> typ -> Prop :=
+  | wk_any : forall K T,
+      well_kinded K None T
+  | wk_kind : forall K k x k',
+      binds x (Some k') K ->
+      entails k' k ->
+      well_kinded K (Some k) (typ_fvar x).
 
 Fixpoint For_all2(A B:Set)(P:A->B->Prop)(l1:list A)(l2:list B) {struct l1}
   : Prop :=
@@ -197,10 +206,13 @@ Fixpoint For_all2(A B:Set)(P:A->B->Prop)(l1:list A)(l2:list B) {struct l1}
   | _ => False
   end.
 
+Definition kinds_open Ks Us :=
+  List.map (fun k:kind => kind_open k Us) Ks.
+
 Definition proper_instance K M Us :=
   types (sch_arity M) Us /\
   scheme M /\
-  For_all2 (well_kinded K Us) (sch_kinds M) Us.
+  For_all2 (well_kinded K) (kinds_open (sch_kinds M) Us) Us.
 
 (** Definition of typing environments *)
 
@@ -211,8 +223,7 @@ Definition env := env sch.
 Reserved Notation "K ; E |= t ~: T" (at level 69).
 
 Definition kind_open_vars Ks Xs :=
-  let Us := typ_fvars Xs in
-  List.combine Xs (List.map (fun k:kind => kind_open k Us) Ks).
+  List.combine Xs (kinds_open Ks (typ_fvars Xs)).
 
 Inductive typing : kenv -> env -> trm -> typ -> Prop :=
   | typing_var : forall K E x M Us,

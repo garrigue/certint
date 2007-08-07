@@ -99,8 +99,13 @@ Fixpoint typ_substs (Zs : list var) (Us : list typ) (T : typ)
 (** Substitution for names for schemes. *)
 
 Definition kind_map f K :=
-  Kind (kind_cstr K)
-    (List.map (fun XT:var*typ => (fst XT, f (snd XT))) (kind_rel K)).
+  match K with
+  | None => None
+  | Some k =>
+    Some (Kind (kind_cstr k)
+               (List.map (fun XT:var*typ => (fst XT, f (snd XT)))
+                 (kind_rel k)))
+  end.
 
 Definition kinds_subst Z U K :=
   List.map (kind_map (typ_subst Z U)) K.
@@ -111,9 +116,13 @@ Definition sch_subst Z U M :=
 
 (** Iterated substitution for schemes. *)
 
+Definition kinds_substs Zs Us :=
+  List.map (kind_map (typ_substs Zs Us)).
+
 Definition sch_substs Zs Us M := 
-  Sch (sch_arity M) (typ_substs Zs Us (sch_type M))
-      (List.map (kind_map (typ_substs Zs Us)) (sch_kinds M)).
+  Sch (sch_arity M)
+      (typ_substs Zs Us (sch_type M))
+      (kinds_substs Zs Us (sch_kinds M)).
 
 (** Substitution for name in a term. *)
 
@@ -479,8 +488,9 @@ Lemma kind_subst_fresh : forall X U K,
   X \notin typ_fv_list (kind_types K) ->
   kind_map (typ_subst X U) K = K.
 Proof.
-  intros. destruct K as [C R].
-  unfold kind_map. simpl. apply (f_equal (Kind C)).
+  intros.
+  destruct* K as [[C R]|].
+  unfold kind_map. simpl. apply (f_equal (fun R => Some (Kind C R))).
   unfold kind_types in H. simpl in H.
   induction* R.
   destruct a; simpl in H.
@@ -564,6 +574,8 @@ Lemma All_kind_types_map (f:typ->typ) (P : typ -> Prop) k:
 Proof.
   intros. unfold All_kind_types in *.
   unfold kind_types in *.
+  simpl.
+  destruct* k as [k|].
   simpl.
   induction* (kind_rel k).
   destruct a; simpl in *.
