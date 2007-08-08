@@ -104,12 +104,11 @@ Definition kind_map f K :=
                  (kind_rel k)))
   end.
 
-Definition kinds_subst S K :=
-  List.map (kind_map (typ_subst S)) K.
+Definition kind_subst S := kind_map (typ_subst S).
 
 Definition sch_subst S M := 
   Sch (sch_arity M) (typ_subst S (sch_type M))
-      (kinds_subst S (sch_kinds M)).
+      (List.map (kind_subst S) (sch_kinds M)).
 
 (** Substitution for name in a term. *)
 
@@ -572,7 +571,7 @@ Qed.
 
 Lemma kind_subst_fresh : forall S K,
   disjoint (dom S) (typ_fv_list (kind_types K)) ->
-  kind_map (typ_subst S) K = K.
+  kind_subst S K = K.
 Proof.
   intros.
   destruct* K as [[C R]|].
@@ -606,7 +605,7 @@ Qed.
 (** Trivial lemma to unfolding definition of [sch_subst] by rewriting. *)
 
 Lemma sch_subst_fold : forall S T n K,
-  Sch n (typ_subst S T) (kinds_subst S K) = sch_subst S (Sch n T K).
+  Sch n (typ_subst S T) (List.map (kind_subst S) K) = sch_subst S (Sch n T K).
 Proof.
   auto.
 Qed. 
@@ -680,9 +679,9 @@ Proof.
   simpls. destruct TS as [L K]. exists (L \u dom S).
   introv Fr. destruct* (K Xs); clear K. split.
     rewrite* typ_subst_open_vars.
-  unfold kinds_subst. apply* list_for_n_map.
+  apply* list_for_n_map.
   clear H0; intros.
-  apply* All_kind_types_map.
+  unfold kind_subst; apply* All_kind_types_map.
   intros; rewrite* typ_subst_open_vars.
 Qed.
 
