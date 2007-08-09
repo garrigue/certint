@@ -32,6 +32,9 @@ Definition typ_fv_list :=
 Definition kind_fv k :=
   typ_fv_list (kind_types k).
 
+Definition kind_fv_list :=
+  List.fold_right (fun t acc => kind_fv t \u acc) {}.
+
 Fixpoint close_fvars (n:nat)(K:kenv)(VK:vars)(Vs:vars) {struct n} : vars :=
   match n with
   | 0 => Vs
@@ -107,8 +110,7 @@ Definition kind_map f K :=
 Definition kind_subst S := kind_map (typ_subst S).
 
 Definition sch_subst S M := 
-  Sch (sch_arity M) (typ_subst S (sch_type M))
-      (List.map (kind_subst S) (sch_kinds M)).
+  Sch (typ_subst S (sch_type M)) (List.map (kind_subst S) (sch_kinds M)).
 
 (** Substitution for name in a term. *)
 
@@ -141,7 +143,8 @@ Ltac gather_vars :=
   let H := gather_vars_with (fun x : sch => sch_fv x) in
   let I := gather_vars_with (fun x : kenv => dom x) in
   let J := gather_vars_with (fun x : kenv => fv_in kind_fv x) in
-  constr:(A \u B \u C \u D \u E \u F \u G \u H \u I \u J).
+  let K := gather_vars_with (fun x : list kind => kind_fv_list x) in
+  constr:(A \u B \u C \u D \u E \u F \u G \u H \u I \u J \u K).
 
 Tactic Notation "pick_fresh" ident(x) :=
   let L := gather_vars in (pick_fresh_gen L x).
@@ -589,9 +592,9 @@ Lemma sch_subst_fresh : forall S M,
   disjoint (dom S) (sch_fv M) -> 
   sch_subst S M = M.
 Proof.
-  intros. destruct M as [n T K]. unfold sch_subst.
+  intros. destruct M as [T K]. unfold sch_subst.
   rewrite* typ_subst_fresh.
-    simpl. apply (f_equal (Sch n T)).
+    simpl. apply (f_equal (Sch T)).
     induction* K. unfold sch_fv in *; simpl in *; rewrite* IHK.
       rewrite* kind_subst_fresh.
       rewrite fv_list_map in H; auto*.
@@ -604,8 +607,8 @@ Qed.
 
 (** Trivial lemma to unfolding definition of [sch_subst] by rewriting. *)
 
-Lemma sch_subst_fold : forall S T n K,
-  Sch n (typ_subst S T) (List.map (kind_subst S) K) = sch_subst S (Sch n T K).
+Lemma sch_subst_fold : forall S T K,
+  Sch (typ_subst S T) (List.map (kind_subst S) K) = sch_subst S (Sch T K).
 Proof.
   auto.
 Qed. 
@@ -675,9 +678,11 @@ Qed.
 Lemma sch_subst_type : forall S M,
   env_prop type S -> scheme M -> scheme (sch_subst S M).
 Proof.
-  unfold scheme, sch_subst. intros S [n T Ks] TU TS.
+  unfold scheme, sch_subst. intros S [T Ks] TU TS.
   simpls. destruct TS as [L K]. exists (L \u dom S).
-  introv Fr. destruct* (K Xs); clear K. split.
+  unfold sch_arity in *; simpl; rewrite map_length; introv Fr.
+    simpls; destruct* (K Xs); clear K. destruct* (fresh_union_r _ _ _ _ Fr).
+  split.
     rewrite* typ_subst_open_vars.
   apply* list_for_n_map.
   clear H0; intros.
@@ -692,7 +697,7 @@ Hint Resolve sch_subst_type.
 Lemma sch_subst_arity : forall S M, 
   sch_arity (sch_subst S M) = sch_arity M.
 Proof.
-  auto.
+  intros; unfold sch_arity. simpl; rewrite* map_length.
 Qed.
 
 (** ** Opening a scheme with a list of types gives a type *)
@@ -702,8 +707,8 @@ Lemma sch_open_types : forall M Us,
   types (sch_arity M) Us ->
   type (sch_open M Us).
 Proof. 
-  unfold scheme, sch_open. intros [n T K] Us WB [Ar TU].
-  simpls. subst n. apply* typ_open_types.
+  unfold scheme, sch_open. intros [T K] Us WB [Ar TU].
+  simpls. rewrite Ar in *. apply* typ_open_types.
 Qed.
 
 Hint Resolve sch_open_types.

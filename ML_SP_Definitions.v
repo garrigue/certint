@@ -38,9 +38,10 @@ Definition entails K K' :=
 (** Type schemes. *)
 
 Record sch : Set := Sch { 
-  sch_arity : nat ; 
   sch_type  : typ ;
   sch_kinds : list kind }.
+
+Definition sch_arity M := length (sch_kinds M).
 
 (** Opening body of type schemes. *)
 
@@ -235,7 +236,7 @@ Inductive typing : kenv -> env -> trm -> typ -> Prop :=
   | typing_abs : forall L K E U T t1, 
       type U ->
       (forall x, x \notin L -> 
-        K ; (E & x ~ Sch 0 U nil) |= (t1 ^ x) ~: T) -> 
+        K ; (E & x ~ Sch U nil) |= (t1 ^ x) ~: T) -> 
       K ; E |= (trm_abs t1) ~: (typ_arrow U T)
   | typing_let : forall M L1 L2 K E T2 t1 t2, 
       (forall Xs, fresh L1 (sch_arity M) Xs ->
