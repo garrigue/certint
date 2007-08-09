@@ -9,18 +9,6 @@ Require Import List Metatheory
   ML_SP_Infrastructure.
 
 (* ********************************************************************** *)
-(** Typing schemes for expressions *)
-
-Definition has_scheme_vars L K E t M := forall Xs, 
-  fresh L (sch_arity M) Xs ->
-  K & kind_open_vars (sch_kinds M) Xs ; E |= t ~: (M ^ Xs).
-
-Definition has_scheme K E t M := forall Vs,
-  types (sch_arity M) Vs ->
-  For_all2 (well_kinded K) (kinds_open (sch_kinds M) Vs) Vs ->
-  K ; E |= t ~: (M ^^ Vs).
-
-(* ********************************************************************** *)
 (** Type substitution preserves typing *)
 
 Definition binds_prop (A : Set) (P : var -> A -> Prop) (E : Env.env A) :=
@@ -319,17 +307,42 @@ Proof.
   intros. split; auto. apply cstr_entails_refl.
 Qed.
 
-Lemma typing_typ_subst : forall F S K K' E t T,
+Fixpoint mkset (l:list var) {struct l} : vars :=
+  match l with
+  | nil => {}
+  | h :: t => {{h}} \u mkset t
+  end.
+
+Lemma mkset_dom : forall (A:Set) Xs (As:list A),
+  length Xs = length As -> dom (combine Xs As) = mkset Xs.
+Proof.
+  induction Xs; destruct As; simpl; intros; try discriminate.
+    auto.
+  rewrite* IHXs.
+Qed.
+
+Lemma fresh_disjoint : forall n Xs L,
+  fresh L n Xs -> disjoint (mkset Xs) L.
+Proof.
+  induction n; destruct Xs; simpl; intros; auto*.
+    intro; auto.
+  destruct H.
+  intro x.
+  assert (fresh L n Xs). auto*.
+  destruct* (IHn Xs L H1 x).
+  destruct* (eq_var_dec x v).
+Qed.
+
+Lemma typing_typ_subst : forall F K' S K E t T,
   disjoint (dom S) (env_fv E \u fv_in kind_fv K) ->
-  disjoint (dom K) (dom K') ->
   env_prop type S ->
   well_subst (K & K') (K & map (kind_subst S) K') S ->
   K & K' ; E & F |= t ~: T -> 
   K & map (kind_subst S) K'; E & (map (sch_subst S) F) |= t ~: (typ_subst S T).
 Proof.
-  introv. intros Dis DisK TS WS Typ.
+  introv. intros Dis TS WS Typ.
   gen_eq (K & K') as GK; gen_eq (E & F) as G; gen K'; gen F.
-  induction Typ; introv DisK WS EQ EQ'; subst; simpls typ_subst.
+  induction Typ; introv WS EQ EQ'; subst; simpls typ_subst.
   rewrite~ sch_subst_open. apply* typing_var.
     binds_cases H1.
       apply* binds_concat_fresh.
@@ -371,7 +384,6 @@ Proof.
        apply (in_dom_combine _ _ H).
      left; intro inK; rewrite (S.mem_1 inK) in H. discriminate.
    apply* H0; clear H H0 H1 H2.
-     intro x; destruct* (KxYs x). destruct* (DisK x).
      intro x; intros.
      destruct* (binds_concat_inv H).
        destruct H0. generalize (WS x a H1); intro HW; clear H WS.
@@ -399,6 +411,100 @@ Proof.
 Qed.
 
 (* ********************************************************************** *)
+(** Iterated type substitution preserves typing *)
+
+(*
+Lemma typing_typ_substs : forall Zs Us E t T,
+  fresh (env_fv E) (length Zs) Zs -> 
+  types (length Zs) Us ->
+  E |= t ~: T -> 
+  E |= t ~: (typ_substs Zs Us T).
+Proof.
+  induction Zs; destruct Us; simpl; introv Fr WU Tt;
+   destruct Fr; inversions WU; 
+   simpls; try solve [ auto | contradictions* ].
+  inversions H2. inversions H1. clear H2 H1.
+  apply* IHZs. apply_empty* typing_typ_subst.
+Qed.
+*)
+
+
+Lemma typing_typ_substs : forall S K K' E t T,
+  disjoint (dom S) (env_fv E \u fv_in kind_fv K \u dom K) -> 
+  dom K' << dom S ->
+  disjoint (dom K') (fv_in typ_fv S) ->
+  well_subst (K & K') K S ->
+  env_prop type S ->
+  K & K'; E |= t ~: T -> 
+  K ; E |= t ~: (typ_subst S T).
+Proof.
+  intros.
+  gen_eq (K & K') as G.
+  induction H4; intro EQ; subst.
+  rewrite~ sch_subst_open. apply* typing_var.
+    destruct* (ok_concat_inv _ _ H4).
+  
+  generalize (typing_typ_subst empty); intro TTS.
+  simpl in TTS.
+
+Lemma typing_typ_substs : forall S K E t T,
+  disjoint (dom S) (env_fv E \u fv_in kind_fv K \u dom K) -> 
+  env_prop type S ->
+  K ; E |= t ~: T -> 
+  K ; E |= t ~: (typ_subst S T).
+Proof.
+  intros.
+  generalize (typing_typ_subst empty empty); intro TTS.
+  simpl in TTS.
+  apply* TTS; clear TTS.
+    intro v; destruct* (H v).
+    intro v; auto.
+  intro x; intros.
+  destruct a; try constructor.
+  simpl.
+  case_eq (get x S); intros.
+    elim (binds_fresh H2).
+    destruct* (H x).
+    elim (binds_fresh H3 H4).
+  eapply wk_kind.
+    apply H2.
+  destruct* c as [kc kr]. split. apply cstr_entails_refl.
+  assert (disjoint (dom S) (typ_fv_list (List.map (fun x => snd x) kr))).
+    intro v; destruct* (H v).
+    generalize (fv_in_spec kind_fv H2); intro.
+    unfold kind_fv at 1 in H5; simpl in H5.
+    right; intro.
+    generalize (H5 _ H6). auto*.
+  simpl; clear H2 H3 kc x; intro.
+  induction* kr.
+  destruct a; destruct T0; simpl.
+  rewrite typ_subst_fresh.
+    intros [e | i]; auto*.
+    right; apply* IHkr.
+    simpl in H4; intro x; destruct* (H4 x).
+  simpl in H4; intro x; destruct* (H4 x).
+Qed.
+
+(*
+Lemma strengthen_kenv : forall K K' E t T,
+  disjoint (dom K') (fv_in kind_fv K \u env_fv E \u typ_fv T) ->
+  K & K'; E |= t ~: T ->
+  K ; E |= t ~: T
+*)  
+  
+(* ********************************************************************** *)
+(** Typing schemes for expressions *)
+
+Definition has_scheme_vars L K E t M := forall Xs,
+  fresh L (sch_arity M) Xs ->
+  K & kind_open_vars (sch_kinds M) Xs; E |= t ~: (M ^ Xs).
+
+Definition has_scheme K E t M := forall Vs,
+  types (sch_arity M) Vs ->
+  For_all2 (well_kinded K) (kinds_open (sch_kinds M) Vs) Vs ->
+  K ; E |= t ~: (M ^^ Vs).
+
+(* ********************************************************************** *)
 (** Type schemes of terms can be instanciated *)
 
 Lemma has_scheme_from_vars : forall L K E t M,
@@ -408,29 +514,40 @@ Proof.
   intros L K E t [n T Ks] H Vs TV. unfold sch_open. simpls.
   pick_freshes n Xs.
   rewrite (fresh_length _ _ _ Fr) in TV, H.
-
-  rewrite~ (@typ_substs_intro Xs Vs T).
+  rewrite~ (@typ_subst_intro Xs Vs T).
   unfolds has_scheme_vars sch_open_vars. simpls.
-  apply* typing_typ_substs.
+  intro WK.
+  generalize (typing_typ_subst empty); intro TTS.
+  simpl in TTS.
+  eapply TTS.
+    rewrite* mkset_dom.
+    intro x; destruct* ((fresh_disjoint _ _ _ Fr) x).
+    right; intro; elim H0; clear H0 Fr.
+    destruct (proj1 (in_union _ _ _) H1); auto with sets.
+    destruct* (proj1 (in_union _ _ _) H0); auto with sets.
+    destruct* TV.
+    apply* types_combine.
+  apply* H.
 Qed.
 
 (* ********************************************************************** *)
 (** A term that has type T has type scheme "forall(no_var).T" *)
 
-Lemma has_scheme_from_typ : forall E t T,
-  E |= t ~: T -> has_scheme E t (Sch 0 T).
+Lemma has_scheme_from_typ : forall K E t T,
+  K ; E |= t ~: T -> has_scheme K E t (Sch 0 T nil).
 Proof.
   introz. unfold sch_open. simpls.
   rewrite* <- typ_open_type.
+  destruct* (typing_regular H).
 Qed.
 
 (* ********************************************************************** *)
 (** Typing is preserved by weakening *)
 
-Lemma typing_weaken : forall G E F t T,
-   (E & G) |= t ~: T -> 
+Lemma typing_weaken : forall G E F K t T,
+   K ; (E & G) |= t ~: T -> 
    ok (E & F & G) ->
-   (E & F & G) |= t ~: T.
+   K ; (E & F & G) |= t ~: T.
 Proof.
   introv Typ. gen_eq (E & G) as H. gen G.
   induction Typ; introv EQ Ok; subst.
@@ -443,22 +560,25 @@ Qed.
 (* ********************************************************************** *)
 (** Typing is preserved by term substitution *)
 
-Lemma typing_trm_subst : forall F M E t T z u, 
-  E & z ~ M & F |= t ~: T ->
-  has_scheme E u M -> 
+Lemma typing_trm_subst : forall F M K E t T z u, 
+  K ; E & z ~ M & F |= t ~: T ->
+  has_scheme K E u M -> 
   term u ->
-  E & F |= (trm_subst z u t) ~: T.
+  K ; E & F |= (trm_subst z u t) ~: T.
 Proof.
   introv Typt. intros Typu Wu. 
   gen_eq (E & z ~ M & F) as G. gen F.
   induction Typt; introv EQ; subst; simpl trm_subst.
   case_var.
-    binds_get H0. apply_empty* typing_weaken.
-    binds_cases H0; apply* typing_var.
+    binds_get H1. apply_empty* typing_weaken.
+      destruct H2; apply* Typu.
+    binds_cases H1; apply* typing_var.
   apply_fresh* typing_abs as y. 
    rewrite* trm_subst_open_var. 
    apply_ih_bind* H1. 
   apply_fresh* (@typing_let M0 L1) as y. 
+   intros; apply* H0.
+     intros Vs TypM. generalize (Typu Vs TypM); intro.
    rewrite* trm_subst_open_var. 
    apply_ih_bind* H2. 
   auto*.
