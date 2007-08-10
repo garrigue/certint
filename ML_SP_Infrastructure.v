@@ -723,10 +723,12 @@ Hint Resolve sch_open_types.
 (** A typing relation is restricted to well-formed objects. *)
 
 Lemma typing_regular : forall K E e T,
-  typing K E e T -> ok E /\ term e /\ type T.
+  typing K E e T -> ok K /\ ok E /\ term e /\ type T.
 Proof.
-  split3; induction* H.
+  split4; induction* H.
   (* ok *)
+  pick_fresh y. apply* (H1 y).
+  pick_fresh y. apply* (H2 y).
   pick_fresh y. forward~ (H1 y) as G. inversions* G.
   pick_fresh y. forward~ (H2 y) as G. inversions* G.
   (* term *) 
@@ -761,21 +763,26 @@ Qed.
 
 (** Automation for reasoning on well-formedness. *)
 
+Hint Extern 1 (ok ?K) =>
+  match goal with
+  | H: typing K _ _ _ |- _ => apply (proj41 (typing_regular H))
+  end.
+
 Hint Extern 1 (ok ?E) =>
   match goal with
-  | H: typing E _ _ |- _ => apply (proj31 (typing_regular H))
+  | H: typing _ E _ _ |- _ => apply (proj42 (typing_regular H))
   end.
 
 Hint Extern 1 (term ?t) =>
   match goal with
-  | H: typing _ t _ |- _ => apply (proj32 (typing_regular H))
+  | H: typing _ _ t _ |- _ => apply (proj43 (typing_regular H))
   | H: red t _ |- _ => apply (proj1 (red_regular H))
   | H: red _ t |- _ => apply (proj2 (red_regular H))
   | H: value t |- _ => apply (value_regular H)
   end.
 
 Hint Extern 1 (type ?T) => match goal with
-  | H: typing _ _ T |- _ => apply (proj33 (typing_regular H))
+  | H: typing _ _ _ T |- _ => apply (proj44 (typing_regular H))
   end.
 
 

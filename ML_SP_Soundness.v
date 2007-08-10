@@ -682,7 +682,6 @@ Lemma has_scheme_from_typ : forall K E t T,
 Proof.
   introz. unfold sch_open. simpls.
   rewrite* <- typ_open_type.
-  destruct* (typing_regular H).
 Qed.
 
 (* ********************************************************************** *)
@@ -701,48 +700,215 @@ Proof.
   auto*.
 Qed.
 
+Lemma well_kinded_comm : forall K K' K'',
+  ok (K & K' & K'') ->
+  forall x T,
+  well_kinded (K & K'' & K') x T ->
+  well_kinded (K & K' & K'') x T.
+Proof.
+  introv OK; introv WK. gen_eq (K & K'' & K') as H. gen K''.
+  induction WK; introv Ok EQ; subst.
+    apply wk_any.
+  eapply wk_kind.
+    destruct* (binds_concat_inv H).
+    destruct H1.
+    destruct* (binds_concat_inv H2).
+  assumption.
+Qed.
+
+Lemma ok_disjoint : forall (A:Set) (E F:Env.env A),
+  ok (E & F) -> disjoint (dom E) (dom F).
+Proof.
+  induction F; simpls; intros.
+    intro; right*.
+  destruct a; simpl.
+  inversion H.
+  clear x a0 H0 H1 H3.
+  intro y.
+  destruct* (eq_var_dec y v).
+    rewrite* e.
+  destruct* (IHF H2 y).
+Qed.
+
+Lemma disjoint_comm : forall A B,
+  disjoint A B -> disjoint B A.
+Proof.
+  intros. intro x; destruct* (H x).
+Qed.
+
+Lemma disjoint_union : forall A B C,
+  disjoint A C -> disjoint B C -> disjoint (A \u B) C.
+Proof.
+  intros. intro x; destruct* (H x); destruct* (H0 x).
+Qed.
+
+Lemma well_kinded_weaken : forall K K' K'',
+  ok (K & K' & K'') ->
+  forall x T,
+  well_kinded (K & K'') x T ->
+  well_kinded (K & K' & K'') x T.
+Proof.
+  intros. apply* well_kinded_comm.
+  apply* well_kinded_extend.
+    rewrite dom_concat.
+    apply disjoint_union.
+      apply ok_disjoint. destruct* (ok_concat_inv _ _ H).
+  apply disjoint_comm.
+  unfold concat in H. rewrite <- app_ass in H.
+  destruct* (ok_concat_inv _ _ H).
+  apply* ok_disjoint.
+Qed.
+
+Lemma ok_cons : forall (A:Set) (E:Env.env A) x (a:A),
+  ok E -> x # E -> ok ((x,a) :: E).
+Proof.
+  intros.
+  assert (r: E = nil ++ E). simpl*.
+  rewrite r; rewrite app_comm_cons.
+  apply* (ok_push (A:=A) a (E:=E) (x:=x)).
+Qed.
+
+Lemma disjoint_ok : forall (A:Set) (E F:Env.env A),
+  ok E -> ok F -> disjoint (dom E) (dom F) -> ok (E & F).
+Proof.
+  induction F; simpl; intros. auto.
+  destruct a; unfold concat.
+  apply ok_cons.
+    apply* IHF. inversion* H0.
+    intro x; destruct* (H1 x).
+  fold (E&F). rewrite dom_concat.
+  apply (proj2 (notin_union v (dom E) (dom F))).
+  split. destruct* (H1 v).
+    elim H2. auto with sets.
+  inversion* H0.
+Qed.
+
+Lemma ok_combine_fresh : forall (A:Set) L n Xs (Vs:list A),
+  fresh L n Xs -> ok (combine Xs Vs).
+Proof.
+  induction n; destruct Xs; simpl; intros; auto*.
+    apply (ok_empty A).
+  destruct* Vs. apply (ok_empty A).
+  apply* ok_cons.
+  destruct H as [_ Fr].
+  clear IHn a.
+  gen n L Vs. induction Xs; simpl; intros.
+    auto with sets.
+  destruct* Vs.
+    auto with sets.
+  destruct n. elim Fr.
+  simpl.
+  apply (proj2 (notin_union v {{a}} (dom (combine Xs Vs)))).
+  split; destruct* Fr.
+  apply* IHXs.
+  rewrite union_comm in H0.
+  rewrite union_assoc in H0.
+  apply H0.
+Qed.
+
+Lemma typing_weaken_kinds : forall K K' K'' E t T,
+  K & K''; E |= t ~: T ->
+  ok (K & K' & K'') ->
+  K & K' & K''; E |= t ~: T.
+Proof.
+  introv Typ. gen_eq (K & K'') as H. gen K''.
+  induction Typ; introv EQ Ok; subst.
+  apply* typing_var. destruct* H2 as [TM [SM FM]]; split3*.
+    rewrite <- list_map_id.
+    rewrite <- (list_map_id (kinds_open (sch_kinds M) Us)).
+    apply (For_all2_map _ (well_kinded (K&K'&K'')) _ _ _ _
+                          (well_kinded_weaken K K' K'' Ok) FM).
+  apply_fresh* typing_abs as y.
+  apply_fresh* (@typing_let M (L1 \u dom(K&K'&K''))) as y.
+    intros. clear H H1 H2.
+    unfold concat. rewrite <- app_ass. unfold concat in H0.
+    apply* H0. rewrite* app_ass.
+    rewrite app_ass. fold ((K'' ++ K' ++ K) & kind_open_vars (sch_kinds M) Xs).
+    unfold kind_open_vars.
+    apply* disjoint_ok.
+    apply* ok_combine_fresh.
+    rewrite mkset_dom.
+    apply disjoint_comm.
+    apply* fresh_disjoint.
+    destruct* (fresh_union_r _ _ _ _ H3).
+    unfold kinds_open. rewrite map_length.
+    rewrite* <- (fresh_length _ _ _ H3).
+  auto*.
+Qed.
+
 (* ********************************************************************** *)
 (** Typing is preserved by term substitution *)
 
 Lemma typing_trm_subst : forall F M K E t T z u, 
   K ; E & z ~ M & F |= t ~: T ->
-  has_scheme K E u M -> 
+  (exists L:vars, has_scheme_vars L K E u M) -> 
   term u ->
   K ; E & F |= (trm_subst z u t) ~: T.
 Proof.
   introv Typt. intros Typu Wu. 
   gen_eq (E & z ~ M & F) as G. gen F.
-  induction Typt; introv EQ; subst; simpl trm_subst.
+  induction Typt; introv EQ; subst; simpl trm_subst; destruct Typu as [Lu Typu].
   case_var.
     binds_get H1. apply_empty* typing_weaken.
-      destruct H2; apply* Typu.
+      destruct H2; apply* (has_scheme_from_vars Typu).
     binds_cases H1; apply* typing_var.
   apply_fresh* typing_abs as y. 
    rewrite* trm_subst_open_var. 
    apply_ih_bind* H1. 
   apply_fresh* (@typing_let M0 L1) as y. 
    intros; apply* H0.
-     intros Vs TypM. generalize (Typu Vs TypM); intro.
+     exists (Lu \u mkset Xs); intros Ys TypM.
+     assert (fresh Lu (sch_arity M) Ys). auto*.
+     generalize (Typu Ys H4); intro; clear H4.
+     apply* typing_weaken_kinds.
+     clear H0 H1 H2 L2 t2 T2 Wu Typu.
+     apply* disjoint_ok.
+     destruct* (typing_regular (H Xs H3)).
+     unfold kind_open_vars.     
+     apply* ok_combine_fresh.
+     rewrite dom_concat.
+     apply disjoint_union.
+       apply ok_disjoint. destruct* (typing_regular H5).
+     apply disjoint_comm.
+     unfold kind_open_vars.
+     rewrite mkset_dom. rewrite mkset_dom.
+       apply* (fresh_disjoint (sch_arity M)).
+       unfold kinds_open. rewrite map_length.
+         rewrite* <- (fresh_length _ _ _ H3).
+       unfold kinds_open. rewrite map_length.
+         rewrite* <- (fresh_length _ _ _ TypM).
    rewrite* trm_subst_open_var. 
-   apply_ih_bind* H2. 
+   apply_ih_bind* H2.
+  assert (exists L : vars, has_scheme_vars L K E u M). exists* Lu.
   auto*.
 Qed.
 
 (* ********************************************************************** *)
 (** Preservation: typing is preserved by reduction *)
 
+Lemma typ_open_vars_nil : forall T,
+  type T -> typ_open_vars T nil = T.
+Proof.
+  induction T; unfold typ_open_vars; simpl; intros; auto*.
+    inversion H.
+  unfold typ_open_vars in *; simpls.
+  rewrite IHT1. rewrite* IHT2. inversion* H. inversion* H.
+Qed.
+
 Lemma preservation_result : preservation.
 Proof.
   introv Typ. gen t'.
   induction Typ; introv Red; subst; inversions Red.
   pick_fresh x. rewrite* (@trm_subst_intro x). 
-   apply_empty* typing_trm_subst. 
-   apply* (@has_scheme_from_vars L1). 
+   apply_empty* typing_trm_subst.
+   exists* L1.
   apply* (@typing_let M L1).
   inversions Typ1. pick_fresh x. 
    rewrite* (@trm_subst_intro x). 
    apply_empty* typing_trm_subst.
-   apply* has_scheme_from_typ.
+   exists {}. intro. unfold sch_arity, kind_open_vars, sch_open_vars; simpl.
+     destruct* Xs. simpl. rewrite* typ_open_vars_nil.
+     simpl. intuition.
   auto*.
   auto*.
 Qed. 
