@@ -24,6 +24,11 @@ Definition typ_def := typ_bvar 0.
 
 Parameter cstr : Set.
 Parameter cstr_entails : cstr -> cstr -> Prop.
+Parameter cstr_entails_refl : forall c, cstr_entails c c.
+Parameter cstr_entails_trans : forall c1 c2 c3,
+  cstr_entails c1 c2 -> cstr_entails c2 c3 -> cstr_entails c1 c3.
+
+Hint Resolve cstr_entails_refl.
 
 Record ckind : Set := Kind {
   kind_cstr : cstr;

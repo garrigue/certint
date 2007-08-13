@@ -429,34 +429,6 @@ Proof.
   rewrite IHT1; rewrite* IHT2.
 Qed.
 
-(*
-Lemma typ_substs_intro_ind : forall T Xs Us Vs, 
-  fresh (typ_fv T \u typ_fv_list Vs \u typ_fv_list Us) (length Xs) Xs -> 
-  types (length Xs) Us ->
-  types (length Vs) Vs ->
-  typ_open T (Vs ++ Us) =
-  typ_subst (combine Xs Us) (typ_open T (Vs ++ (typ_fvars Xs))).
-Proof.
-  induction Xs; simpl; introv Fr Tu Tv; 
-   destruct Tu; destruct Us; try solve [ contradictions ].
-   rewrite* typ_subst_nil.
-  auto.
-  inversions H0. inversions Fr. clear H0 Fr. simpls.
-  rewrite list_concat_right.
-  forward (IHXs Us (Vs++t::nil)) as K; clear IHXs.
-    rewrite* fv_list_map.
-    auto. 
-    split~. inversions Tv. apply* list_forall_concat.  
-  rewrite K. clear K.
-  f_equal. rewrite~ typ_subst_open. rewrite~ typ_subst_fresh.
-  f_equal. rewrite map_app.
-  simpl. case_var; try solve [ contradictions* ].
-  rewrite <- list_concat_right. 
-  f_equal. apply~ typ_subst_fresh_list.
-  f_equal. apply* typ_subst_fresh_trm_fvars.
-Qed.
-*)
-
 Lemma typ_subst_nth : forall n S Xs Us,
   fresh (dom S) (length Xs) Xs ->
   types (length Xs) Us ->

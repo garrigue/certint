@@ -29,45 +29,10 @@ Qed.
 
 Definition comp(A:Set)(f g:A->A) := fun x => f (g x).
 
-Lemma map_comp : forall (A:Set) (f g:A->A) l,
+Lemma list_map_comp : forall (A:Set) (f g:A->A) l,
   List.map f (List.map g l) = List.map (fun x:A => f (g x)) l.
 Proof.
   induction l; simpl*. rewrite* IHl.
-Qed.
-
-Lemma kind_map_id : forall k, kind_map (fun T:typ => T) k = k.
-Proof.
-  intros.
-  unfold kind_map.
-  destruct* k as [[c r]|]; simpl.
-  apply (f_equal (fun r => Some (Kind c r))).
-  induction r; simpl; auto. rewrite* IHr.
-Qed.
-
-Lemma kinds_map_id : forall K,
-  List.map (kind_map (fun T:typ => T)) K = K.
-Proof.
-  induction K; intros; simpl; auto*.
-  rewrite* IHK.
-  rewrite* kind_map_id.
-Qed.
-
-Lemma kind_map_comp : forall f g k,
-  kind_map f (kind_map g k) = kind_map (fun T:typ => f (g T)) k.
-Proof.
-  intros.
-  destruct* k as [[kc kr]|].
-  unfold kind_map; simpl.
-  rewrite* map_comp.
-Qed.
-
-Lemma kinds_map_comp : forall f g K,
-  List.map (fun k:kind => kind_map f (kind_map g k)) K =
-  List.map (kind_map (fun T:typ => f (g T))) K.
-Proof.
-  induction K; simpl; intros; auto.
-  rewrite* IHK.
-  rewrite* kind_map_comp.
 Qed.
 
 Lemma fresh_sub : forall n Xs L1 L2,
@@ -123,9 +88,6 @@ Proof.
   destruct (IHl1 l2 H H1).
   exists* x0.
 Qed.
-
-Parameter cstr_entails_trans : forall k1 k2 k3,
-  cstr_entails k1 k2 -> cstr_entails k2 k3 -> cstr_entails k1 k3.
 
 Lemma entails_trans : forall k1 k2 k3,
   entails k1 k2 -> entails k2 k3 -> entails k1 k3.
@@ -198,30 +160,6 @@ Proof.
     discriminate.
 Qed.
 
-(*
-Lemma well_subst_map : forall K S,
-  well_subst K S -> well_subst (map (kind_subst S) K) S.
-Proof.
-  intros. intro x.
-  case_eq (get x K); intros.
-    generalize (binds_map (kind_subst S) H0); intro.
-    unfold binds in *.
-    rewrite H1 in H2; inversion H2 as [e]; rewrite e in *; clear a e H2.
-    generalize (H x k H0); intro HW.
-    inversion HW.
-      unfold kind_subst; rewrite <- H4. apply wk_any.
-    unfold kind_subst; rewrite <- H2.
-    simpl; rewrite <- H3.
-    eapply wk_kind.
-      generalize (binds_map (kind_map (typ_subst S)) H5); intro B.
-      simpl in B. apply B.
-    apply* kind_subst_entails.
-  unfold binds in H1.
-  rewrite (map_get_none (kind_subst S) _ _ H0) in H1.
-  discriminate.
-Qed.
-*)
-
 Lemma map_combine : forall (A:Set) (f:A->A) Xs Ys,
   map f (combine Xs Ys) = combine Xs (List.map f Ys).
 Proof.
@@ -280,20 +218,6 @@ Proof.
   simpl in *. auto*.
 Qed.
 
-
-Lemma kinds_map_fresh : forall K S,
-  disjoint (dom S) (fv_in kind_fv K) ->
-  map (kind_subst S) K = K.
-Proof.
-  intros.
-  induction* K.
-  destruct* a. simpl in *.
-  rewrite IHK; clear IHK.
-    rewrite* kind_map_fresh.
-    intro x; destruct* (H x).
-  intro x; destruct* (H x).
-Qed.
-
 Lemma well_kinded_extend : forall K K' x T,
   disjoint (dom K) (dom K') ->
   well_kinded K x T -> well_kinded (K & K') x T.
@@ -306,10 +230,6 @@ Proof.
     elim (binds_fresh H0 H2).
   assumption.
 Qed.
-
-Parameter cstr_entails_refl : forall c, cstr_entails c c.
-
-Hint Resolve cstr_entails_refl.
 
 Lemma entails_refl : forall k, entails k k.
 Proof.
@@ -342,6 +262,14 @@ Proof.
   destruct* (eq_var_dec x v).
 Qed.
 
+Lemma in_vars_dec : forall x L,
+  x \in L \/ x \notin L.
+Proof.
+  intros.
+  case_eq (S.mem x L); intros; auto with sets.
+  right; intro inL. rewrite (S.mem_1 inL) in H. discriminate.
+Qed.
+
 Lemma typing_typ_subst : forall F K'' S K K' E t T,
   disjoint (dom S) (env_fv E \u fv_in kind_fv K) ->
   env_prop type S ->
@@ -371,8 +299,7 @@ Proof.
     apply* well_kinded_subst.
   apply_fresh* typing_abs as y.
    (* rewrite sch_subst_fold. *)
-   assert (r: Sch (typ_subst S U) nil = sch_subst S (Sch U nil)).
-     auto.
+   assert (r: Sch (typ_subst S U) nil = sch_subst S (Sch U nil)). auto.
    rewrite r; clear r.
    apply_ih_map_bind* H1.
   apply_fresh* (@typing_let (sch_subst S M) (L1 \u dom S \u dom (K&K''))) as y.
@@ -385,38 +312,30 @@ Proof.
      clear H H0 H1 H2.
      unfold kind_open_vars.
      intro v.
-     case_eq (S.mem v (dom K \u dom K'')); intros.
-       generalize (S.mem_2 H); intro; clear H.
-       right; intro.
-       elim (fresh_rev _ _ Fr (x:=v)).
-       rewrite* dom_concat. auto with sets.
-       apply (in_dom_combine _ _ H).
-     left; intro inK; rewrite (S.mem_1 inK) in H. discriminate.
+     destruct* (in_vars_dec v (dom K \u dom K'')).
+     right; intro.
+     elim (fresh_rev _ _ Fr (x:=v)).
+     rewrite* dom_concat. auto with sets.
+     apply (in_dom_combine _ _ H0).
    unfold sch_arity in Fr; simpl in Fr; rewrite map_length in Fr.
    apply* H0; clear H H0 H1 H2.
      destruct* (fresh_union_r _ _ _ _ Fr).
      destruct* (fresh_union_r _ _ _ _ H).
      intro x; intros.
-     destruct* (binds_concat_inv H).
-       destruct H0. generalize (WS x a H1); intro HW; clear H WS.
-       rewrite map_concat. rewrite <- concat_assoc.
+     rewrite map_concat. rewrite <- concat_assoc.
+     destruct* (binds_concat_inv H) as [[N B]|B]; clear H.
        apply* well_kinded_extend.
        rewrite dom_map. rewrite dom_concat; rewrite* dom_map.
-     rewrite map_concat. rewrite <- concat_assoc.
      destruct a; try constructor.
      simpl. rewrite get_notin_dom.
      eapply wk_kind. eapply binds_prepend.
-     generalize (binds_map (kind_subst S) H0); intro B.
-     simpl in B; apply B; clear B.
+     generalize (binds_map (kind_subst S) B); intro B'.
+     simpl in B'; apply B'; clear B'.
      apply entails_refl.
-     intro.
-     generalize (proj2 (fresh_union_r _ _ _ _
-         (proj1 (fresh_union_r _ _ _ _ Fr))));
-       intro FrS.
-     elim (binds_fresh H0).
-     intro.
-     elim (fresh_rev _ _ FrS (x:=x)). auto.
-     apply (in_dom_combine _ _ H2).
+     intro; elim (binds_fresh B); clear B.
+     use (proj2 (fresh_union_r _ _ _ _ (proj1 (fresh_union_r _ _ _ _ Fr)))).
+     intro; destruct* (fresh_rev _ _ H0 (x:=x)).
+     apply (in_dom_combine _ _ H1).
    rewrite* concat_assoc.
   apply_ih_map_bind* H2.
   auto*.
@@ -450,24 +369,6 @@ Definition has_scheme K E t M := forall Vs,
 
 (* ********************************************************************** *)
 (** Type schemes of terms can be instanciated *)
-(*
-Lemma well_subst_disjoint :
-  Fr : fresh (v T \u typ_fv_list Vs \u env_fv E \u
-          dom K \u fv_in kind_fv K) n Xs
-  TV : types (length Xs) Vs
-  WK : For_all2 (well_kinded K) (kinds_open Ks Vs) Vs
-  ============================
-   well_subst (K & kind_open_vars Ks Xs) K (combine Xs Vs)
-*)
-
-(*
-Lemma well_kinded_combine :
-  types (length Xs) Vs ->
-  For_all2 (well_kinded K) (kinds_open Ks Vs) Vs ->
-  binds x (Some c) (combine Xs (kinds_open Ks (typ_fvars Xs))) ->
-  well_kinded K (kind_subst (combine Xs Vs) (Some c))
-     (typ_subst (combine Xs Vs) (typ_fvar x)).
-*)
 
 Lemma incr_subst_fresh : forall a t S Xs,
   fresh {{a}} (length Xs) Xs ->
@@ -501,19 +402,6 @@ Fixpoint map_get (A:Set) (l:list var) (E:Env.env A) {struct l} : list A :=
     end
   end.
 
-(*
-Lemma  : forall a t S Xs,
-  fresh {{a}} (length Xs) Xs ->
-  List.map (typ_subst ((a, t) :: S)) (typ_fvars Xs) =
-  List.map (typ_subst S) (typ_fvars Xs).
-Proof.
-  induction Xs; simpl; intros. auto.
-  destruct* (eq_var_dec a0 a).
-    rewrite e in H. destruct* H. elim H. auto.
-  rewrite* IHXs.
-Qed.
-*)
-
 Lemma map_get_fresh : forall (A:Set) a (a0:A) S Xs,
   fresh {{a}} (length Xs) Xs ->
   map_get Xs ((a, a0) :: S) = map_get Xs S.
@@ -524,22 +412,6 @@ Proof.
     rewrite e in H. destruct* H. elim H. auto.
   rewrite* IHXs.
 Qed.
-
-(*
-Lemma map_get_total : forall (A:Set) Xs (Vs:list A),
-  length Xs = length Vs ->
-  ok (combine Xs Vs) ->
-  map_get Xs (combine Xs Vs) = Vs.
-Proof.
-  induction Xs; destruct Vs; simpl; intros; try discriminate.
-    auto.
-  destruct* (eq_var_dec a a).
-  rewrite* map_get_fresh.
-    inversion H.
-    inversion H0.
-    rewrite* IHXs.
-  inversion H0.
-*)
 
 Lemma For_all2_get : forall (A B:Set) (P:A->B->Prop) Xs Ys Zs x y z,
   For_all2 P Ys Zs ->
@@ -639,7 +511,7 @@ Proof.
     apply WK.
     generalize (binds_map (kind_subst (combine Xs Vs)) B); simpl; intro B'.
     rewrite map_combine in B'.
-    rewrite map_comp in B'.
+    rewrite list_map_comp in B'.
     assert (forall k, In k Ks -> kind_open k Vs =
              kind_subst (combine Xs Vs) (kind_open k (typ_fvars Xs))).
       clear B B' WK x t0 k H H0. intros.
@@ -919,8 +791,8 @@ Qed.
 Lemma progress_result : progress.
 Proof.
   introv Typ. gen_eq (empty:env) as E. poses Typ' Typ.
-  induction Typ; intros; subst. 
-  inversions H0.
+  induction Typ; intros; subst.
+  inversions H1.
   left*. 
   right. pick_freshes (sch_arity M) Ys.
     destructi~ (@H0 Ys) as [Val1 | [t1' Red1]]. 
