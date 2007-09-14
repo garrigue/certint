@@ -6,6 +6,10 @@
 Set Implicit Arguments.
 Require Import List Metatheory ML_SP_Definitions.
 
+Module MkInfra(Cstr:CstrIntf).
+
+Module Defs := MkDefs(Cstr).
+Import Defs.
 
 (* ====================================================================== *)
 (** * Additional Definitions used in the Proofs *)
@@ -1082,7 +1086,7 @@ Proof.
   intros.
   destruct H; destruct H0.
   split.
-  apply* (cstr_entails_trans H H0).
+  apply* (Cstr.entails_trans H H0).
   intros; auto.
 Qed.
 
@@ -1214,4 +1218,4 @@ Hint Extern 1 (type ?T) => match goal with
   end.
 
 
-
+End MkInfra.

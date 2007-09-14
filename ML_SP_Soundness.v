@@ -8,6 +8,12 @@ Require Import List Metatheory
   ML_SP_Definitions
   ML_SP_Infrastructure.
 
+Module MkSound(Cstr:CstrIntf).
+
+Module Infra := MkInfra(Cstr).
+Import Infra.
+Import Defs.
+
 (* ********************************************************************** *)
 (** Type substitution preserves typing *)
 
@@ -112,14 +118,13 @@ Proof.
    assert (r: Sch (typ_subst S U) nil = sch_subst S (Sch U nil)); auto.
    rewrite r; apply_ih_map_bind* H1.
   apply_fresh* (@typing_let (sch_subst S M) (L1 \u dom S \u dom (K&K''))) as y.
+   clear H H1 H2. clear L2 T2 t2 Dis.
    simpl. intros Ys Fr. 
    rewrite* <- sch_subst_open_vars.
    rewrite* <- kinds_subst_open_vars.
    rewrite concat_assoc. rewrite <- map_concat.
    unfold sch_arity in Fr; simpl in Fr; rewrite map_length in Fr.
-   apply* H0; clear H H0 H1 H2.
-     destruct* (fresh_union_r _ _ _ _ Fr).
-     destruct* (fresh_union_r _ _ _ _ H).
+   apply* H0; clear H0.
      apply* well_subst_fresh.
    rewrite* concat_assoc.
   apply_ih_map_bind* H2.
@@ -143,7 +148,7 @@ Qed.
 (* ********************************************************************** *)
 (** Typing schemes for expressions *)
 
-Definition has_scheme_vars L K E t M := forall Xs,
+Definition has_scheme_vars L (K:kenv) E t M := forall Xs,
   fresh L (sch_arity M) Xs ->
   K & kind_open_vars (sch_kinds M) Xs; E |= t ~: (M ^ Xs).
 
@@ -167,9 +172,7 @@ Proof.
   rewrite* kind_subst_open.
     rewrite* kind_subst_fresh.
       rewrite* (fresh_subst {}).
-      rewrite <- H0.
-      rewrite <- (fresh_length _ _ _ Fr).
-      apply* fresh_empty.
+      rewrite* <- H0.
     rewrite* mkset_dom.
     apply (fresh_disjoint (length Ks)).
     apply* (kind_fv_fresh k Ks).
@@ -181,6 +184,7 @@ Lemma has_scheme_from_vars : forall L K E t M,
   has_scheme K E t M.
 Proof.
   intros L K E t [T Ks] H Vs TV. unfold sch_open. simpls.
+  fold kind in K. fold kenv in K.
   pick_freshes (length Ks) Xs.
   unfold sch_arity in TV; simpl in TV.
   rewrite (fresh_length _ _ _ Fr) in TV.
@@ -188,16 +192,12 @@ Proof.
   unfolds has_scheme_vars sch_open_vars. simpls.
   intro WK.
   apply* (typing_typ_substs (kind_open_vars Ks Xs)).
-     rewrite* mkset_dom.
-     apply* (fresh_disjoint (length Ks)).
-     fresh_simpl; auto*.
-     destruct* (fresh_union_r _ _ _ _ Fr).
-     destruct* (fresh_union_r _ _ _ _ H0).
-     destruct* (fresh_union_r _ _ _ _ H2).
+      rewrite* mkset_dom.
+      apply* (fresh_disjoint (length Ks)).
     apply* types_combine.
-   clear H.
-   intro x; intros.
-   destruct* (binds_concat_inv H) as [[N B]|B]; clear H.
+  clear H.
+  intro x; intros.
+  destruct* (binds_concat_inv H) as [[N B]|B]; clear H.
     unfold kind_open_vars in N.
     rewrite* kind_map_fresh.
      simpl.
@@ -232,9 +232,7 @@ Proof.
      rewrite H. apply H.
     elim (get_contradicts _ _ _ _ H H0); auto.
     rewrite* <- (fresh_length _ _ _ Fr).
-   elim (get_contradicts _ _ _ _ B H); auto.
-  apply* H.
-  unfold sch_arity. simpl*.
+  elim (get_contradicts _ _ _ _ B H); auto.
 Qed.
 
 (* ********************************************************************** *)
@@ -390,4 +388,4 @@ Proof.
     exists* (trm_app t1' t2).
 Qed.
 
-
+End MkSound.

@@ -239,12 +239,13 @@ Ltac fresh_solve_from_context xs n E :=
     fresh_solve_from xs n E H end.
 
 Ltac fresh_solve_one :=
+  assumption ||
   match goal with
   | |- fresh {} ?n ?xs =>
     match goal with H: fresh ?L n xs |- _ =>
       apply (@fresh_empty L n xs H) end
-  | |- fresh ?E ?n ?xs =>   
-    fresh_solve_from_context xs n E
+  (* | H: fresh _ ?n ?xs |- fresh ?E ?n ?xs =>   
+    fresh_solve_from xs n E H *)
   | |- fresh _ (length ?xs) ?xs =>  
     match goal with H: fresh _ ?n xs |- _ =>
       progress (apply (@fresh_resize n)); fresh_solve_one end
@@ -253,6 +254,13 @@ Ltac fresh_solve_one :=
 Ltac fresh_simpl :=
   try match goal with |- fresh (_ \u _) _ _ =>
     apply fresh_union_l; fresh_simpl end.
+
+Ltac fresh_split :=
+  match goal with
+  | H: fresh (?L1 \u ?L2) ?n ?xs |- fresh _ _ ?xs =>
+      destruct (fresh_union_r xs L1 L2 n H); clear H; fresh_split
+  | _ => try fresh_simpl
+  end.
 
 Ltac fresh_simpl_to_notin_in_goal :=
   simpl; splits.
@@ -263,8 +271,7 @@ Ltac fresh_simpl_to_notin_solve :=
   notin_solve.
 
 Ltac fresh_solve :=
-  try fresh_simpl; 
-  (fresh_solve_one || fresh_simpl_to_notin_solve).
+  (fresh_split; fresh_solve_one) || (fresh_simpl; fresh_simpl_to_notin_solve).
 
 
 (* ********************************************************************** *)

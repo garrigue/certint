@@ -6,6 +6,21 @@
 Set Implicit Arguments.
 Require Import Metatheory List.
 
+(* Constraint domain specification *)
+
+Module Type CstrIntf.
+  Parameter cstr : Set.
+  Parameter entails : cstr -> cstr -> Prop.
+  Parameter entails_refl : forall c, entails c c.
+  Parameter entails_trans : forall c1 c2 c3,
+    entails c1 c2 -> entails c2 c3 -> entails c1 c3.
+  Hint Resolve entails_refl.
+End CstrIntf.
+
+(* Parameterized definitions *)
+
+Module MkDefs(Cstr:CstrIntf).
+
 (* ********************************************************************** *)
 (** ** Description of types *)
 
@@ -22,22 +37,14 @@ Definition typ_def := typ_bvar 0.
 
 (** Constraint domain *)
 
-Parameter cstr : Set.
-Parameter cstr_entails : cstr -> cstr -> Prop.
-Parameter cstr_entails_refl : forall c, cstr_entails c c.
-Parameter cstr_entails_trans : forall c1 c2 c3,
-  cstr_entails c1 c2 -> cstr_entails c2 c3 -> cstr_entails c1 c3.
-
-Hint Resolve cstr_entails_refl.
-
 Record ckind : Set := Kind {
-  kind_cstr : cstr;
+  kind_cstr : Cstr.cstr;
   kind_rel  : list (var*typ) }.
 
 Definition kind := option ckind.
 
 Definition entails K K' :=
-  cstr_entails (kind_cstr K) (kind_cstr K') /\
+  Cstr.entails (kind_cstr K) (kind_cstr K') /\
   forall T:var*typ, In T (kind_rel K') -> In T (kind_rel K).
 
 (** Type schemes. *)
@@ -305,3 +312,5 @@ Definition progress := forall K t T,
   K ; empty |= t ~: T ->
      value t 
   \/ exists t', t --> t'.
+
+End MkDefs.
