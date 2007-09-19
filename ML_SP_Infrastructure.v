@@ -993,27 +993,28 @@ Proof.
   inversion* H0.
 Qed.
 
+Lemma notin_combine_fresh : forall (A:Set) Xs v (Vs:list A) n L,
+  fresh L n Xs -> v \in L -> v # (combine Xs Vs).
+Proof.
+  induction Xs; simpl; intros. auto.
+  destruct* Vs. auto with sets.
+  destruct n. elim H.
+  destruct H.
+  apply (proj2 (notin_union v {{a}} (dom (combine Xs Vs)))).
+  split.
+    intro Hv. elim H.
+    rewrite* <- (proj1 (in_singleton _ _) Hv).
+  apply* IHXs. auto with sets.
+Qed.
+
 Lemma ok_combine_fresh : forall (A:Set) L n Xs (Vs:list A),
   fresh L n Xs -> ok (combine Xs Vs).
 Proof.
-  induction n; destruct Xs; simpl; intros; auto*.
-    apply (ok_empty A).
-  destruct* Vs. apply (ok_empty A).
+  induction n; destruct Xs; simpl; intros; destruct* Vs;
+    try apply (ok_empty A).
   apply* ok_cons.
-  destruct H as [_ Fr].
-  clear IHn a.
-  gen n L Vs. induction Xs; simpl; intros.
-    auto with sets.
-  destruct* Vs.
-    auto with sets.
-  destruct n. elim Fr.
-  simpl.
-  apply (proj2 (notin_union v {{a}} (dom (combine Xs Vs)))).
-  split; destruct* Fr.
-  apply* IHXs.
-  rewrite union_comm in H0.
-  rewrite union_assoc in H0.
-  apply H0.
+  apply* notin_combine_fresh.
+  destruct H; auto with sets.
 Qed.
 
 Lemma incr_subst_fresh : forall a t S Xs,
