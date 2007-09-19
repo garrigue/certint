@@ -4,7 +4,7 @@
 ***************************************************************************)
 
 Set Implicit Arguments.
-Require Import Metatheory List.
+Require Import Metatheory List Arith.
 
 (* Constraint domain specification *)
 
@@ -271,6 +271,30 @@ where "K ; E |= t ~: T" := (typing K E t T).
 Inductive value : trm -> Prop :=
   | value_abs : forall t1, term (trm_abs t1) -> value (trm_abs t1).
 
+Definition trm_def := trm_bvar 0.
+
+Fixpoint trm_inst_rec (k : nat) (tl : list trm) (t : trm) {struct t} : trm :=
+  match t with
+  | trm_bvar i    => if le_lt_dec k i then nth (i-k) tl trm_def else trm_bvar i
+  | trm_fvar x    => trm_fvar x 
+  | trm_abs t1    => trm_abs (trm_inst_rec (S k) tl t1) 
+  | trm_let t1 t2 => trm_let (trm_inst_rec k tl t1) (trm_inst_rec (S k) tl t2) 
+  | trm_app t1 t2 => trm_app (trm_inst_rec k tl t1) (trm_inst_rec k tl t2)
+  end.
+
+Definition trm_inst t tl := trm_inst_rec 0 tl t.
+
+Parameter delta_rules : list (nat * trm * trm).
+Parameter delta_term : forall n t1 t2 tl,
+  In (n,t1,t2) delta_rules ->
+  list_for_n term n tl ->
+  term (trm_inst t1 tl) /\ term (trm_inst t2 tl).
+Parameter delta_typed : forall n t1 t2 tl K E T,
+  In (n,t1,t2) delta_rules ->
+  list_for_n term n tl ->
+  K ; E |= trm_inst t1 tl ~: T ->
+  K ; E |= trm_inst t2 tl ~: T.
+
 (** Reduction rules *)
 
 Inductive red : trm -> trm -> Prop :=
@@ -282,6 +306,10 @@ Inductive red : trm -> trm -> Prop :=
       term (trm_let t1 t2) ->
       value t1 -> 
       red (trm_let t1 t2) (t2 ^^ t1)
+  | red_delta : forall n t1 t2 tl,
+      In (n,t1,t2) delta_rules ->
+      list_for_n term n tl ->
+      red (trm_inst t1 tl) (trm_inst t2 tl)
   | red_let_1 : forall t1 t1' t2, 
       term_body t2 ->
       red t1 t1' -> 

@@ -360,10 +360,13 @@ Qed.
 Lemma preservation_result : preservation.
 Proof.
   introv Typ. gen t'.
-  induction Typ; introv Red; subst; inversions Red.
+  induction Typ; introv Red; subst; inversions Red; try (apply* delta_typed).
+  rewrite* H3.
+  rewrite* H2.
   pick_fresh x. rewrite* (@trm_subst_intro x). 
    apply_empty* typing_trm_subst.
    exists* L1.
+  rewrite* H3.
   apply* (@typing_let M L1).
   inversions Typ1. pick_fresh x. 
    rewrite* (@trm_subst_intro x). 
@@ -371,6 +374,7 @@ Proof.
    exists {}. intro. unfold sch_arity, kind_open_vars, sch_open_vars; simpl.
      destruct* Xs. simpl. rewrite* typ_open_vars_nil.
      simpl. intuition.
+  rewrite* H.
   auto*.
   auto*.
 Qed. 

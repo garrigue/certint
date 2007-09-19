@@ -1189,6 +1189,7 @@ Lemma red_regular : forall e e',
   red e e' -> term e /\ term e'.
 Proof.
   induction 1; use value_regular.
+  apply* delta_term.
 Qed.
 
 (* ********************************************************************** *)
