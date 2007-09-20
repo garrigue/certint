@@ -14,6 +14,8 @@ Module Infra := MkInfra(Cstr).
 Import Infra.
 Import Defs.
 
+Parameter const_closed : forall c, sch_fv (const_type c) = {}.
+
 (* ********************************************************************** *)
 (** Type substitution preserves typing *)
 
@@ -129,6 +131,13 @@ Proof.
    rewrite* concat_assoc.
   apply_ih_map_bind* H2.
   auto*.
+  rewrite* sch_subst_open.
+  assert (disjoint (dom S) (sch_fv (const_type c))).
+    intro x. rewrite* const_closed.
+  rewrite* sch_subst_fresh.
+  apply* typing_cst.
+  rewrite* <- (sch_subst_fresh S H2).
+  apply* proper_instance_subst.
 Qed.
 
 Lemma typing_typ_substs : forall K' S K E t T,
@@ -266,6 +275,20 @@ Proof.
   apply_fresh* typing_abs as y. apply_ih_bind* H1.
   apply_fresh* (@typing_let M L1) as y. apply_ih_bind* H2.
   auto*.
+  auto.
+Qed.
+
+Lemma proper_instance_weaken : forall K K' K'' M Us,
+  ok (K & K' & K'') ->
+  proper_instance (K & K'') M Us ->
+  proper_instance (K & K' & K'') M Us.
+Proof.
+  intros.
+  destruct* H0 as [TM [SM FM]]; split3*.
+  rewrite <- list_map_id.
+  rewrite <- (list_map_id (kinds_open (sch_kinds M) Us)).
+  apply (For_all2_map _ (well_kinded (K&K'&K'')) _ _ _ _
+                        (well_kinded_weaken K K' K'' H) FM).
 Qed.
 
 Lemma typing_weaken_kinds : forall K K' K'' E t T,
@@ -275,11 +298,7 @@ Lemma typing_weaken_kinds : forall K K' K'' E t T,
 Proof.
   introv Typ. gen_eq (K & K'') as H. gen K''.
   induction Typ; introv EQ Ok; subst.
-  apply* typing_var. destruct* H2 as [TM [SM FM]]; split3*.
-    rewrite <- list_map_id.
-    rewrite <- (list_map_id (kinds_open (sch_kinds M) Us)).
-    apply (For_all2_map _ (well_kinded (K&K'&K'')) _ _ _ _
-                          (well_kinded_weaken K K' K'' Ok) FM).
+  apply* typing_var. apply* proper_instance_weaken.
   apply_fresh* typing_abs as y.
   apply_fresh* (@typing_let M (L1 \u dom(K&K'&K''))) as y.
     intros. clear H H1 H2.
@@ -296,6 +315,7 @@ Proof.
     unfold kinds_open. rewrite map_length.
     rewrite* <- (fresh_length _ _ _ H3).
   auto*.
+  apply* typing_cst. apply* proper_instance_weaken.
 Qed.
 
 (* ********************************************************************** *)
@@ -343,6 +363,7 @@ Proof.
    apply_ih_bind* H2.
   assert (exists L : vars, has_scheme_vars L K E u M). exists* Lu.
   auto*.
+  auto.
 Qed.
 
 (* ********************************************************************** *)
@@ -377,6 +398,7 @@ Proof.
   rewrite* H.
   auto*.
   auto*.
+  rewrite* H2.
 Qed. 
 
 (* ********************************************************************** *)

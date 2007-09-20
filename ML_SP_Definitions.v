@@ -141,18 +141,22 @@ Definition typ_body n T Ks :=
 Definition scheme M :=
    typ_body (sch_arity M) (sch_type M) (sch_kinds M).
 
-
 (* ********************************************************************** *)
 (** ** Description of terms *)
 
 (** Grammar of terms. *)
+
+Parameter const : Set.
+Parameter const_type : const -> sch.
+Parameter const_scheme : forall c, scheme (const_type c).
 
 Inductive trm : Set :=
   | trm_bvar : nat -> trm
   | trm_fvar : var -> trm
   | trm_abs  : trm -> trm
   | trm_let  : trm -> trm -> trm
-  | trm_app  : trm -> trm -> trm.
+  | trm_app  : trm -> trm -> trm
+  | trm_cst  : const -> trm.
 
 (** Opening term binders. *)
 
@@ -163,6 +167,7 @@ Fixpoint trm_open_rec (k : nat) (u : trm) (t : trm) {struct t} : trm :=
   | trm_abs t1    => trm_abs (trm_open_rec (S k) u t1) 
   | trm_let t1 t2 => trm_let (trm_open_rec k u t1) (trm_open_rec (S k) u t2) 
   | trm_app t1 t2 => trm_app (trm_open_rec k u t1) (trm_open_rec k u t2)
+  | trm_cst c     => trm_cst c
   end.
 
 Definition trm_open t u := trm_open_rec 0 u t.
@@ -186,7 +191,9 @@ Inductive term : trm -> Prop :=
   | term_app : forall t1 t2,
       term t1 -> 
       term t2 -> 
-      term (trm_app t1 t2).
+      term (trm_app t1 t2)
+  | term_cst : forall c,
+      term (trm_cst c).
 
 (** Definition of the body of an abstraction *)
 
@@ -259,17 +266,17 @@ Inductive typing : kenv -> env -> trm -> typ -> Prop :=
       K ; E |= t1 ~: (typ_arrow S T) ->
       K ; E |= t2 ~: S ->   
       K ; E |= (trm_app t1 t2) ~: T
+  | typing_cst : forall K E Us c,
+      ok K ->
+      ok E ->
+      proper_instance K (const_type c) Us ->
+      K ; E |= (trm_cst c) ~: (const_type c ^^ Us)
 
 where "K ; E |= t ~: T" := (typing K E t T).
 
 
 (* ********************************************************************** *)
 (** ** Description of the semantics *)
-
-(** Grammar of values *)
-
-Inductive value : trm -> Prop :=
-  | value_abs : forall t1, term (trm_abs t1) -> value (trm_abs t1).
 
 Definition trm_def := trm_bvar 0.
 
@@ -280,34 +287,57 @@ Fixpoint trm_inst_rec (k : nat) (tl : list trm) (t : trm) {struct t} : trm :=
   | trm_abs t1    => trm_abs (trm_inst_rec (S k) tl t1) 
   | trm_let t1 t2 => trm_let (trm_inst_rec k tl t1) (trm_inst_rec (S k) tl t2) 
   | trm_app t1 t2 => trm_app (trm_inst_rec k tl t1) (trm_inst_rec k tl t2)
+  | trm_cst c     => trm_cst c
   end.
 
 Definition trm_inst t tl := trm_inst_rec 0 tl t.
 
-Parameter delta_rules : list (nat * trm * trm).
+Definition const_app c vl := fold_left trm_app vl (trm_cst c).
+
+Parameter delta_rule : nat -> trm -> trm -> Prop.
 Parameter delta_term : forall n t1 t2 tl,
-  In (n,t1,t2) delta_rules ->
+  delta_rule n t1 t2 ->
   list_for_n term n tl ->
   term (trm_inst t1 tl) /\ term (trm_inst t2 tl).
 Parameter delta_typed : forall n t1 t2 tl K E T,
-  In (n,t1,t2) delta_rules ->
+  delta_rule n t1 t2 ->
   list_for_n term n tl ->
   K ; E |= trm_inst t1 tl ~: T ->
   K ; E |= trm_inst t2 tl ~: T.
+Parameter const_arity : const -> nat.
+Parameter const_arity_ok1 : forall c vl n t1 t2 tl,
+  length vl < const_arity c ->
+  const_app c vl = trm_inst t1 tl ->
+  ~delta_rule n t1 t2.
+Parameter const_arity_ok2 : forall c vl K E T,
+  list_for_n term (const_arity c) vl ->
+  K ; E |= const_app c vl ~: T ->
+  exists n:nat, exists t1:trm, exists t2:trm, exists tl:list trm,
+    delta_rule n t1 t2 /\ const_app c vl = trm_inst t1 tl.
+
+(** Grammar of values *)
+
+Inductive value : nat -> trm -> Prop :=
+  | value_abs : forall t1, term (trm_abs t1) -> value 0 (trm_abs t1)
+  | value_cst : forall c, value (const_arity c) (trm_cst c)
+  | value_app : forall n t1 n2 t2,
+      value (S n) t1 ->
+      value n2 t2 ->
+      value n (trm_app t1 t2).
 
 (** Reduction rules *)
 
 Inductive red : trm -> trm -> Prop :=
   | red_abs : forall t1 t2, 
       term (trm_abs t1) -> 
-      value t2 ->  
+      value 0 t2 ->  
       red (trm_app (trm_abs t1) t2) (t1 ^^ t2)
   | red_let : forall t1 t2, 
       term (trm_let t1 t2) ->
-      value t1 -> 
+      value 0 t1 -> 
       red (trm_let t1 t2) (t2 ^^ t1)
   | red_delta : forall n t1 t2 tl,
-      In (n,t1,t2) delta_rules ->
+      delta_rule n t1 t2 ->
       list_for_n term n tl ->
       red (trm_inst t1 tl) (trm_inst t2 tl)
   | red_let_1 : forall t1 t1' t2, 
@@ -319,7 +349,7 @@ Inductive red : trm -> trm -> Prop :=
       red t1 t1' -> 
       red (trm_app t1 t2) (trm_app t1' t2)
   | red_app_2 : forall t1 t2 t2', 
-      value t1 ->
+      value 0 t1 ->
       red t2 t2' ->
       red (trm_app t1 t2) (trm_app t1 t2').
                   
@@ -338,7 +368,7 @@ Definition preservation := forall K E t t' T,
 
 Definition progress := forall K t T, 
   K ; empty |= t ~: T ->
-     value t 
+     value 0 t 
   \/ exists t', t --> t'.
 
 End MkDefs.

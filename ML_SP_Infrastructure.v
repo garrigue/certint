@@ -80,6 +80,7 @@ Fixpoint trm_fv (t : trm) {struct t} : vars :=
   | trm_abs t1    => (trm_fv t1)
   | trm_let t1 t2 => (trm_fv t1) \u (trm_fv t2)
   | trm_app t1 t2 => (trm_fv t1) \u (trm_fv t2)
+  | trm_cst c     => {}
   end.
 
 (* ********************************************************************** *)
@@ -127,6 +128,7 @@ Fixpoint trm_subst (z : var) (u : trm) (t : trm) {struct t} : trm :=
   | trm_abs t1    => trm_abs (trm_subst z u t1) 
   | trm_let t1 t2 => trm_let (trm_subst z u t1) (trm_subst z u t2) 
   | trm_app t1 t2 => trm_app (trm_subst z u t1) (trm_subst z u t2)
+  | trm_cst c     => trm_cst c
   end.
 
 Notation "[ z ~> u ] t" := (trm_subst z u t) (at level 68).
@@ -1173,12 +1175,17 @@ Proof.
   pick_fresh y. forward~ (H1 y). 
   pick_fresh y. forward~ (H2 y).   
   inversion* IHtyping1.
+  (* const *)
+  destruct (const_type c) as [ct ck].
+  destruct H1 as [[Hlen HT] [Hc _]].
+  unfold scheme in Hc; unfold sch_open; simpl in *.
+  eapply typ_open_types; rewrite* <- Hlen.
 Qed. 
 
 (** The value predicate only holds on locally-closed terms. *)
 
-Lemma value_regular : forall e,
-  value e -> term e.
+Lemma value_regular : forall n e,
+  value n e -> term e.
 Proof.
   induction 1; auto*.
 Qed.
@@ -1212,7 +1219,7 @@ Hint Extern 1 (term ?t) =>
   | H: typing _ _ t _ |- _ => apply (proj43 (typing_regular H))
   | H: red t _ |- _ => apply (proj1 (red_regular H))
   | H: red _ t |- _ => apply (proj2 (red_regular H))
-  | H: value t |- _ => apply (value_regular H)
+  | H: value _ t |- _ => apply (value_regular H)
   end.
 
 Hint Extern 1 (type ?T) => match goal with
