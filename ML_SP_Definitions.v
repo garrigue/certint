@@ -148,7 +148,6 @@ Definition scheme M :=
 
 Parameter const : Set.
 Parameter const_type : const -> sch.
-Parameter const_scheme : forall c, scheme (const_type c).
 
 Inductive trm : Set :=
   | trm_bvar : nat -> trm
