@@ -14,6 +14,7 @@ Module Type CstrIntf.
   Parameter entails_refl : forall c, entails c c.
   Parameter entails_trans : forall c1 c2 c3,
     entails c1 c2 -> entails c2 c3 -> entails c1 c3.
+  Parameter unique : cstr -> var -> Prop.
   Hint Resolve entails_refl.
 End CstrIntf.
 
@@ -42,6 +43,10 @@ Record ckind : Set := Kind {
   kind_rel  : list (var*typ) }.
 
 Definition kind := option ckind.
+
+Definition coherent k := forall x T U,
+  Cstr.unique (kind_cstr k) x ->
+  In (x,T) (kind_rel k) -> In (x,U) (kind_rel k) -> T = U.
 
 Definition entails K K' :=
   Cstr.entails (kind_cstr K) (kind_cstr K') /\
@@ -104,7 +109,7 @@ Definition types := list_for_n type.
 
 (** Iterating and opening kinds *)
 
-Definition kind_types K :=
+Definition kind_types (K:kind) :=
   match K with
   | None => nil
   | Some k => List.map (fun (x:var*typ) => snd x) (kind_rel k)
@@ -119,27 +124,31 @@ Fixpoint For_all(A:Set)(P:A->Prop)(l:list A) {struct l} : Prop :=
 Definition All_kind_types (P:typ->Prop) K :=
   For_all P (kind_types K).
 
-Definition kind_open K Vs :=
+Definition ckind_map f k :=
+  match k with Kind kc kr =>
+    Kind kc (List.map (fun XT:var*typ => (fst XT, f (snd XT))) kr)
+  end.
+
+Definition kind_map f K :=
   match K with
   | None => None
-  | Some k =>
-    Some (Kind (kind_cstr k)
-               (List.map (fun F:var*typ => (fst F, typ_open (snd F) Vs))
-                 (kind_rel k)))
+  | Some k => Some (ckind_map f k)
   end.
+
+Definition kind_open K Vs := kind_map (fun T => typ_open T Vs) K.
 
 (** Body of a scheme *)
 
-Definition typ_body n T Ks :=
+Definition typ_body T Ks :=
   exists L, forall Xs, 
-  fresh L n Xs ->
+  fresh L (length Ks) Xs ->
   type (typ_open_vars T Xs) /\
-  list_for_n (All_kind_types (fun T' => type (typ_open_vars T' Xs))) n Ks.
+  list_forall (All_kind_types (fun T' => type (typ_open_vars T' Xs))) Ks.
 
 (** Definition of a well-formed scheme *)
 
 Definition scheme M :=
-   typ_body (sch_arity M) (sch_type M) (sch_kinds M).
+   typ_body (sch_type M) (sch_kinds M).
 
 (* ********************************************************************** *)
 (** ** Description of terms *)
@@ -148,6 +157,7 @@ Definition scheme M :=
 
 Parameter const : Set.
 Parameter const_type : const -> sch.
+Parameter const_arity : const -> nat.
 
 Inductive trm : Set :=
   | trm_bvar : nat -> trm
@@ -207,6 +217,10 @@ Definition term_body t :=
 
 Definition kenv := env kind.
 
+Definition kenv_ok K :=
+  ok K /\
+  env_prop (fun o => match o with None => True | Some k => coherent k end) K.
+
 (** Proper instanciation *)
 
 Inductive well_kinded : kenv -> kind -> typ -> Prop :=
@@ -246,7 +260,7 @@ Definition kind_open_vars Ks Xs :=
 
 Inductive typing : kenv -> env -> trm -> typ -> Prop :=
   | typing_var : forall K E x M Us,
-      ok K ->
+      kenv_ok K ->
       ok E -> 
       binds x M E -> 
       proper_instance K M Us ->
@@ -256,7 +270,7 @@ Inductive typing : kenv -> env -> trm -> typ -> Prop :=
       (forall x, x \notin L -> 
         K ; (E & x ~ Sch U nil) |= (t1 ^ x) ~: T) -> 
       K ; E |= (trm_abs t1) ~: (typ_arrow U T)
-  | typing_let : forall M L1 L2 K E T2 t1 t2, 
+  | typing_let : forall M L1 L2 K E T2 t1 t2,
       (forall Xs, fresh L1 (sch_arity M) Xs ->
          (K & kind_open_vars (sch_kinds M) Xs); E |= t1 ~: (M ^ Xs)) ->
       (forall x, x \notin L2 -> K ; (E & x ~ M) |= (t2 ^ x) ~: T2) -> 
@@ -266,7 +280,7 @@ Inductive typing : kenv -> env -> trm -> typ -> Prop :=
       K ; E |= t2 ~: S ->   
       K ; E |= (trm_app t1 t2) ~: T
   | typing_cst : forall K E Us c,
-      ok K ->
+      kenv_ok K ->
       ok E ->
       proper_instance K (const_type c) Us ->
       K ; E |= (trm_cst c) ~: (const_type c ^^ Us)
@@ -291,49 +305,34 @@ Fixpoint trm_inst_rec (k : nat) (tl : list trm) (t : trm) {struct t} : trm :=
 
 Definition trm_inst t tl := trm_inst_rec 0 tl t.
 
-Definition const_app c vl := fold_left trm_app vl (trm_cst c).
+(** Grammar of values *)
+
+Inductive valu : nat -> trm -> Prop :=
+  | value_abs : forall t1, term (trm_abs t1) -> valu 0 (trm_abs t1)
+  | value_cst : forall c, valu (const_arity c) (trm_cst c)
+  | value_app : forall n t1 n2 t2,
+      valu (S n) t1 ->
+      valu n2 t2 ->
+      valu n (trm_app t1 t2).
+
+Definition value t := exists n, valu n t.
+
+(** Reduction rules *)
 
 Parameter delta_rule : nat -> trm -> trm -> Prop.
 Parameter delta_term : forall n t1 t2 tl,
   delta_rule n t1 t2 ->
   list_for_n term n tl ->
   term (trm_inst t1 tl) /\ term (trm_inst t2 tl).
-Parameter delta_typed : forall n t1 t2 tl K E T,
-  delta_rule n t1 t2 ->
-  list_for_n term n tl ->
-  K ; E |= trm_inst t1 tl ~: T ->
-  K ; E |= trm_inst t2 tl ~: T.
-Parameter const_arity : const -> nat.
-Parameter const_arity_ok1 : forall c vl n t1 t2 tl,
-  length vl < const_arity c ->
-  const_app c vl = trm_inst t1 tl ->
-  ~delta_rule n t1 t2.
-Parameter const_arity_ok2 : forall c vl K E T,
-  list_for_n term (const_arity c) vl ->
-  K ; E |= const_app c vl ~: T ->
-  exists n:nat, exists t1:trm, exists t2:trm, exists tl:list trm,
-    delta_rule n t1 t2 /\ const_app c vl = trm_inst t1 tl.
-
-(** Grammar of values *)
-
-Inductive value : nat -> trm -> Prop :=
-  | value_abs : forall t1, term (trm_abs t1) -> value 0 (trm_abs t1)
-  | value_cst : forall c, value (const_arity c) (trm_cst c)
-  | value_app : forall n t1 n2 t2,
-      value (S n) t1 ->
-      value n2 t2 ->
-      value n (trm_app t1 t2).
-
-(** Reduction rules *)
 
 Inductive red : trm -> trm -> Prop :=
   | red_abs : forall t1 t2, 
       term (trm_abs t1) -> 
-      value 0 t2 ->  
+      value t2 ->  
       red (trm_app (trm_abs t1) t2) (t1 ^^ t2)
   | red_let : forall t1 t2, 
       term (trm_let t1 t2) ->
-      value 0 t1 -> 
+      value t1 -> 
       red (trm_let t1 t2) (t2 ^^ t1)
   | red_delta : forall n t1 t2 tl,
       delta_rule n t1 t2 ->
@@ -348,7 +347,7 @@ Inductive red : trm -> trm -> Prop :=
       red t1 t1' -> 
       red (trm_app t1 t2) (trm_app t1' t2)
   | red_app_2 : forall t1 t2 t2', 
-      value 0 t1 ->
+      value t1 ->
       red t2 t2' ->
       red (trm_app t1 t2) (trm_app t1 t2').
                   
@@ -367,7 +366,7 @@ Definition preservation := forall K E t t' T,
 
 Definition progress := forall K t T, 
   K ; empty |= t ~: T ->
-     value 0 t 
+     value t
   \/ exists t', t --> t'.
 
 End MkDefs.

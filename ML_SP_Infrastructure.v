@@ -103,17 +103,6 @@ Fixpoint typ_subst (S : subs) (T : typ) {struct T} : typ :=
 
 (** Substitution for names for schemes. *)
 
-Definition ckind_map f k :=
-  match k with Kind kc kr =>
-    Kind kc (List.map (fun XT:var*typ => (fst XT, f (snd XT))) kr)
-  end.
-
-Definition kind_map f K :=
-  match K with
-  | None => None
-  | Some k => Some (ckind_map f k)
-  end.
-
 Definition kind_subst S := kind_map (typ_subst S).
 
 Definition sch_subst S M := 
@@ -170,7 +159,7 @@ Tactic Notation "apply_fresh" "*" constr(T) "as" ident(x) :=
 (* ********************************************************************** *)
 (** ** Automation *)
 
-Hint Constructors type term typing value red.
+Hint Constructors type term typing valu red.
 
 Lemma typ_def_fresh : typ_fv typ_def = {}.
 Proof.
@@ -592,15 +581,17 @@ Proof.
 Qed.
 
 Lemma typ_open_types : forall T Us Ks,
-  typ_body (length Us) T Ks ->
-  types (length Us) Us -> 
+  typ_body T Ks ->
+  types (length Ks) Us -> 
   type (typ_open T Us).
 Proof. 
-  introv [L K] WT. pick_freshes (length Us) Xs. poses Fr' Fr.
-  rewrite (fresh_length _ _ _  Fr) in WT, Fr'.
+  introv [L K] WT. pick_freshes (length Ks) Xs.
   rewrite* (@typ_subst_intro Xs). apply* typ_subst_type.
     apply* types_combine.
-  destruct* (K Xs).
+    destruct* WT.
+      split*. rewrite <- H. rewrite* (fresh_length _ _ _ Fr).
+    destruct* (K Xs).
+  rewrite* <- (fresh_length _ _ _ Fr).
 Qed.
 
 
@@ -710,11 +701,10 @@ Lemma well_kinded_extend : forall K K' x T,
 Proof.
   induction 2.
     apply wk_any.
-  eapply wk_kind.
+  apply* wk_kind.
   apply* binds_concat_fresh.
-    destruct* (H x).
-    elim (binds_fresh H0 H2).
-  assumption.
+  destruct* (H x).
+  elim (binds_fresh H0 H2).
 Qed.
 
 Lemma well_kinded_comm : forall K K' K'',
@@ -726,11 +716,10 @@ Proof.
   introv OK; introv WK. gen_eq (K & K'' & K') as H. gen K''.
   induction WK; introv Ok EQ; subst.
     apply wk_any.
-  eapply wk_kind.
-    destruct* (binds_concat_inv H).
-    destruct H1.
-    destruct* (binds_concat_inv H2).
-  assumption.
+  apply* wk_kind.
+  destruct* (binds_concat_inv H).
+  destruct H1.
+  destruct* (binds_concat_inv H2).
 Qed.
 
 Lemma disjoint_union : forall A B C,
@@ -1107,6 +1096,20 @@ Proof.
   apply* (in_map (fun XT : var * typ => (fst XT, typ_subst S (snd XT)))).
 Qed.
 
+Lemma map_coherent : forall f k,
+  coherent k -> coherent (ckind_map f k).
+Proof.
+  intros. intro; intros.
+  destruct k as [kc kr].
+  use (H x); simpl in *.
+  destruct (proj1 (in_map_iff _ _ _) H1) as [[x' T'] [Heq Hin]].
+  simpl in Heq; inversions Heq.
+  destruct (proj1 (in_map_iff _ _ _) H2) as [[x' U'] [Heq' Hin']].
+  simpl in Heq'; inversions Heq'.
+  rewrite* (H3 T' U').
+Qed.
+
+Hint Resolve map_coherent.
 
 (** Schemes are stable by type substitution. *)
 
@@ -1119,7 +1122,7 @@ Proof.
     simpls; destruct* (K Xs); clear K. destruct* (fresh_union_r _ _ _ _ Fr).
   split.
     rewrite* typ_subst_open_vars.
-  apply* list_for_n_map.
+  apply* list_forall_map.
   clear H0; intros.
   unfold kind_subst; apply* All_kind_types_map.
   intros; rewrite* typ_subst_open_vars.
@@ -1143,7 +1146,7 @@ Lemma sch_open_types : forall M Us,
   type (sch_open M Us).
 Proof. 
   unfold scheme, sch_open. intros [T K] Us WB [Ar TU].
-  simpls. rewrite Ar in *. apply* typ_open_types.
+  simpls. apply* typ_open_types.
 Qed.
 
 Hint Resolve sch_open_types.
@@ -1158,7 +1161,7 @@ Hint Resolve sch_open_types.
 (** A typing relation is restricted to well-formed objects. *)
 
 Lemma typing_regular : forall K E e T,
-  typing K E e T -> ok K /\ ok E /\ term e /\ type T.
+  typing K E e T -> kenv_ok K /\ ok E /\ term e /\ type T.
 Proof.
   split4; induction* H.
   (* ok *)
@@ -1170,24 +1173,31 @@ Proof.
   apply_fresh* term_let as y.
     pick_freshes (sch_arity M) Xs.
     forward~ (H0 Xs) as G.
-    unfold proper_instance in H2. auto*.
   (* type *)
-  pick_fresh y. forward~ (H1 y). 
-  pick_fresh y. forward~ (H2 y).   
+  pick_fresh y. unfold proper_instance in H2. auto*.
+  pick_fresh y. forward~ (H1 y).
+  pick_fresh y. forward~ (H2 y).
   inversion* IHtyping1.
   (* const *)
   destruct (const_type c) as [ct ck].
   destruct H1 as [[Hlen HT] [Hc _]].
   unfold scheme in Hc; unfold sch_open; simpl in *.
-  eapply typ_open_types; rewrite* <- Hlen.
-Qed. 
+  apply* typ_open_types.
+Qed.
+
+Lemma env_ok_is_ok : forall K, kenv_ok K -> ok K.
+Proof.
+  unfold kenv_ok. tauto.
+Qed.
+
+Hint Resolve env_ok_is_ok.
 
 (** The value predicate only holds on locally-closed terms. *)
 
-Lemma value_regular : forall n e,
-  value n e -> term e.
+Lemma value_regular : forall e,
+  value e -> term e.
 Proof.
-  induction 1; auto*.
+  intros. destruct H. induction H; auto.
 Qed.
 
 (** A reduction relation only holds on pairs of locally-closed terms. *)
@@ -1204,7 +1214,7 @@ Qed.
 
 (** Automation for reasoning on well-formedness. *)
 
-Hint Extern 1 (ok ?K) =>
+Hint Extern 1 (kenv_ok ?K) =>
   match goal with
   | H: typing K _ _ _ |- _ => apply (proj41 (typing_regular H))
   end.
@@ -1219,7 +1229,7 @@ Hint Extern 1 (term ?t) =>
   | H: typing _ _ t _ |- _ => apply (proj43 (typing_regular H))
   | H: red t _ |- _ => apply (proj1 (red_regular H))
   | H: red _ t |- _ => apply (proj2 (red_regular H))
-  | H: value _ t |- _ => apply (value_regular H)
+  | H: value t |- _ => apply (value_regular H)
   end.
 
 Hint Extern 1 (type ?T) => match goal with

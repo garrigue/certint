@@ -4,7 +4,7 @@
 ***************************************************************************)
 
 Set Implicit Arguments.
-Require Import List Metatheory 
+Require Import Arith List Metatheory 
   ML_SP_Definitions
   ML_SP_Infrastructure.
 
@@ -14,7 +14,28 @@ Module Infra := MkInfra(Cstr).
 Import Infra.
 Import Defs.
 
+(* Hypotheses *)
+
 Parameter const_closed : forall c, sch_fv (const_type c) = {}.
+
+Parameter delta_typed : forall n t1 t2 tl K E T,
+  delta_rule n t1 t2 ->
+  list_for_n term n tl ->
+  K ; E |= trm_inst t1 tl ~: T ->
+  K ; E |= trm_inst t2 tl ~: T.
+
+Definition const_app c vl := fold_left trm_app vl (trm_cst c).
+
+Parameter const_arity_ok : forall c vl K T,
+  list_for_n value (S(const_arity c)) vl ->
+  K ; empty |= const_app c vl ~: T ->
+  exists n:nat, exists t1:trm, exists t2:trm, exists tl:list trm,
+    delta_rule n t1 t2 /\ list_for_n term n tl /\
+    const_app c vl = trm_inst t1 tl.
+
+Parameter delta_arity : forall n t1 t2,
+  delta_rule n t1 t2 ->
+  exists c, exists pl, t1 = const_app c pl /\ length pl = S(const_arity c).
 
 (* ********************************************************************** *)
 (** Type substitution preserves typing *)
@@ -33,17 +54,17 @@ Proof.
   induction H0.
     constructor.
   generalize (H x _ H0); intro HW.
-  inversion HW. clear k0 H2 K0 H4 HW.
+  inversions HW.
   simpl typ_subst.
   case_eq (get x S); intros; rewrite H2 in H3.
-    rewrite <- H3; clear t H2 H3.
-    simpl. eapply wk_kind. apply H5.
-    eapply entails_trans. apply H6.
+    subst.
+    simpl. apply* wk_kind.
+    apply* entails_trans.
     apply* kind_subst_entails.
   simpl.
-  inversion H3. rewrite H7 in *; clear x0 H3 H2 H7.
-  eapply wk_kind. apply H5.
-  eapply entails_trans. apply H6.
+  inversions H3.
+  apply* wk_kind.
+  apply* entails_trans.
   apply* kind_subst_entails.
 Qed.
 
@@ -64,7 +85,15 @@ Proof.
   apply* (For_all2_map (well_kinded (K&K'&K''))); intros.
   apply* well_kinded_subst.
 Qed.
-  
+
+Lemma binds_combine : forall (A:Set) x (c:A) Ys Ks,
+  binds x c (combine Ys Ks) -> In c Ks.
+Proof.
+  induction Ys; destruct Ks; simpl; intros; try (elim (binds_empty H)).
+  unfold binds in H. simpl in H.
+  destruct* (eq_var_dec x a). inversion* H.
+Qed.
+
 Lemma well_subst_fresh : forall K K' K'' S Ys L1 M,
   well_subst (K & K' & K'') (K & map (kind_subst S) K'') S ->
   fresh (L1 \u dom S \u dom (K & K'')) (length (sch_kinds M)) Ys ->
@@ -88,14 +117,43 @@ Proof.
     rewrite dom_map. rewrite dom_concat; rewrite* dom_map.
   destruct k; try constructor.
   simpl. rewrite get_notin_dom.
-    eapply wk_kind. eapply binds_prepend.
+    apply* wk_kind. apply* binds_prepend.
       use (binds_map (kind_subst S) B).
       simpl in H; apply H.
     apply entails_refl.
   intro; elim (binds_fresh B); clear B.
   use (proj2 (fresh_union_r _ _ _ _ (proj1 (fresh_union_r _ _ _ _ Fr)))).
-  intro; destruct* (fresh_rev _ _ H0 (x:=x)).
+  intro. destruct* (fresh_rev _ _ H0 (x:=x)).
   apply (in_dom_combine _ _ H1).
+Qed.
+
+(*
+Lemma kinds_ok_subst : forall M S,
+  kinds_ok (sch_kinds M) -> kinds_ok (sch_kinds (sch_subst S M)).
+Proof.
+  unfold kinds_ok. destruct M. simpl.
+  intros; apply* list_forall_map.
+  intros. destruct* x. unfold kind_subst. simpl*.
+Qed.
+*)
+
+Lemma kenv_ok_subst : forall K K' K'' S,
+  kenv_ok (K & K' & K'') -> kenv_ok (K & map (kind_subst S) K'').
+Proof.
+  intros. split*.
+  intro; intros. destruct H.
+  binds_cases H0. apply* (H1 x).
+    apply* binds_concat_ok.
+    apply* binds_concat_ok. destruct* (ok_concat_inv _ _ H).
+  case_eq (get x K''); intros.
+    use (binds_map (kind_subst S) H0).
+    rewrite (binds_inj B0 H2).
+    clear B0 a. destruct o. simpl.
+      apply map_coherent.
+      apply (H1 x (Some c)).
+      apply* binds_prepend.
+    simpl*.
+  elim (binds_fresh B0). apply get_none_notin. apply* map_get_none.
 Qed.
 
 Lemma typing_typ_subst : forall F K'' S K K' E t T,
@@ -109,6 +167,7 @@ Proof.
   gen_eq (K & K' & K'') as GK; gen_eq (E & F) as G; gen K''; gen F.
   induction Typ; introv WS EQ EQ'; subst; simpls typ_subst.
   rewrite~ sch_subst_open. apply* typing_var.
+    apply* kenv_ok_subst.
     binds_cases H1.
       apply* binds_concat_fresh.
        rewrite* sch_subst_fresh. use (fv_in_spec sch_fv B).
@@ -136,6 +195,7 @@ Proof.
     intro x. rewrite* const_closed.
   rewrite* sch_subst_fresh.
   apply* typing_cst.
+    apply* kenv_ok_subst.
   rewrite* <- (sch_subst_fresh S H2).
   apply* proper_instance_subst.
 Qed.
@@ -293,7 +353,7 @@ Qed.
 
 Lemma typing_weaken_kinds : forall K K' K'' E t T,
   K & K''; E |= t ~: T ->
-  ok (K & K' & K'') ->
+  kenv_ok (K & K' & K'') ->
   K & K' & K''; E |= t ~: T.
 Proof.
   introv Typ. gen_eq (K & K'') as H. gen K''.
@@ -301,19 +361,25 @@ Proof.
   apply* typing_var. apply* proper_instance_weaken.
   apply_fresh* typing_abs as y.
   apply_fresh* (@typing_let M (L1 \u dom(K&K'&K''))) as y.
-    intros. clear H H1 H2.
+    intros. clear H1 H2.
     unfold concat. rewrite <- app_ass. unfold concat in H0.
-    apply* H0. rewrite* app_ass.
+    apply* H0; clear H0. rewrite* app_ass.
     rewrite app_ass. fold ((K'' ++ K' ++ K) & kind_open_vars (sch_kinds M) Xs).
     unfold kind_open_vars.
-    apply* disjoint_ok.
-    apply* ok_combine_fresh.
-    rewrite mkset_dom.
-    apply disjoint_comm.
-    apply* fresh_disjoint.
-    destruct* (fresh_union_r _ _ _ _ H3).
-    unfold kinds_open. rewrite map_length.
-    rewrite* <- (fresh_length _ _ _ H3).
+    split. apply* disjoint_ok.
+      apply* ok_combine_fresh.
+      rewrite mkset_dom.
+      apply disjoint_comm.
+      apply* fresh_disjoint.
+      destruct* (fresh_union_r _ _ _ _ H3).
+      unfold kinds_open. rewrite map_length.
+      rewrite* <- (fresh_length _ _ _ H3).
+    intro; intros.
+    destruct Ok as [_ Ok].
+    destruct (binds_concat_inv H0) as [[Fr B]|B]; clear H0.
+      apply* (Ok x).
+    use (typing_regular (H Xs (proj1 (fresh_union_r _ _ _ _ H3)))).
+    apply* (proj2 (proj41 H0) x).
   auto*.
   apply* typing_cst. apply* proper_instance_weaken.
 Qed.
@@ -344,21 +410,26 @@ Proof.
      generalize (Typu Ys H4); intro; clear H4.
      apply* typing_weaken_kinds.
      clear H0 H1 H2 L2 t2 T2 Wu Typu.
-     apply* disjoint_ok.
-     destruct* (typing_regular (H Xs H3)).
-     unfold kind_open_vars.     
-     apply* ok_combine_fresh.
-     rewrite dom_concat.
-     apply disjoint_union.
-       apply ok_disjoint. destruct* (typing_regular H5).
-     apply disjoint_comm.
-     unfold kind_open_vars.
-     rewrite mkset_dom. rewrite mkset_dom.
-       apply* (fresh_disjoint (sch_arity M)).
-       unfold kinds_open. rewrite map_length.
-         rewrite* <- (fresh_length _ _ _ H3).
-       unfold kinds_open. rewrite map_length.
-         rewrite* <- (fresh_length _ _ _ TypM).
+     split.
+       apply* disjoint_ok.
+       destruct* (typing_regular (H Xs H3)).
+       unfold kind_open_vars.
+       apply* ok_combine_fresh.
+       rewrite dom_concat.
+       apply disjoint_union.
+         apply ok_disjoint. destruct* (typing_regular H5).
+       apply disjoint_comm.
+       unfold kind_open_vars.
+       rewrite mkset_dom. rewrite mkset_dom.
+         apply* (fresh_disjoint (sch_arity M)).
+         unfold kinds_open. rewrite map_length.
+           rewrite* <- (fresh_length _ _ _ H3).
+         unfold kinds_open. rewrite map_length.
+       rewrite* <- (fresh_length _ _ _ TypM).
+     intro; intros.
+     destruct (binds_concat_inv H0) as [[Fr B]|B]; clear H0.
+       apply* (proj2 (proj41 (typing_regular (H Xs H3))) x).
+     apply* (proj2 (proj41 (typing_regular H5))).
    rewrite* trm_subst_open_var. 
    apply_ih_bind* H2.
   assert (exists L : vars, has_scheme_vars L K E u M). exists* Lu.
@@ -404,21 +475,167 @@ Qed.
 (* ********************************************************************** *)
 (** Progress: typed terms are values or can reduce *)
 
+Lemma value_app_const : forall t1 t2 n,
+  valu n (trm_app t1 t2) ->
+  exists c:const, exists vl:list trm,
+    length vl + n = const_arity c /\ trm_app t1 t2 = const_app c vl /\
+    list_forall value vl.
+Proof.
+  induction t1; intros; inversions H; try (inversion H3; fail).
+    clear IHt1_2.
+    destruct (IHt1_1 _ _ H3) as [c [vl [Hlen [Heq Hv]]]].
+    exists c. exists (vl ++ t2 :: nil).
+    split. rewrite app_length. rewrite <- Hlen. simpl. ring.
+    split. rewrite Heq. unfold const_app.
+      rewrite fold_left_app. simpl. auto.
+    apply* list_forall_concat.
+    constructor; auto. exists* n2.
+  exists c. exists (t2 :: nil).
+  inversions H3. rewrite H1.
+  unfold const_app. simpl; auto.
+  split3*. constructor; auto. exists* n2.
+Qed.
+
+Lemma progress_delta : forall K t0 t3 t2 T,
+  K; empty |= trm_app (trm_app t0 t3) t2 ~: T ->
+  valu 0 (trm_app t0 t3) ->
+  value t2 ->
+  exists t' : trm, trm_app (trm_app t0 t3) t2 --> t'.
+Proof.
+  intros.
+  destruct (value_app_const H0) as [c [vl [Hlen [Heq Hv]]]].
+  destruct (const_arity_ok (c:=c) (vl:=vl ++ t2 :: nil) (K:=K) (T:=T)).
+    split. rewrite <- Hlen. rewrite app_length. simpl; ring.
+    apply* list_forall_concat.
+    rewrite Heq in H.
+    unfold const_app in *. rewrite* fold_left_app.
+  destruct H2 as [t1' [t3' [tl [R [Htl Heq']]]]].
+  exists (trm_inst t3' tl).
+  rewrite Heq.
+  unfold const_app in *.
+  rewrite fold_left_app in Heq'; simpl in Heq'.
+  rewrite Heq'.
+  apply* red_delta.
+Qed.
+
 Lemma progress_result : progress.
 Proof.
   introv Typ. gen_eq (empty:env) as E. poses Typ' Typ.
   induction Typ; intros; subst.
   inversions H1.
-  left*. 
+  left. exists* 0.
   right. pick_freshes (sch_arity M) Ys.
-    destructi~ (@H0 Ys) as [Val1 | [t1' Red1]]. 
-      exists* (t2 ^^ t1). 
+    destructi~ (@H0 Ys) as [[n Val1] | [t1' Red1]].
+      assert (value t1). exists* n.
+      exists* (t2 ^^ t1).
       exists* (trm_let t1' t2).
-  right. destruct~ IHTyp1 as [Val1 | [t1' Red1]]. 
+  destruct~ IHTyp1 as [Val1 | [t1' Red1]]. 
     destruct~ IHTyp2 as [Val2 | [t2' Red2]]. 
-      inversions Typ1; inversion Val1. exists* (t0 ^^ t2).
-      exists* (trm_app t1 t2'). 
-    exists* (trm_app t1' t2).
+      inversions Typ1; destruct Val1 as [n Val1]; inversions Val1.
+        right; exists* (t0 ^^ t2).
+      destruct n.
+        right; apply* progress_delta.
+      left. destruct Val2. exists* n.
+      case_eq (const_arity c); intro.
+        right. rewrite H2 in Val1.
+        destruct (const_arity_ok (c:=c)(vl:=t2::nil)(K:=K)(T:=T)).
+          rewrite H2. constructor; simpl; auto.
+        unfold const_app; simpl*.
+        destruct H3 as [t1' [t3' [tl [R [Htl Heq]]]]].
+        exists (trm_inst t3' tl).
+        unfold const_app in Heq; simpl in Heq; rewrite Heq.
+        apply* red_delta.
+      left. exists n. rewrite H2 in Val1. destruct* Val2.
+      right; exists* (trm_app t1 t2'). 
+    right; exists* (trm_app t1' t2).
+  left. exists* (const_arity c).
+Qed.
+
+Lemma trm_inst_app : forall c tl pl,
+  trm_inst (const_app c pl) tl = const_app c (List.map (trm_inst_rec 0 tl) pl).
+Proof.
+  introv.
+  rewrite <- (rev_involutive pl).
+  induction (rev pl). simpl. auto.
+  unfold const_app in *. simpl in *.
+  rewrite map_app.
+  rewrite fold_left_app.
+  rewrite fold_left_app.
+  simpl. unfold trm_inst. simpl. rewrite <- IHl. auto.
+Qed.
+
+Lemma const_app_inv : forall c pl,
+  pl = nil \/
+  exists t1, exists t2, const_app c pl = trm_app t1 t2.
+Proof.
+  intros.
+  destruct* pl.
+  right.
+  destruct* (exists_last (l:=t::pl)). intro; discriminate.
+  destruct s. rewrite e. unfold const_app.
+  rewrite fold_left_app. simpl.
+  exists (fold_left trm_app x (trm_cst c)).
+  exists* x0.
+Qed.
+  
+Lemma trm_inst_app_inv : forall c pl tl,
+  pl = nil \/
+  exists t1, exists t2,
+    trm_inst (const_app c pl) tl = trm_app t1 t2.
+Proof.
+  intros.
+  destruct* (const_app_inv c pl).
+  right.
+  destruct H as [x1 [x2 e]].
+  rewrite e.
+  exists (trm_inst x1 tl).
+  exists* (trm_inst x2 tl).
+Qed.
+
+Lemma const_app_eq : forall c1 vl1 c2 vl2,
+  const_app c1 vl1 = const_app c2 vl2 -> c1 = c2 /\ vl1 = vl2.
+Proof.
+  intros.
+  rewrite <- (rev_involutive vl1) in *.
+  rewrite <- (rev_involutive vl2) in *.
+  generalize (rev vl2) H. clear vl2 H.
+  induction (rev vl1). intros; destruct l.
+    inversion H. auto.
+    unfold const_app in H. simpl in H; rewrite fold_left_app in H. discriminate.
+  intros; destruct l0;
+    unfold const_app in H; simpl in H; rewrite fold_left_app in H.
+      discriminate.
+  destruct (IHl l0); rewrite fold_left_app in H; simpl in H; inversion* H.
+  simpl. subst c1; rewrite* H1.
+Qed.
+
+Lemma value_irreducible : forall t t',
+  value t -> ~(t --> t').
+Proof.
+  induction t; introv HV; destruct HV as [k HV']; inversions HV';
+    intro R; inversions R.
+       destruct (delta_arity H0) as [c [pl [Heq Hlen]]]. rewrite Heq in H.
+       destruct* (trm_inst_app_inv c pl tl). subst. discriminate.
+       destruct H3; destruct H3; rewrite H3 in H. discriminate.
+      inversions H2.
+     clear IHt1 IHt2 H1.
+     destruct (delta_arity H0) as [c [pl [Heq Hlen]]]. rewrite Heq in H.
+     destruct (value_app_const HV').
+     destruct H1 as [vl [Hl [He Hv]]].
+     rewrite He in H; clear He.
+     rewrite trm_inst_app in H.
+     destruct (const_app_eq _ _ _ _ H). subst.
+     rewrite map_length in Hl.
+     omega.
+    elim (IHt1 t1'). exists* (S k). auto.
+   elim (IHt2 t2'). exists* n2. auto.
+  destruct (delta_arity H0) as [c' [pl [Heq Hlen]]]. rewrite Heq in H.
+  rewrite trm_inst_app in H.
+  assert (const_app c nil = trm_cst c). auto.
+  rewrite <- H2 in H.
+  destruct (const_app_eq _ _ _ _ H). subst.
+  rewrite <- (map_length (trm_inst_rec 0 tl)) in Hlen.
+  rewrite H4 in Hlen. discriminate.
 Qed.
 
 End MkSound.
