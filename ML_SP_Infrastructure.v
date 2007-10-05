@@ -6,9 +6,9 @@
 Set Implicit Arguments.
 Require Import List Metatheory ML_SP_Definitions.
 
-Module MkInfra(Cstr:CstrIntf).
+Module MkInfra(Cstr:CstrIntf)(Const:CstIntf).
 
-Module Defs := MkDefs(Cstr).
+Module Defs := MkDefs(Cstr)(Const).
 Import Defs.
 
 (* ====================================================================== *)
@@ -159,7 +159,7 @@ Tactic Notation "apply_fresh" "*" constr(T) "as" ident(x) :=
 (* ********************************************************************** *)
 (** ** Automation *)
 
-Hint Constructors type term typing valu red.
+Hint Constructors type term.
 
 Lemma typ_def_fresh : typ_fv typ_def = {}.
 Proof.
@@ -460,10 +460,10 @@ Qed.
 Lemma kinds_subst_open_vars : forall S Ks Xs,
   fresh (dom S) (length Xs) Xs ->
   env_prop type S ->
-  map (kind_subst S) (kind_open_vars Ks Xs) =
-  kind_open_vars (List.map (kind_subst S) Ks) Xs.
+  map (kind_subst S) (kinds_open_vars Ks Xs) =
+  kinds_open_vars (List.map (kind_subst S) Ks) Xs.
 Proof.
-  unfold kind_open_vars.
+  unfold kinds_open_vars.
   intros.
   rewrite map_combine.
   apply (f_equal (combine Xs (B:=kind))).
@@ -566,18 +566,15 @@ Qed.
 
 (** ** Opening a body with a list of types gives a type *)
 
-Lemma types_combine : forall Xs Us,
-  types (length Xs) Us -> env_prop type (combine Xs Us).
+Lemma list_forall_env_prop : forall (A:Set) (P:A->Prop) Xs Vs,
+  list_forall P Vs -> env_prop P (combine Xs Vs).
 Proof.
-  induction Xs; destruct Us; intros; destruct* H; try discriminate;
-    intros v u; unfold binds; simpl; intro B.
-    discriminate.
-  destruct (eq_var_dec v a).
-    inversion B as [e']; rewrite <- e'. inversion* H0.
-  assert (HT: types (length Xs) Us).
-    split. simpl in H; inversion* H.
-    inversion* H0.
-  apply* (IHXs Us HT v).
+  induction Xs; destruct Vs; simpl; intros; intro; intros;
+    unfold binds in H0; simpl in H0; try discriminate.
+  destruct* (eq_var_dec x a).
+    inversion H. generalize H4; inversion* H0.
+  inversion H.
+  apply (IHXs Vs H3 x a1 H0).
 Qed.
 
 Lemma typ_open_types : forall T Us Ks,
@@ -587,9 +584,7 @@ Lemma typ_open_types : forall T Us Ks,
 Proof. 
   introv [L K] WT. pick_freshes (length Ks) Xs.
   rewrite* (@typ_subst_intro Xs). apply* typ_subst_type.
-    apply* types_combine.
-    destruct* WT.
-      split*. rewrite <- H. rewrite* (fresh_length _ _ _ Fr).
+    apply list_forall_env_prop. destruct* WT.
     destruct* (K Xs).
   rewrite* <- (fresh_length _ _ _ Fr).
 Qed.
@@ -765,6 +760,71 @@ Proof.
   apply* ok_disjoint.
 Qed.
 
+(** Properties of constants *)
+
+Definition const_app c vl := fold_left trm_app vl (trm_cst c).
+
+Lemma trm_inst_app : forall c tl pl,
+  trm_inst_rec 0 tl (const_app c pl) =
+  const_app c (List.map (trm_inst_rec 0 tl) pl).
+Proof.
+  introv.
+  rewrite <- (rev_involutive pl).
+  induction (rev pl). simpl. auto.
+  unfold const_app in *. simpl in *.
+  rewrite map_app.
+  rewrite fold_left_app.
+  rewrite fold_left_app.
+  simpl. unfold trm_inst. simpl. rewrite <- IHl. auto.
+Qed.
+
+Lemma const_app_inv : forall c pl,
+  pl = nil \/
+  exists t1, exists t2, const_app c pl = trm_app t1 t2.
+Proof.
+  intros.
+  destruct* pl.
+  right.
+  destruct* (exists_last (l:=t::pl)). intro; discriminate.
+  destruct s. rewrite e. unfold const_app.
+  rewrite fold_left_app. simpl.
+  exists (fold_left trm_app x (trm_cst c)).
+  exists* x0.
+Qed.
+  
+Lemma trm_inst_app_inv : forall c pl tl,
+  pl = nil \/
+  exists t1, exists t2,
+    trm_inst (const_app c pl) tl = trm_app t1 t2.
+Proof.
+  intros.
+  destruct* (const_app_inv c pl).
+  right.
+  destruct H as [x1 [x2 e]].
+  rewrite e.
+  exists (trm_inst x1 tl).
+  exists* (trm_inst x2 tl).
+Qed.
+
+Lemma const_app_eq : forall c1 vl1 c2 vl2,
+  const_app c1 vl1 = const_app c2 vl2 -> c1 = c2 /\ vl1 = vl2.
+Proof.
+  intros.
+  rewrite <- (rev_involutive vl1) in *.
+  rewrite <- (rev_involutive vl2) in *.
+  generalize (rev vl2) H. clear vl2 H.
+  induction (rev vl1). intros; destruct l.
+    inversion H. auto.
+    unfold const_app in H. simpl in H; rewrite fold_left_app in H. discriminate.
+  intros; destruct l0;
+    unfold const_app in H; simpl in H; rewrite fold_left_app in H.
+      discriminate.
+  destruct (IHl l0); rewrite fold_left_app in H; simpl in H; inversion* H.
+  simpl. subst c1; rewrite* H1.
+Qed.
+
+
+
 (* Extra properties *)
 
 Lemma list_forall_map(A B:Set)(f:A->B)(PA:A->Prop)(PB:B->Prop)(l:list A):
@@ -814,17 +874,6 @@ Lemma list_map_comp : forall (A:Set) (f g:A->A) l,
   List.map f (List.map g l) = List.map (fun x:A => f (g x)) l.
 Proof.
   induction l; simpl*. rewrite* IHl.
-Qed.
-
-Lemma list_forall_env_prop : forall (A:Set) (P:A->Prop) Xs Vs,
-  list_forall P Vs -> env_prop P (combine Xs Vs).
-Proof.
-  induction Xs; destruct Vs; simpl; intros; intro; intros;
-    unfold binds in H0; simpl in H0; try discriminate.
-  destruct* (eq_var_dec x a).
-    inversion H. generalize H4; inversion* H0.
-  inversion H.
-  apply (IHXs Vs H3 x a1 H0).
 Qed.
 
 Lemma list_map_ext : forall (A B:Set) (l:list A) (f1 f2:A->B),
@@ -882,6 +931,14 @@ Proof.
   destruct* (eq_var_dec a1 a).
     rewrite e in H. destruct* H. elim H. auto.
   rewrite* IHXs.
+Qed.
+
+Lemma binds_combine : forall (A:Set) x (c:A) Ys Ks,
+  binds x c (combine Ys Ks) -> In c Ks.
+Proof.
+  induction Ys; destruct Ks; simpl; intros; try (elim (binds_empty H)).
+  unfold binds in H. simpl in H.
+  destruct* (eq_var_dec x a). inversion* H.
 Qed.
 
 Lemma For_all2_get : forall (A B:Set) (P:A->B->Prop) Xs Ys Zs x y z,
@@ -1151,9 +1208,13 @@ Qed.
 
 Hint Resolve sch_open_types.
 
-
 (* ====================================================================== *)
 (** * Properties of judgments *)
+
+Module MkJudgInfra(Delta:DeltaIntf).
+Module Judge := MkJudge(Delta).
+Import Judge.
+Hint Constructors typing valu red.
 
 (* ********************************************************************** *)
 (** ** Regularity of relations *)
@@ -1179,7 +1240,7 @@ Proof.
   pick_fresh y. forward~ (H2 y).
   inversion* IHtyping1.
   (* const *)
-  destruct (const_type c) as [ct ck].
+  destruct (Delta.type c) as [ct ck].
   destruct H1 as [[Hlen HT] [Hc _]].
   unfold scheme in Hc; unfold sch_open; simpl in *.
   apply* typ_open_types.
@@ -1206,7 +1267,7 @@ Lemma red_regular : forall e e',
   red e e' -> term e /\ term e'.
 Proof.
   induction 1; use value_regular.
-  apply* delta_term.
+  apply* Delta.term.
 Qed.
 
 (* ********************************************************************** *)
@@ -1236,5 +1297,6 @@ Hint Extern 1 (type ?T) => match goal with
   | H: typing _ _ _ T |- _ => apply (proj44 (typing_regular H))
   end.
 
+End MkJudgInfra.
 
 End MkInfra.

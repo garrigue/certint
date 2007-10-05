@@ -10,6 +10,7 @@ Require Import Metatheory List Arith.
 
 Module Type CstrIntf.
   Parameter cstr : Set.
+  Parameter valid : cstr -> Prop.
   Parameter entails : cstr -> cstr -> Prop.
   Parameter entails_refl : forall c, entails c c.
   Parameter entails_trans : forall c1 c2 c3,
@@ -18,9 +19,14 @@ Module Type CstrIntf.
   Hint Resolve entails_refl.
 End CstrIntf.
 
+Module Type CstIntf.
+  Parameter const : Set.
+  Parameter arity : const -> nat.
+End CstIntf.
+
 (* Parameterized definitions *)
 
-Module MkDefs(Cstr:CstrIntf).
+Module MkDefs(Cstr:CstrIntf)(Const:CstIntf).
 
 (* ********************************************************************** *)
 (** ** Description of types *)
@@ -155,17 +161,13 @@ Definition scheme M :=
 
 (** Grammar of terms. *)
 
-Parameter const : Set.
-Parameter const_type : const -> sch.
-Parameter const_arity : const -> nat.
-
 Inductive trm : Set :=
   | trm_bvar : nat -> trm
   | trm_fvar : var -> trm
   | trm_abs  : trm -> trm
   | trm_let  : trm -> trm -> trm
   | trm_app  : trm -> trm -> trm
-  | trm_cst  : const -> trm.
+  | trm_cst  : Const.const -> trm.
 
 (** Opening term binders. *)
 
@@ -209,6 +211,21 @@ Inductive term : trm -> Prop :=
 Definition term_body t :=
   exists L, forall x, x \notin L -> term (t ^ x).
 
+(** Term instanciation *)
+
+Definition trm_def := trm_bvar 0.
+
+Fixpoint trm_inst_rec (k : nat) (tl : list trm) (t : trm) {struct t} : trm :=
+  match t with
+  | trm_bvar i    => if le_lt_dec k i then nth (i-k) tl trm_def else trm_bvar i
+  | trm_fvar x    => trm_fvar x 
+  | trm_abs t1    => trm_abs (trm_inst_rec (S k) tl t1) 
+  | trm_let t1 t2 => trm_let (trm_inst_rec k tl t1) (trm_inst_rec (S k) tl t2) 
+  | trm_app t1 t2 => trm_app (trm_inst_rec k tl t1) (trm_inst_rec k tl t2)
+  | trm_cst c     => trm_cst c
+  end.
+
+Definition trm_inst t tl := trm_inst_rec 0 tl t.
 
 (* ********************************************************************** *)
 (** ** Description of typing *)
@@ -219,7 +236,8 @@ Definition kenv := env kind.
 
 Definition kenv_ok K :=
   ok K /\
-  env_prop (fun o => match o with None => True | Some k => coherent k end) K.
+  env_prop (fun o => match o with None => True
+           | Some k => Cstr.valid (kind_cstr k) /\ coherent k end) K.
 
 (** Proper instanciation *)
 
@@ -247,16 +265,29 @@ Definition proper_instance K M Us :=
   scheme M /\
   For_all2 (well_kinded K) (kinds_open (sch_kinds M) Us) Us.
 
+Definition kinds_open_vars Ks Xs :=
+  List.combine Xs (kinds_open Ks (typ_fvars Xs)).
+
 (** Definition of typing environments *)
 
 Definition env := env sch.
 
+(** Another functor for delta-rules *)
+
+Module Type DeltaIntf.
+  Parameter type : Const.const -> sch.
+  Parameter rule : nat -> trm -> trm -> Prop.
+  Parameter term : forall n t1 t2 tl,
+    rule n t1 t2 ->
+    list_for_n term n tl ->
+    term (trm_inst t1 tl) /\ term (trm_inst t2 tl).
+End DeltaIntf.
+
+Module MkJudge(Delta:DeltaIntf).
+
 (** The typing judgment *)
 
 Reserved Notation "K ; E |= t ~: T" (at level 69).
-
-Definition kind_open_vars Ks Xs :=
-  List.combine Xs (kinds_open Ks (typ_fvars Xs)).
 
 Inductive typing : kenv -> env -> trm -> typ -> Prop :=
   | typing_var : forall K E x M Us,
@@ -272,7 +303,7 @@ Inductive typing : kenv -> env -> trm -> typ -> Prop :=
       K ; E |= (trm_abs t1) ~: (typ_arrow U T)
   | typing_let : forall M L1 L2 K E T2 t1 t2,
       (forall Xs, fresh L1 (sch_arity M) Xs ->
-         (K & kind_open_vars (sch_kinds M) Xs); E |= t1 ~: (M ^ Xs)) ->
+         (K & kinds_open_vars (sch_kinds M) Xs); E |= t1 ~: (M ^ Xs)) ->
       (forall x, x \notin L2 -> K ; (E & x ~ M) |= (t2 ^ x) ~: T2) -> 
       K ; E |= (trm_let t1 t2) ~: T2
   | typing_app : forall K E S T t1 t2, 
@@ -282,8 +313,8 @@ Inductive typing : kenv -> env -> trm -> typ -> Prop :=
   | typing_cst : forall K E Us c,
       kenv_ok K ->
       ok E ->
-      proper_instance K (const_type c) Us ->
-      K ; E |= (trm_cst c) ~: (const_type c ^^ Us)
+      proper_instance K (Delta.type c) Us ->
+      K ; E |= (trm_cst c) ~: (Delta.type c ^^ Us)
 
 where "K ; E |= t ~: T" := (typing K E t T).
 
@@ -291,25 +322,11 @@ where "K ; E |= t ~: T" := (typing K E t T).
 (* ********************************************************************** *)
 (** ** Description of the semantics *)
 
-Definition trm_def := trm_bvar 0.
-
-Fixpoint trm_inst_rec (k : nat) (tl : list trm) (t : trm) {struct t} : trm :=
-  match t with
-  | trm_bvar i    => if le_lt_dec k i then nth (i-k) tl trm_def else trm_bvar i
-  | trm_fvar x    => trm_fvar x 
-  | trm_abs t1    => trm_abs (trm_inst_rec (S k) tl t1) 
-  | trm_let t1 t2 => trm_let (trm_inst_rec k tl t1) (trm_inst_rec (S k) tl t2) 
-  | trm_app t1 t2 => trm_app (trm_inst_rec k tl t1) (trm_inst_rec k tl t2)
-  | trm_cst c     => trm_cst c
-  end.
-
-Definition trm_inst t tl := trm_inst_rec 0 tl t.
-
 (** Grammar of values *)
 
 Inductive valu : nat -> trm -> Prop :=
   | value_abs : forall t1, term (trm_abs t1) -> valu 0 (trm_abs t1)
-  | value_cst : forall c, valu (const_arity c) (trm_cst c)
+  | value_cst : forall c, valu (Const.arity c) (trm_cst c)
   | value_app : forall n t1 n2 t2,
       valu (S n) t1 ->
       valu n2 t2 ->
@@ -318,12 +335,6 @@ Inductive valu : nat -> trm -> Prop :=
 Definition value t := exists n, valu n t.
 
 (** Reduction rules *)
-
-Parameter delta_rule : nat -> trm -> trm -> Prop.
-Parameter delta_term : forall n t1 t2 tl,
-  delta_rule n t1 t2 ->
-  list_for_n term n tl ->
-  term (trm_inst t1 tl) /\ term (trm_inst t2 tl).
 
 Inductive red : trm -> trm -> Prop :=
   | red_abs : forall t1 t2, 
@@ -335,7 +346,7 @@ Inductive red : trm -> trm -> Prop :=
       value t1 -> 
       red (trm_let t1 t2) (t2 ^^ t1)
   | red_delta : forall n t1 t2 tl,
-      delta_rule n t1 t2 ->
+      Delta.rule n t1 t2 ->
       list_for_n term n tl ->
       red (trm_inst t1 tl) (trm_inst t2 tl)
   | red_let_1 : forall t1 t1' t2, 
@@ -368,5 +379,7 @@ Definition progress := forall K t T,
   K ; empty |= t ~: T ->
      value t
   \/ exists t', t --> t'.
+
+End MkJudge.
 
 End MkDefs.
