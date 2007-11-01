@@ -344,12 +344,11 @@ Inductive typing : kenv -> env -> trm -> typ -> Prop :=
       ok E ->
       proper_instance K (Delta.type c) Us ->
       K ; E |= (trm_cst c) ~: (Delta.type c ^^ Us)
-  | typing_gc : forall K K' E t T,
-      K ; E |= t ~: T ->
-      ok K' ->
-      (forall x k, binds x k K' -> binds x k K) ->
-      fv_in kind_fv K' \u env_fv E \u typ_fv T << dom K' ->
-      K' ; E |= t ~: T
+  | typing_gc : forall Ks L K E t T,
+      (forall Xs, fresh L (length Ks) Xs ->
+        K & kinds_open_vars Ks Xs; E |= t ~: T) ->
+      ok K ->
+      K ; E |= t ~: T
 
 where "K ; E |= t ~: T" := (typing K E t T).
 

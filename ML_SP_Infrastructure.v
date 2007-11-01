@@ -1228,13 +1228,18 @@ Proof.
   (* ok *)
   pick_fresh y. apply* (H1 y).
   pick_fresh y. apply* (H2 y).
-  split*. destruct IHtyping. intro; intros. apply* (H4 x a). 
+  pick_freshes (length Ks) Xs. forward~ (H0 Xs).
+    intro. split*.
+    intros x k B. apply (proj2 H2 x k).
+    apply* binds_concat_ok. destruct* H2.
   pick_fresh y. forward~ (H1 y) as G. inversions* G.
   pick_fresh y. forward~ (H2 y) as G. inversions* G.
+  pick_freshes (length Ks) Xs. forward~ (H0 Xs).
   (* term *) 
   apply_fresh* term_let as y.
     pick_freshes (sch_arity M) Xs.
     forward~ (H0 Xs) as G.
+  pick_freshes (length Ks) Xs. forward~ (H0 Xs).
   (* type *)
   pick_fresh y. unfold proper_instance in H2. auto*.
   pick_fresh y. forward~ (H1 y).
@@ -1245,14 +1250,15 @@ Proof.
   destruct H1 as [[Hlen HT] [Hc _]].
   unfold scheme in Hc; unfold sch_open; simpl in *.
   apply* typ_open_types.
+  pick_freshes (length Ks) Xs. forward~ (H0 Xs).
 Qed.
 
-Lemma env_ok_is_ok : forall K, kenv_ok K -> ok K.
+Lemma kenv_ok_is_ok : forall K, kenv_ok K -> ok K.
 Proof.
   unfold kenv_ok. tauto.
 Qed.
 
-Hint Resolve env_ok_is_ok.
+Hint Resolve kenv_ok_is_ok.
 
 (** The value predicate only holds on locally-closed terms. *)
 
