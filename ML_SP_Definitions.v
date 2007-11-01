@@ -272,6 +272,35 @@ Definition kinds_open_vars Ks Xs :=
 
 Definition env := env sch.
 
+(** Computing free variables of a type. *)
+
+Fixpoint typ_fv (T : typ) {struct T} : vars :=
+  match T with
+  | typ_bvar i      => {}
+  | typ_fvar x      => {{x}}
+  | typ_arrow T1 T2 => (typ_fv T1) \u (typ_fv T2)
+  end.
+
+(** Computing free variables of a list of terms. *)
+
+Definition typ_fv_list :=
+  List.fold_right (fun t acc => typ_fv t \u acc) {}.
+
+(** Computing free variables of a kind. *)
+
+Definition kind_fv k :=
+  typ_fv_list (kind_types k).
+
+(** Computing free variables of a type scheme. *)
+
+Definition sch_fv M := 
+  typ_fv_list (sch_type M :: flat_map kind_types (sch_kinds M)).
+
+(** Computing free type variables of the values of an environment. *)
+
+Definition env_fv := 
+  fv_in sch_fv.
+
 (** Another functor for delta-rules *)
 
 Module Type DeltaIntf.
@@ -315,6 +344,12 @@ Inductive typing : kenv -> env -> trm -> typ -> Prop :=
       ok E ->
       proper_instance K (Delta.type c) Us ->
       K ; E |= (trm_cst c) ~: (Delta.type c ^^ Us)
+  | typing_gc : forall K K' E t T,
+      K ; E |= t ~: T ->
+      ok K' ->
+      (forall x k, binds x k K' -> binds x k K) ->
+      fv_in kind_fv K' \u env_fv E \u typ_fv T << dom K' ->
+      K' ; E |= t ~: T
 
 where "K ; E |= t ~: T" := (typing K E t T).
 

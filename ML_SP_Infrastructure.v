@@ -1228,6 +1228,7 @@ Proof.
   (* ok *)
   pick_fresh y. apply* (H1 y).
   pick_fresh y. apply* (H2 y).
+  split*. destruct IHtyping. intro; intros. apply* (H4 x a). 
   pick_fresh y. forward~ (H1 y) as G. inversions* G.
   pick_fresh y. forward~ (H2 y) as G. inversions* G.
   (* term *) 
