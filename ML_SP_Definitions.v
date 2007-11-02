@@ -236,8 +236,9 @@ Definition kenv := env kind.
 
 Definition kenv_ok K :=
   ok K /\
-  env_prop (fun o => match o with None => True
-           | Some k => Cstr.valid (kind_cstr k) /\ coherent k end) K.
+  env_prop (fun o => All_kind_types type o /\
+            match o with None => True
+            | Some k => Cstr.valid (kind_cstr k) /\ coherent k end) K.
 
 (** Proper instanciation *)
 
@@ -347,7 +348,6 @@ Inductive typing : kenv -> env -> trm -> typ -> Prop :=
   | typing_gc : forall Ks L K E t T,
       (forall Xs, fresh L (length Ks) Xs ->
         K & kinds_open_vars Ks Xs; E |= t ~: T) ->
-      ok K ->
       K ; E |= t ~: T
 
 where "K ; E |= t ~: T" := (typing K E t T).

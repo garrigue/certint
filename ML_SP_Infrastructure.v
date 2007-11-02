@@ -1229,9 +1229,10 @@ Proof.
   pick_fresh y. apply* (H1 y).
   pick_fresh y. apply* (H2 y).
   pick_freshes (length Ks) Xs. forward~ (H0 Xs).
-    intro. split*.
-    intros x k B. apply (proj2 H2 x k).
-    apply* binds_concat_ok. destruct* H2.
+    intro. split.
+      destruct* (ok_concat_inv _ _ (proj1 H1)).
+    intros x k B. apply (proj2 H1 x k).
+    apply* binds_concat_ok. destruct* H1.
   pick_fresh y. forward~ (H1 y) as G. inversions* G.
   pick_fresh y. forward~ (H2 y) as G. inversions* G.
   pick_freshes (length Ks) Xs. forward~ (H0 Xs).

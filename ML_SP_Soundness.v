@@ -128,9 +128,10 @@ Proof.
 Qed.
 
 Lemma kenv_ok_subst : forall K K' K'' S,
+  env_prop type S ->
   kenv_ok (K & K' & K'') -> kenv_ok (K & map (kind_subst S) K'').
 Proof.
-  intros. split*.
+  introv HS H. split*.
   intro; intros. destruct H.
   binds_cases H0. apply* (H1 x).
     apply* binds_concat_ok.
@@ -138,13 +139,17 @@ Proof.
   case_eq (get x K''); intros.
     use (binds_map (kind_subst S) H0).
     rewrite (binds_inj B0 H2).
-    clear B0 a. destruct o. simpl.
-      assert (Cstr.valid (kind_cstr c) /\ coherent c).
-        apply (H1 x (Some c)).
-        apply* binds_prepend.
-      destruct c.
-      split*.
-    simpl*.
+    clear B0 a.
+    destruct* (H1 x k); clear H1 H0.
+    destruct k; simpl*.
+    destruct c as [kc kr].
+    split*.
+    clear H2 H4.
+    unfold All_kind_types in *; simpl in *.
+    rewrite map_map; simpl.
+    induction kr; simpl. auto.
+    simpl in H3.
+    split*.
   elim (binds_fresh B0). apply get_none_notin. apply* map_get_none.
 Qed.
 
@@ -396,7 +401,7 @@ Proof.
     apply (fresh_disjoint (length Ks)).
     repeat rewrite dom_concat. auto*.
     unfold kinds_open. rewrite map_length.
-    rewrite* (fresh_length _ _ _ H2).
+    rewrite* (fresh_length _ _ _ H1).
   intros x a B.
   elim (binds_concat_inv B).
     intros [Hx Ha]. apply* (proj2 Ok x).
@@ -476,7 +481,7 @@ Proof.
      unfold kinds_open. rewrite map_length. rewrite* (fresh_length _ _ _ Fr).
    intros x a B.
    destruct (binds_concat_inv B); clear B.
-     apply* (proj2 H2 x).
+     apply* (proj2 H1 x).
    apply* (proj2 H0 x).
 Qed.
 
@@ -492,6 +497,148 @@ Proof.
   rewrite IHT1. rewrite* IHT2. inversion* H. inversion* H.
 Qed.
 
+Fixpoint shift_type n (T:typ) {struct T} :=
+  match T with
+  | typ_bvar k => typ_bvar (n+k)
+  | typ_fvar x => typ_fvar x
+  | typ_arrow T1 T2 => typ_arrow (shift_type n T1) (shift_type n T2)
+  end.
+
+Definition shift_kinds n :=
+  List.map (kind_map (shift_type n)).
+
+Lemma shift_type0 : forall T,
+  shift_type 0 T = T.
+Proof.
+  induction T; simpl; auto.
+  rewrite IHT1; rewrite IHT2; auto.
+Qed.
+
+Lemma kind_map_id : forall f k,
+  (forall T, f T = T) -> kind_map f k = k.
+Proof.
+  intros; destruct* k.
+  destruct c; simpl.
+  induction kind_rel0; simpl. auto.
+  destruct a; rewrite H; simpl.
+  inversion IHkind_rel0. repeat rewrite H1. auto.
+Qed.
+
+Lemma typ_open_shift : forall T Us Us',
+  typ_open (shift_type (length Us') T) (Us' ++ Us) = typ_open T Us.
+Proof.
+  induction T; simpl; intros.
+    induction Us'; simpl; auto.
+    auto.
+  rewrite IHT1. rewrite* IHT2.
+Qed.
+
+Lemma kind_open_shift : forall k Us Us',
+  kind_open (kind_map (shift_type (length Us')) k) (Us' ++ Us) = kind_open k Us.
+Proof.
+  intros.
+  unfold kind_open.
+  destruct k. destruct c; simpl.
+    induction kind_rel0; simpl; auto.
+    inversion IHkind_rel0; clear IHkind_rel0.
+    rewrite H0; clear H0.
+    rewrite* typ_open_shift.
+  simpl. auto.
+Qed.
+
+Lemma kinds_open_shift : forall Us Us' Ks,
+  kinds_open (shift_kinds (length Us') Ks) (Us' ++ Us) =
+  kinds_open Ks Us.
+Proof.
+  induction Ks; simpl; auto.
+  rewrite IHKs. rewrite* kind_open_shift.
+Qed.
+
+Lemma typ_open_more : forall Us Us' T,
+  type (typ_open T Us) ->
+  typ_open T (Us ++ Us') = typ_open T Us.
+Proof.
+  induction T; simpl; intros; auto.
+    destruct (le_lt_dec (length Us) n).
+      rewrite nth_overflow in H; auto.
+      inversion H.
+    rewrite* app_nth1.
+  inversions H.
+  rewrite* IHT1.
+  rewrite* IHT2.
+Qed.
+
+Lemma kind_open_more : forall Us Us' k,
+  All_kind_types type (kind_open k Us) ->
+  kind_open k (Us ++ Us') = kind_open k Us.
+Proof.
+  intros.
+  unfold All_kind_types in H.
+  destruct k. destruct c; simpl in *.
+    induction kind_rel0; simpl in *.
+      auto.
+    use (IHkind_rel0 (proj2 H)); clear IHkind_rel0.
+    inversion H0; clear H0.
+    rewrite* typ_open_more.
+  reflexivity.
+Qed.
+
+Lemma kinds_open_more : forall Us Us' Ks,
+  list_forall (All_kind_types type) (kinds_open Ks Us) ->
+  kinds_open Ks (Us ++ Us') = kinds_open Ks Us.
+Proof.
+  induction Ks; intros. reflexivity.
+  simpl.
+  inversions H.
+  rewrite* IHKs. rewrite* kind_open_more.
+Qed.
+
+Lemma combine_app : forall A B (Xs':list A) (Us':list B) Xs Us,
+  length Xs = length Us ->
+  combine (Xs ++ Xs') (Us ++ Us') = combine Xs Us ++ combine Xs' Us'.
+Proof.
+  induction Xs; destruct Us; simpl; intros; try discriminate.
+    auto.
+  rewrite* IHXs.
+Qed.
+
+Lemma kinds_open_concat : forall Ks Xs Ks' Xs',
+  length Xs' = length Ks' ->
+  kinds_open_vars (Ks' ++ shift_kinds (length Xs') Ks) (Xs' ++ Xs) =
+  kinds_open_vars Ks Xs & kinds_open_vars Ks' Xs'.
+Proof.
+  intros.
+  unfold kinds_open_vars, concat.
+  unfold kinds_open at 1, typ_fvars at 1.
+  repeat rewrite map_app.
+  rewrite* combine_app.
+  rewrite <- (kinds_open_shift (typ_fvars Xs) (typ_fvars Xs') Ks).
+  rewrite <- (kinds_open_more (typ_fvars Xs') (typ_fvars Xs) Ks').
+  unfold kinds_open, typ_fvars. rewrite map_length. auto.
+Qed.
+
+Lemma typing_abs_inv : forall K E t t1 T T1 T2,
+  t = trm_abs t1 ->
+  T = typ_arrow T1 T2 ->
+  K ; E |= t ~: T ->
+  exists L1, exists Ks,
+    forall x L2, x \notin L1 ->
+      exists Xs, fresh L2 (length Ks) Xs ->
+        K & kinds_open_vars Ks Xs; E & x ~ Sch T1 nil |= t1 ^ x ~: T2.
+Proof.
+  introv Et ET Typ; induction Typ; try discriminate.
+    clear H1. inversions Et; inversions ET; clear Et ET.
+    exists L; exists (nil(A:=kind)).
+    intros. exists (nil(A:=var)).
+    unfold kinds_open_vars; simpl; intros.
+    simpl in *. apply* H0.
+  pick_freshes (length Ks) Xs.
+  destruct* (H0 Xs) as [L1 [Ks' HF]]; clear H0.
+  exists L1; exists (Ks ++ shift_kinds (length Ks) Ks').
+  intros.
+  destruct (HF x (L2 \u mkset Xs) H0) as [Xs' HF']; clear HF.
+  exists (Xs ++ Xs'). intro.
+
 Lemma preservation_result : preservation.
 Proof.
   introv Typ. gen t'.
@@ -503,23 +650,6 @@ Proof.
    exists* L1.
   rewrite* H3.
   apply* (@typing_let M L1).
-Lemma typing_abs_inv : forall K E t t1 T T1 T2,
-  t = trm_abs t1 ->
-  T = typ_arrow T1 T2 ->
-  K ; E |= t ~: T ->
-  exists L1, exists L2, exists Ks,
-    forall x Xs, x \notin L1 -> fresh L2 (length Ks) Xs ->
-      K & kinds_open_vars Ks Xs; E & x ~ Sch T1 nil |= t1 ^ x ~: T2.
-Proof.
-  introv Et ET Typ; induction Typ; try discriminate.
-    clear H1. inversions Et; inversions ET; clear Et ET.
-    exists L; exists {}; exists (nil(A:=kind)).
-    unfold kinds_open_vars; simpl; intros.
-    destruct* Xs. simpl. simpl in H0. apply* H0.
-    elim H2.
-  pick_freshes (length Ks) Xs.
-  destruct* (H0 Xs) as [L1 [L2 [Ks' HF]]]; clear H0.
-  exists L1; exists (L \u L2); exists (Ks ++ Ks').
 
 
     
