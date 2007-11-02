@@ -497,152 +497,43 @@ Proof.
   rewrite IHT1. rewrite* IHT2. inversion* H. inversion* H.
 Qed.
 
-Fixpoint shift_type n (T:typ) {struct T} :=
-  match T with
-  | typ_bvar k => typ_bvar (n+k)
-  | typ_fvar x => typ_fvar x
-  | typ_arrow T1 T2 => typ_arrow (shift_type n T1) (shift_type n T2)
-  end.
-
-Definition shift_kinds n :=
-  List.map (kind_map (shift_type n)).
-
-Lemma shift_type0 : forall T,
-  shift_type 0 T = T.
-Proof.
-  induction T; simpl; auto.
-  rewrite IHT1; rewrite IHT2; auto.
-Qed.
-
-Lemma kind_map_id : forall f k,
-  (forall T, f T = T) -> kind_map f k = k.
-Proof.
-  intros; destruct* k.
-  destruct c; simpl.
-  induction kind_rel0; simpl. auto.
-  destruct a; rewrite H; simpl.
-  inversion IHkind_rel0. repeat rewrite H1. auto.
-Qed.
-
-Lemma typ_open_shift : forall T Us Us',
-  typ_open (shift_type (length Us') T) (Us' ++ Us) = typ_open T Us.
-Proof.
-  induction T; simpl; intros.
-    induction Us'; simpl; auto.
-    auto.
-  rewrite IHT1. rewrite* IHT2.
-Qed.
-
-Lemma kind_open_shift : forall k Us Us',
-  kind_open (kind_map (shift_type (length Us')) k) (Us' ++ Us) = kind_open k Us.
+Lemma typing_weaken_kinds' : forall K K' E t T,
+  kenv_ok (K & K') ->
+  K ; E |= t ~: T -> K & K' ; E |= t ~: T.
 Proof.
   intros.
-  unfold kind_open.
-  destruct k. destruct c; simpl.
-    induction kind_rel0; simpl; auto.
-    inversion IHkind_rel0; clear IHkind_rel0.
-    rewrite H0; clear H0.
-    rewrite* typ_open_shift.
-  simpl. auto.
+  replace (K & K') with (K & K' & empty) by simpl*.
+  apply* typing_weaken_kinds.
 Qed.
 
-Lemma kinds_open_shift : forall Us Us' Ks,
-  kinds_open (shift_kinds (length Us') Ks) (Us' ++ Us) =
-  kinds_open Ks Us.
-Proof.
-  induction Ks; simpl; auto.
-  rewrite IHKs. rewrite* kind_open_shift.
-Qed.
-
-Lemma typ_open_more : forall Us Us' T,
-  type (typ_open T Us) ->
-  typ_open T (Us ++ Us') = typ_open T Us.
-Proof.
-  induction T; simpl; intros; auto.
-    destruct (le_lt_dec (length Us) n).
-      rewrite nth_overflow in H; auto.
-      inversion H.
-    rewrite* app_nth1.
-  inversions H.
-  rewrite* IHT1.
-  rewrite* IHT2.
-Qed.
-
-Lemma kind_open_more : forall Us Us' k,
-  All_kind_types type (kind_open k Us) ->
-  kind_open k (Us ++ Us') = kind_open k Us.
-Proof.
-  intros.
-  unfold All_kind_types in H.
-  destruct k. destruct c; simpl in *.
-    induction kind_rel0; simpl in *.
-      auto.
-    use (IHkind_rel0 (proj2 H)); clear IHkind_rel0.
-    inversion H0; clear H0.
-    rewrite* typ_open_more.
-  reflexivity.
-Qed.
-
-Lemma kinds_open_more : forall Us Us' Ks,
-  list_forall (All_kind_types type) (kinds_open Ks Us) ->
-  kinds_open Ks (Us ++ Us') = kinds_open Ks Us.
-Proof.
-  induction Ks; intros. reflexivity.
-  simpl.
-  inversions H.
-  rewrite* IHKs. rewrite* kind_open_more.
-Qed.
-
-Lemma combine_app : forall A B (Xs':list A) (Us':list B) Xs Us,
-  length Xs = length Us ->
-  combine (Xs ++ Xs') (Us ++ Us') = combine Xs Us ++ combine Xs' Us'.
-Proof.
-  induction Xs; destruct Us; simpl; intros; try discriminate.
-    auto.
-  rewrite* IHXs.
-Qed.
-
-Lemma kinds_open_concat : forall Ks Xs Ks' Xs',
-  length Xs' = length Ks' ->
-  kinds_open_vars (Ks' ++ shift_kinds (length Xs') Ks) (Xs' ++ Xs) =
-  kinds_open_vars Ks Xs & kinds_open_vars Ks' Xs'.
-Proof.
-  intros.
-  unfold kinds_open_vars, concat.
-  unfold kinds_open at 1, typ_fvars at 1.
-  repeat rewrite map_app.
-  rewrite* combine_app.
-  rewrite <- (kinds_open_shift (typ_fvars Xs) (typ_fvars Xs') Ks).
-  rewrite <- (kinds_open_more (typ_fvars Xs') (typ_fvars Xs) Ks').
-  unfold kinds_open, typ_fvars. rewrite map_length. auto.
-Qed.
-
-Lemma typing_abs_inv : forall K E t t1 T T1 T2,
+Lemma typing_abs_inv : forall K E t t1 t2 T T1 T2,
   t = trm_abs t1 ->
   T = typ_arrow T1 T2 ->
   K ; E |= t ~: T ->
-  exists L1, exists Ks,
-    forall x L2, x \notin L1 ->
-      exists Xs, fresh L2 (length Ks) Xs ->
-        K & kinds_open_vars Ks Xs; E & x ~ Sch T1 nil |= t1 ^ x ~: T2.
+  K ; E |= t2 ~: T1 ->
+  K ; E |= t1 ^^ t2 ~: T2.
 Proof.
-  introv Et ET Typ; induction Typ; try discriminate.
-    clear H1. inversions Et; inversions ET; clear Et ET.
-    exists L; exists (nil(A:=kind)).
-    intros. exists (nil(A:=var)).
-    unfold kinds_open_vars; simpl; intros.
-    simpl in *. apply* H0.
-  pick_freshes (length Ks) Xs.
-  destruct* (H0 Xs) as [L1 [Ks' HF]]; clear H0.
-  exists L1; exists (Ks ++ shift_kinds (length Ks) Ks').
+  introv Et ET Typ1 Typ2; induction Typ1; try discriminate.
+    inversions Et; inversions ET; clear Et ET.
+    pick_fresh x. 
+    rewrite* (@trm_subst_intro x). 
+    apply_empty* typing_trm_subst.
+    exists {}. intro. unfold sch_arity, kinds_open_vars, sch_open_vars; simpl.
+    destruct* Xs. simpl. rewrite* typ_open_vars_nil.
+    simpl. intuition.
+  apply* (typing_gc Ks L).
   intros.
-  destruct (HF x (L2 \u mkset Xs) H0) as [Xs' HF']; clear HF.
-  exists (Xs ++ Xs'). intro.
+  apply* H0.
+  apply* typing_weaken_kinds'.
+  simpl.
+  forward~ (H Xs) as Typ. apply (proj41 (typing_regular Typ)).
+Qed.
 
 Lemma preservation_result : preservation.
 Proof.
   introv Typ. gen t'.
-  induction Typ; introv Red; subst; inversions Red; try (apply* delta_typed).
+  induction Typ; introv Red; subst; inversions Red;
+    try (apply* delta_typed); try (apply* typing_gc; fail).
   rewrite* H3.
   rewrite* H2.
   pick_fresh x. rewrite* (@trm_subst_intro x). 
@@ -650,24 +541,9 @@ Proof.
    exists* L1.
   rewrite* H3.
   apply* (@typing_let M L1).
-
-
-    
-
-  inversions Typ1. pick_fresh x. 
-   rewrite* (@trm_subst_intro x). 
-   apply_empty* typing_trm_subst.
-   exists {}. intro. unfold sch_arity, kinds_open_vars, sch_open_vars; simpl.
-     destruct* Xs. simpl. rewrite* typ_open_vars_nil.
-     simpl. intuition.
-
-   pick_fresh x. 
-   rewrite* (@trm_subst_intro x). 
-   apply_empty* typing_trm_subst.
-   exists {}. intro. unfold sch_arity, kinds_open_vars, sch_open_vars; simpl.
-     destruct* Xs. simpl. rewrite* typ_open_vars_nil.
-     simpl. intuition.
-
+  (* Beta *)
+  apply* typing_abs_inv.
+  (* Delta *)
   rewrite* H.
   auto*.
   auto*.
@@ -723,7 +599,8 @@ Qed.
 Lemma progress_result : progress.
 Proof.
   introv Typ. gen_eq (empty:env) as E. poses Typ' Typ.
-  induction Typ; intros; subst.
+  induction Typ; intros; subst;
+    try (pick_freshes (length Ks) Xs; apply* (H0 Xs)).
   inversions H1.
   left. exists* 0.
   right. pick_freshes (sch_arity M) Ys.
@@ -732,25 +609,31 @@ Proof.
       exists* (t2 ^^ t1).
       exists* (trm_let t1' t2).
   destruct~ IHTyp1 as [Val1 | [t1' Red1]]. 
-    destruct~ IHTyp2 as [Val2 | [t2' Red2]]. 
-      inversions Typ1; destruct Val1 as [n Val1]; inversions Val1.
-        right; exists* (t0 ^^ t2).
-      destruct n.
-        right; apply* progress_delta.
-      left. destruct Val2. exists* n.
-      case_eq (Const.arity c); intro.
-        right. rewrite H2 in Val1.
-        destruct (const_arity_ok (c:=c)(vl:=t2::nil)(K:=K)(T:=T)).
-          rewrite H2. constructor; simpl; auto.
-        unfold const_app; simpl*.
-        destruct H3 as [t1' [t3' [tl [R [Htl Heq]]]]].
-        exists (trm_inst t3' tl).
-        unfold const_app in Heq; simpl in Heq; rewrite Heq.
-        apply* red_delta.
-      left. exists n. rewrite H2 in Val1. destruct* Val2.
+    destruct~ IHTyp2 as [Val2 | [t2' Red2]].
+      gen_eq (typ_arrow S T) as U; intro HU.
+      gen_eq (empty(A:=sch)) as E; intro HE.
+      induction Typ1; inversions HU;
+        try (pick_freshes (length Ks) Xs; apply* (H0 Xs);
+               forward~ (H Xs) as Typ3; destruct* (typing_regular Typ3);
+               try apply* typing_weaken_kinds'; simpl*);
+        destruct Val1 as [n Val1]; inversions Val1.
+        right; exists* (t1 ^^ t2).
+        destruct n.
+          right; apply* progress_delta.
+        left. destruct Val2. exists* n.
+        case_eq (Const.arity c); intros.
+          right. rewrite H2 in Val1.
+          destruct (const_arity_ok (c:=c)(vl:=t2::nil)(K:=K)(T:=T)).
+            rewrite H2. constructor; simpl; auto.
+          unfold const_app; simpl*.
+          destruct H4 as [t1' [t3' [tl [R [Htl Heq]]]]].
+          exists (trm_inst t3' tl).
+          unfold const_app in Heq; simpl in Heq; rewrite Heq.
+          apply* red_delta.
+        left. exists n. rewrite H2 in Val1. destruct* Val2.
       right; exists* (trm_app t1 t2'). 
     right; exists* (trm_app t1' t2).
-  left. exists* (Const.arity c).
+  left; exists* (Const.arity c).
 Qed.
 
 Lemma value_irreducible : forall t t',
