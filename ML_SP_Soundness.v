@@ -19,6 +19,101 @@ Module JudgInfra := MkJudgInfra(Delta).
 Import JudgInfra.
 Import Judge.
 
+(* ********************************************************************** *)
+(** Typing is preserved by weakening *)
+
+Lemma typing_weaken : forall G E F K t T,
+   K ; (E & G) |= t ~: T -> 
+   ok (E & F & G) ->
+   K ; (E & F & G) |= t ~: T.
+Proof.
+  introv Typ. gen_eq (E & G) as H. gen G.
+  induction Typ; introv EQ Ok; subst.
+  apply* typing_var. apply* binds_weaken.
+  apply_fresh* typing_abs as y. apply_ih_bind* H1.
+  apply_fresh* (@typing_let M L1) as y. apply_ih_bind* H2.
+  auto*.
+  auto.
+  apply_fresh* (@typing_gc Ks) as y.
+Qed.
+
+Lemma proper_instance_weaken : forall K K' K'' M Us,
+  ok (K & K' & K'') ->
+  proper_instance (K & K'') M Us ->
+  proper_instance (K & K' & K'') M Us.
+Proof.
+  intros.
+  destruct* H0 as [TM [SM FM]]; split3*.
+  rewrite <- list_map_id.
+  rewrite <- (list_map_id (kinds_open (sch_kinds M) Us)).
+  apply (For_all2_map _ (well_kinded (K&K'&K'')) _ _ _ _
+                        (well_kinded_weaken K K' K'' H) FM).
+Qed.
+
+Lemma typing_weaken_kinds : forall K K' K'' E t T,
+  K & K''; E |= t ~: T ->
+  kenv_ok (K & K' & K'') ->
+  K & K' & K''; E |= t ~: T.
+Proof.
+  introv Typ. gen_eq (K & K'') as H. gen K''.
+  induction Typ; introv EQ Ok; subst.
+  apply* typing_var. apply* proper_instance_weaken.
+  apply_fresh* typing_abs as y.
+  apply_fresh* (@typing_let M (L1 \u dom(K&K'&K''))) as y.
+    intros. clear H1 H2.
+    unfold concat. rewrite <- app_ass. unfold concat in H0.
+    apply* H0; clear H0. rewrite* app_ass.
+    rewrite app_ass. fold ((K'' ++ K' ++ K) & kinds_open_vars (sch_kinds M) Xs).
+    unfold kinds_open_vars.
+    split. apply* disjoint_ok.
+      apply* ok_combine_fresh.
+      rewrite mkset_dom.
+      apply disjoint_comm.
+      apply* fresh_disjoint.
+      destruct* (fresh_union_r _ _ _ _ H3).
+      unfold kinds_open. rewrite map_length.
+      rewrite* <- (fresh_length _ _ _ H3).
+    intro; intros.
+    destruct Ok as [_ Ok].
+    destruct (binds_concat_inv H0) as [[Fr B]|B]; clear H0.
+      apply* (Ok x).
+    use (typing_regular (H Xs (proj1 (fresh_union_r _ _ _ _ H3)))).
+    apply* (proj2 (proj41 H0) x).
+  auto*.
+  apply* typing_cst. apply* proper_instance_weaken.
+  apply_fresh* (@typing_gc Ks) as y.
+  intros.
+  rewrite concat_assoc.
+  apply* (H0 Xs); clear H0.
+    rewrite* concat_assoc.
+  rewrite* <- concat_assoc.
+  forward~ (H Xs) as Typ; clear H.
+  split.
+    apply* disjoint_ok. destruct* (typing_regular Typ). destruct* H.
+      destruct* (ok_concat_inv _ _ H).
+    unfold kinds_open_vars.
+    apply disjoint_comm.
+    rewrite mkset_dom.
+    apply (fresh_disjoint (length Ks)).
+    repeat rewrite dom_concat. auto*.
+    unfold kinds_open. rewrite map_length.
+    rewrite* (fresh_length _ _ _ H1).
+  intros x a B.
+  elim (binds_concat_inv B).
+    intros [Hx Ha]. apply* (proj2 Ok x).
+  intro. destruct (typing_regular Typ).
+  apply* (proj2 H0 x).
+Qed.
+
+Lemma typing_weaken_kinds' : forall K K' E t T,
+  kenv_ok (K & K') ->
+  K ; E |= t ~: T -> K & K' ; E |= t ~: T.
+Proof.
+  intros.
+  replace (K & K') with (K & K' & empty) by simpl*.
+  apply* typing_weaken_kinds.
+Qed.
+
 (** Extra hypotheses *)
 
 Module Type SndHypIntf.
@@ -324,92 +419,6 @@ Proof.
 Qed.
 
 (* ********************************************************************** *)
-(** Typing is preserved by weakening *)
-
-Lemma typing_weaken : forall G E F K t T,
-   K ; (E & G) |= t ~: T -> 
-   ok (E & F & G) ->
-   K ; (E & F & G) |= t ~: T.
-Proof.
-  introv Typ. gen_eq (E & G) as H. gen G.
-  induction Typ; introv EQ Ok; subst.
-  apply* typing_var. apply* binds_weaken.
-  apply_fresh* typing_abs as y. apply_ih_bind* H1.
-  apply_fresh* (@typing_let M L1) as y. apply_ih_bind* H2.
-  auto*.
-  auto.
-  apply_fresh* (@typing_gc Ks) as y.
-Qed.
-
-Lemma proper_instance_weaken : forall K K' K'' M Us,
-  ok (K & K' & K'') ->
-  proper_instance (K & K'') M Us ->
-  proper_instance (K & K' & K'') M Us.
-Proof.
-  intros.
-  destruct* H0 as [TM [SM FM]]; split3*.
-  rewrite <- list_map_id.
-  rewrite <- (list_map_id (kinds_open (sch_kinds M) Us)).
-  apply (For_all2_map _ (well_kinded (K&K'&K'')) _ _ _ _
-                        (well_kinded_weaken K K' K'' H) FM).
-Qed.
-
-Lemma typing_weaken_kinds : forall K K' K'' E t T,
-  K & K''; E |= t ~: T ->
-  kenv_ok (K & K' & K'') ->
-  K & K' & K''; E |= t ~: T.
-Proof.
-  introv Typ. gen_eq (K & K'') as H. gen K''.
-  induction Typ; introv EQ Ok; subst.
-  apply* typing_var. apply* proper_instance_weaken.
-  apply_fresh* typing_abs as y.
-  apply_fresh* (@typing_let M (L1 \u dom(K&K'&K''))) as y.
-    intros. clear H1 H2.
-    unfold concat. rewrite <- app_ass. unfold concat in H0.
-    apply* H0; clear H0. rewrite* app_ass.
-    rewrite app_ass. fold ((K'' ++ K' ++ K) & kinds_open_vars (sch_kinds M) Xs).
-    unfold kinds_open_vars.
-    split. apply* disjoint_ok.
-      apply* ok_combine_fresh.
-      rewrite mkset_dom.
-      apply disjoint_comm.
-      apply* fresh_disjoint.
-      destruct* (fresh_union_r _ _ _ _ H3).
-      unfold kinds_open. rewrite map_length.
-      rewrite* <- (fresh_length _ _ _ H3).
-    intro; intros.
-    destruct Ok as [_ Ok].
-    destruct (binds_concat_inv H0) as [[Fr B]|B]; clear H0.
-      apply* (Ok x).
-    use (typing_regular (H Xs (proj1 (fresh_union_r _ _ _ _ H3)))).
-    apply* (proj2 (proj41 H0) x).
-  auto*.
-  apply* typing_cst. apply* proper_instance_weaken.
-  apply_fresh* (@typing_gc Ks) as y.
-  intros.
-  rewrite concat_assoc.
-  apply* (H0 Xs); clear H0.
-    rewrite* concat_assoc.
-  rewrite* <- concat_assoc.
-  forward~ (H Xs) as Typ; clear H.
-  split.
-    apply* disjoint_ok. destruct* (typing_regular Typ). destruct* H.
-      destruct* (ok_concat_inv _ _ H).
-    unfold kinds_open_vars.
-    apply disjoint_comm.
-    rewrite mkset_dom.
-    apply (fresh_disjoint (length Ks)).
-    repeat rewrite dom_concat. auto*.
-    unfold kinds_open. rewrite map_length.
-    rewrite* (fresh_length _ _ _ H1).
-  intros x a B.
-  elim (binds_concat_inv B).
-    intros [Hx Ha]. apply* (proj2 Ok x).
-  intro. destruct (typing_regular Typ).
-  apply* (proj2 H0 x).
-Qed.
-
-(* ********************************************************************** *)
 (** Typing is preserved by term substitution *)
 
 Lemma typing_trm_subst : forall F M K E t T z u, 
@@ -495,15 +504,6 @@ Proof.
     inversion H.
   unfold typ_open_vars in *; simpls.
   rewrite IHT1. rewrite* IHT2. inversion* H. inversion* H.
-Qed.
-
-Lemma typing_weaken_kinds' : forall K K' E t T,
-  kenv_ok (K & K') ->
-  K ; E |= t ~: T -> K & K' ; E |= t ~: T.
-Proof.
-  intros.
-  replace (K & K') with (K & K' & empty) by simpl*.
-  apply* typing_weaken_kinds.
 Qed.
 
 Lemma typing_abs_inv : forall K E t t1 t2 T T1 T2,

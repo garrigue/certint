@@ -208,23 +208,68 @@ Module SndHyp.
     destruct* (IHTL1 T2 TL2 Us).
   Qed.
 
-  Lemma fold_app_inv : forall K E t tl T,
-    K ; E |= fold_left trm_app tl t ~: T ->
-    exists TL,
-      K ; E |= t ~: fold_right typ_arrow T TL /\
-      For_all2 (typing K E) tl TL.
+  Lemma kenv_ok_concat_inv : forall K K',
+    kenv_ok (K & K') -> kenv_ok K /\ kenv_ok K'.
   Proof.
-    intros K E t tl.
-    rewrite <- (rev_involutive tl).
-    induction (rev tl); clear tl; simpl; intros.
-      exists (nil(A:=typ)). auto.
+    intros; destruct H.
+    destruct (ok_concat_inv _ _ H).
+    split; split*; intros x a B; apply* (H0 x).
+  Qed.
+
+  Lemma kenv_ok_open_fresh : forall K Ks Xs,
+    kenv_ok K ->
+    kenv_ok (kinds_open_vars Ks Xs) -> 
+    fresh (dom K) (length Ks) Xs ->
+    kenv_ok (K & kinds_open_vars Ks Xs).
+  Proof.
+    intros.
+    split*.
+      unfold kinds_open_vars.
+      apply* disjoint_ok.
+      rewrite mkset_dom. apply disjoint_comm.
+      apply* (fresh_disjoint (length Ks)).
+      unfold kinds_open. rewrite map_length.
+      rewrite* (fresh_length _ _ _ H1).
+    intros x a B.
+    binds_cases B.
+      apply* (proj2 H x).
+    apply* (proj2 H0 x).
+  Qed.
+
+  Lemma typing_app_inv : forall K E t1 t2 T,
+    K; E |= trm_app t1 t2 ~: T ->
+    exists U, exists K',
+      K & K'; E |= t1 ~: typ_arrow U T /\ K & K'; E |= t2 ~: U.
+  Proof.
+    introv Typ.
+    gen_eq (trm_app t1 t2) as t.
+    induction Typ; intros; try discriminate.
+      inversions H. exists S. exists* (empty(A:=kind)).
+    pick_freshes (length Ks) Xs.
+    destruct* (H0 Xs) as [U [K' R]].
+    exists U; exists* (kinds_open_vars Ks Xs & K').
+    repeat rewrite <- concat_assoc. auto.
+  Qed.
+
+  Lemma fold_app_inv : forall E t tl K T,
+    K ; E |= fold_left trm_app tl t ~: T ->
+    exists TL, exists K',
+      K & K'; E |= t ~: fold_right typ_arrow T TL /\
+      For_all2 (typing (K & K') E) tl TL.
+  Proof.
+    induction tl using rev_ind; simpl; intros.
+    exists (nil(A:=typ)). exists* (empty(A:=kind)).
     rewrite fold_left_app in *; simpl in *.
-    inversions H.
-    destruct (IHl (typ_arrow S T) H4).
-    exists (x ++ S :: nil).
+    destruct* (typing_app_inv H) as [U [K' [Typ1 Typ2]]].
+    destruct* (IHtl (K & K') (typ_arrow U T)).
+    exists (x0 ++ U :: nil).
     rewrite fold_right_app; simpl.
-    split*. apply* For_all2_app.
-    simpl. split*.
+    destruct H0 as [K'' [Typ' FA]].
+    exists (K' & K''). repeat rewrite <- concat_assoc.
+    split*.
+    apply* For_all2_app.
+      simpl. split*.
+    apply* typing_weaken_kinds'.
   Qed.
 
   Lemma map_nth : forall (A B:Set) d1 d2 (f:A->B) k l,
@@ -254,12 +299,30 @@ Module SndHyp.
 
   Hint Rewrite combine_length combine_nth : list.
 
+  Lemma typing_cst_inv : forall K E c T,
+    K; E |= trm_cst c ~: T ->
+    exists Us, exists K',
+      proper_instance (K & K') (Delta.type c) Us /\
+      T = sch_open (Delta.type c) Us /\ kenv_ok (K & K').
+  Proof.
+    introv Typ; gen_eq (trm_cst c) as t.
+    induction Typ; intros; try discriminate.
+      inversions H2. exists* Us. exists* (empty(A:=kind)).
+    subst.
+    pick_freshes (length Ks) Xs.
+    destruct* (H0 Xs) as [Us [Ks' [[Ht [Hs Hk]] Eq]]].
+    exists Us; exists (kinds_open_vars Ks Xs & Ks').
+    rewrite* <- concat_assoc. intuition.
+    split*.
+  Qed.
+
   Lemma get_kind_for_matches : forall k l t K E Us,
     k < length l ->
     proper_instance K (Delta.type (Const.matches l)) Us ->
     K; E |= trm_app (trm_cst (Const.tag (nth k l var_default)))
                     t ~: nth 0 Us typ_def ->
-    K; E |= t ~: nth (S (S k)) Us typ_def.
+    exists K',
+      K & K'; E |= t ~: nth (S (S k)) Us typ_def.
   Proof.
     introv Hk PI Typ.
     destruct PI as [[Arity _] [_ WK]].
@@ -271,26 +334,30 @@ Module SndHyp.
     destruct WK as [WK _].
     inversions WK. clear WK.
     destruct H2 as [_ HE]. simpl in *.
-    inversions Typ. clear Typ.
-    inversions H4. clear H4 H8.
-    destruct H9 as [_ [_ WK']].
-    destruct* Us0. simpl in H2. discriminate.
+    destruct (typing_app_inv Typ) as [U [K' [Typ1 Typ2]]]. clear Typ.
+    destruct (typing_cst_inv Typ1) as [Us' [K'' [WK [Eq Kok]]]].
+    destruct WK as [_ [_ WK']].
+    destruct* Us'. discriminate.
     simpl in WK'. destruct WK' as [_ WK].
-    destruct* Us0.
-    destruct* Us0.
+    destruct* Us'.
+    destruct* Us'.
     destruct WK as [WK _].
     inversions WK. clear WK; simpl in *.
-    inversions H2; clear H2.
-    use (binds_func H0 H1). inversion H; clear H H1; subst k'0.
-    simpl in H4; destruct H4.
-    use (proj2 H7 x (Some k') H0). simpl in H2.
-    rewrite (proj2 H2 (nth k l var_default) t0 (nth k Us typ_def)) in H6;
-      clear H2; auto.
+    unfold sch_open in Eq. simpl in Eq.
+    inversions Eq; clear Eq.
+    use (binds_concat_ok K' H0 (proj1 (proj1 (typing_regular Typ2)))).
+    use (binds_concat_ok K'' H (proj1 Kok)).
+    use (binds_func H2 H1). inversion H4; clear H H1 H4; subst k'0.
+    simpl in H3; destruct H3.
+    use (proj2 Kok x0 (Some k') H2). simpl in H3.
+    exists K'.
+    rewrite (proj2 (proj2 H3) (nth k l var_default) t0 (nth k Us typ_def))
+      in Typ2; auto.
       unfold Cstr.unique.
       destruct H as [Hlow _]. simpl in Hlow.
       apply* Hlow.
     apply HE.
-    clear HE t0 H6 H7 H H1.
+    clear HE t0 Typ1 Typ2 H H1.
     rewrite* <- combine_nth.
     apply* nth_In_eq.
         rewrite combine_length.
@@ -310,7 +377,8 @@ Module SndHyp.
     Delta.rule n t1 t2 ->
     list_for_n term n tl ->
     K ; E |= trm_inst t1 tl ~: T ->
-    K ; E |= trm_inst t2 tl ~: T.
+    exists K',
+      K & K'; E |= trm_inst t2 tl ~: T.
   Proof.
     intros.
     clear H0.
@@ -319,7 +387,7 @@ Module SndHyp.
     inversions H1; clear H1.
     rewrite trm_inst_app in H4.
     unfold const_app in H4.
-    destruct (fold_app_inv _ _ H4) as [TL [Typ0 TypA]]; clear H4.
+    destruct (fold_app_inv _ _ H4) as [TL [K' [Typ0 TypA]]]; clear H4.
     unfold trm_inst; simpl.
     inversions Typ0. clear Typ0 H1 H4.
     unfold sch_open in H0. simpl in H0.
@@ -338,8 +406,13 @@ Module SndHyp.
        rewrite seq_nth in TypA; auto.
        simpl in TypA, H.
        inversions H; clear H.
+       destruct (get_kind_for_matches HK H5 (t:=nth 0 tl trm_def) (E:=E)).
+         apply* typing_weaken_kinds'.
+       exists (K' & x).
        apply* typing_app.
-       apply* get_kind_for_matches.
+       rewrite <- concat_assoc.
+       apply* typing_weaken_kinds'.
+       rewrite* <- concat_assoc.
       rewrite* seq_length.
      rewrite* seq_length.
     autorewrite with list; auto.
