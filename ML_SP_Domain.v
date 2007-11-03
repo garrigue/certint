@@ -299,30 +299,47 @@ Module SndHyp.
 
   Hint Rewrite combine_length combine_nth : list.
 
+  Lemma For_all2_imp : forall (A B:Set) (P P' : A -> B -> Prop) l1 l2,
+    For_all2 P l1 l2 ->
+    (forall x y, In (x,y) (combine l1 l2) -> P x y -> P' x y) ->
+    For_all2 P' l1 l2.
+  Proof.
+    induction l1; destruct l2; simpl; intros; auto.
+    split*.
+  Qed.
+
   Lemma typing_cst_inv : forall K E c T,
     K; E |= trm_cst c ~: T ->
-    exists Us, exists K',
-      proper_instance (K & K') (Delta.type c) Us /\
-      T = sch_open (Delta.type c) Us /\ kenv_ok (K & K').
+    exists Us,
+      proper_instance K (Delta.type c) Us /\
+      T = sch_open (Delta.type c) Us.
   Proof.
     introv Typ; gen_eq (trm_cst c) as t.
     induction Typ; intros; try discriminate.
-      inversions H2. exists* Us. exists* (empty(A:=kind)).
+      inversions H2. exists* Us.
     subst.
     pick_freshes (length Ks) Xs.
-    destruct* (H0 Xs) as [Us [Ks' [[Ht [Hs Hk]] Eq]]].
-    exists Us; exists (kinds_open_vars Ks Xs & Ks').
-    rewrite* <- concat_assoc. intuition.
-    split*.
+    destruct* (H0 Xs) as [Us [[Ht [Hs Hk]] Eq]]; clear H0.
+    exists Us.
+    intuition. split*. split*.
+    apply* For_all2_imp. intros.
+    inversions H1. constructor.
+    econstructor.
+      case_eq (get x0 K); intros.
+        forward~ (H Xs) as Typ.
+        use (binds_concat_ok _ H4 (proj1 (proj1 (typing_regular Typ)))).
+        use H4.
+        rewrite (binds_func H5 H2) in *.
+        unfold binds. apply H6.
+      binds_cases H2. auto.
   Qed.
 
   Lemma get_kind_for_matches : forall k l t K E Us,
     k < length l ->
     proper_instance K (Delta.type (Const.matches l)) Us ->
-    K; E |= trm_app (trm_cst (Const.tag (nth k l var_default)))
+    K ; E |= trm_app (trm_cst (Const.tag (nth k l var_default)))
                     t ~: nth 0 Us typ_def ->
-    exists K',
-      K & K'; E |= t ~: nth (S (S k)) Us typ_def.
+    K ; E |= t ~: nth (S (S k)) Us typ_def.
   Proof.
     introv Hk PI Typ.
     destruct PI as [[Arity _] [_ WK]].
@@ -377,8 +394,7 @@ Module SndHyp.
     Delta.rule n t1 t2 ->
     list_for_n term n tl ->
     K ; E |= trm_inst t1 tl ~: T ->
-    exists K',
-      K & K'; E |= trm_inst t2 tl ~: T.
+    K ; E |= trm_inst t2 tl ~: T.
   Proof.
     intros.
     clear H0.
@@ -408,7 +424,6 @@ Module SndHyp.
        inversions H; clear H.
        destruct (get_kind_for_matches HK H5 (t:=nth 0 tl trm_def) (E:=E)).
          apply* typing_weaken_kinds'.
-       exists (K' & x).
        apply* typing_app.
        rewrite <- concat_assoc.
        apply* typing_weaken_kinds'.
