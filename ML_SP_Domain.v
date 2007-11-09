@@ -812,7 +812,7 @@ Module SndHyp.
     use (proj1 H5); clear H5.
     inversions H9; clear H9.
     inversions H8; clear H8.
-      use (binds_concat_ok (K'2 & K'3) H13).
+    use (binds_concat_ok (K'2 & K'3) H13).
     rewrite <- concat_assoc in H5.
     use (binds_func (H5 (proj1 H1)) H10); clear H5 H13.
     inversions H8; clear H8.
@@ -1047,53 +1047,55 @@ Module SndHyp.
     S(Const.arity c) = length vl ->
     K ; empty |= const_app c vl ~: T ->
     exists l, exists Us, exists v, exists vl',
-      vl = rev (v :: vl') /\ c = Const.matches l /\ length l = length vl' /\
-      proper_instance K (Delta.type (Const.matches l)) Us /\
-      K; empty |= v ~: nth 0 Us typ_def.
+      vl = vl' ++ v :: nil /\ c = Const.matches l /\ length l = length vl' /\
+      exists K',
+        proper_instance (K & K') (Delta.type (Const.matches l)) Us /\
+        K & K'; empty |= v ~: nth 0 Us typ_def.
   Proof.
     intros.
     unfold const_app in H0.
-    use (fold_app_inv _ _ H0).
-    clear H0; destruct H1 as [TL [TypC TypA]].
+    destruct* (fold_app_inv' _ _ H0) as [K' [TL [TypC TypA]]]; clear H0.
     destruct c.
       elim (tag_is_const _ _ _ H TypC TypA).
     exists l.
-    inversions TypC. clear TypC H5.
+    destruct* (typing_cst_inv TypC) as [K'' [Us [Kok [PI E]]]]; clear TypC.
     exists Us.
     simpl in H.
-    unfold sch_open in H1; simpl in H1.
-    rewrite <- (rev_involutive TL) in *.
-    destruct (rev TL) as [|T' TL'].
-      destruct vl. discriminate.
-      elim TypA.
-    rewrite <- (rev_involutive vl) in *.
-    destruct (rev vl) as [|v vl'].
-      discriminate.
-    exists v. exists vl'.
-    rewrite rev_length in H. simpl in H; inversion* H.
-    intuition.
-    use (For_all2_rev _ _ _ TypA); clear TypA.
-    autorewrite with list in H0.
-    simpl in H0; destruct H0 as [Typv TypA].
-    rewrite cons_append in H1.
-    rewrite distr_rev in H1.
-    rewrite fold_right_app in H1. simpl in H1.
-    destruct (fold_arrow_eq _ _ _ _ _ H1); clear H1.
-      autorewrite with list.
-      rewrite H3. apply* For_all2_length.
-    simpl in H0. inversions* H0.
+    unfold sch_open in E; simpl in E.
+    induction vl using rev_ind. discriminate. clear IHvl.
+    induction TL using rev_ind.
+      destruct vl; elim TypA.
+    clear IHTL.
+    exists x. exists vl.
+    assert (length l = length vl).
+      rewrite app_length in H. rewrite plus_comm in H. simpl in H.
+      inversion* H.
+    clear H; intuition.
+    assert (length vl = length TL).
+      generalize (For_all2_length _ _ _ TypA); intro.
+      repeat (rewrite app_length in H; rewrite plus_comm in H; simpl in H).
+      inversions* H.
+    destruct* (For_all2_app' _ _ _ _ _ TypA).
+    exists (K' & K''). rewrite <- concat_assoc.
+    split*.
+    simpl in H2. destruct H2 as [Typx _].
+    rewrite fold_right_app in E. simpl in E.
+    destruct (fold_arrow_eq _ _ _ _ _ (sym_equal E)); clear E.
+      simpl_list. rewrite* H0.
+    simpl in H2. inversions H2.
+    apply* typing_weaken_kinds'.
   Qed.
 
   Lemma const_arity_ok : forall c vl K T,
     list_for_n value (S(Const.arity c)) vl ->
     K ; empty |= const_app c vl ~: T ->
-    exists n:nat, exists t1:trm, exists t2:trm, exists tl:list trm,
+    exists n, exists t1, exists t2, exists tl,
       Delta.rule n t1 t2 /\ list_for_n term n tl /\
       const_app c vl = trm_inst t1 tl.
   Proof.
     intros.
     destruct (const_arity_ok0 _ _ (proj1 H) H0) as
-      [l [Us [v [vl' [Evl [Ec [Hvl' [PI Typv]]]]]]]]; clear H0.
+      [l [Us [v [vl' [Evl [Ec [Hvl' [K' [PI Typv]]]]]]]]]; clear H0.
     subst.
     exists (S (length l)).
     destruct PI as [_ [_ WK]].
@@ -1102,7 +1104,7 @@ Module SndHyp.
       inversion H0.
     destruct H as [_ Val].
     use (list_forall_rev Val); clear Val.
-    rewrite rev_involutive in H.
+    rewrite distr_rev in H. simpl in H.
     inversions H; clear H.
     destruct H3 as [vn Hv].
     use (proj1 WK). inversions H; clear H WK.
@@ -1111,27 +1113,30 @@ Module SndHyp.
     clear vn Hv.
     subst.
     destruct (typing_tag_inv _ _ Typv) as
-      [t [T' [k [EQ [Typa [Bk Ek]]]]]]; clear Typv.
-    use (binds_func H1 Bk). inversion H; subst; clear H H1.
+      [t [T' [k [K'' [EQ [Typa [Bk Ek]]]]]]]; clear Typv.
+    forward (binds_concat_ok K'' H1) as Bk'.
+      apply (proj1 (proj1 (typing_regular Typa))).
+    use (binds_func Bk' Bk). inversion H; subst; clear H H1 Bk'.
     destruct H4 as [[_ High] _].
     destruct Ek as [[Low _] _].
     destruct k as [[kl kh] kr]; simpl in *.
     destruct* kh as [kh|].
-    use (proj2 (proj41 (typing_regular Typa)) _ _ Bk).
-    simpl in H; destruct H.
+    use (proj2 (proj1 (typing_regular Typa)) _ _ Bk).
+    simpl in H.
     unfold Cstr.valid in H. simpl in H.
-    use (subset_trans Low (subset_trans H High) (in_same l')).
-    clear H High Low kl kh kr Bk H0 x Us.
-    use (mkset_in _ H1); clear H1.
+    use (subset_trans Low (subset_trans (proj1 (proj2 H)) High) (in_same l')).
+    clear H High Low kl kh kr Bk x Us.
+    use (mkset_in _ H0); clear H0.
     destruct (exists_nth var_default _ _ H) as [n [Hlen EQ]].
     clear H; subst l'.
     exists (Delta.matches_lhs l n).
     exists (Delta.matches_rhs n).
-    exists (t :: rev vl').
+    exists (t :: vl').
     split3.
       unfold Delta.rule. exists l; exists n. auto.
-      split*. simpl. rewrite rev_length. rewrite* Hvl'.
+      split*. simpl. rewrite* Hvl'.
       constructor; auto.
+      rewrite <- rev_involutive.
       apply* list_forall_rev.
       apply (list_forall_imp _ value_regular H2).
     unfold Delta.matches_lhs.
@@ -1142,8 +1147,7 @@ Module SndHyp.
     rewrite fold_left_app.
     simpl.
     rewrite Hvl'.
-    rewrite <- (rev_length vl').
-    rewrite <- (map_inst_bvar t (rev vl')).
+    rewrite <- (map_inst_bvar t vl').
     auto.
   Qed.
     
