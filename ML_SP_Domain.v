@@ -1,4 +1,7 @@
-(* $Id$ *)
+(***************************************************************************
+* Preservation and Progress for mini-ML with structural polymorphism       *
+* Jacques Garrigue, October 2007                                           *
+***************************************************************************)
 
 Set Implicit Arguments.
 Require Import Lib_FinSet Metatheory List Arith
