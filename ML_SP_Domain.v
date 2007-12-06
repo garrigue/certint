@@ -471,7 +471,6 @@ Module SndHyp.
     intros.
     destruct* (H0 Xs0) as [L'' R']; clear H0 R Fr.
     apply* R'.
-*)    
 
   Lemma fv_in_concat : forall (A : Set) (fv : A -> vars) E F,
     fv_in fv (E & F) = fv_in fv F \u fv_in fv E.
@@ -597,8 +596,7 @@ Module SndHyp.
       right. unfold kinds_open_vars.
       rewrite fv_in_combine.
       apply* notin_kinds_open.
-
-      
+*)
 
   Lemma typing_abs_inv0 : forall K E t1 U T,
     K ; E |= trm_abs t1 ~: typ_arrow U T ->
