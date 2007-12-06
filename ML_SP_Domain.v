@@ -229,10 +229,10 @@ Module SndHyp.
   Require Import Min.
 
   Hint Rewrite combine_length combine_nth : list.
-(*
+
   Lemma get_kind_for_matches : forall k l t K E Us,
     k < length l ->
-    proper_instance K (Delta.type (Const.matches l)) Us ->
+    proper_instance K (fst (Delta.type (Const.matches l))) Us ->
     K; E |= trm_app (trm_cst (Const.tag (nth k l var_default)))
                     t ~: nth 0 Us typ_def ->
     K; E |= t ~: nth (S (S k)) Us typ_def.
@@ -281,47 +281,55 @@ Module SndHyp.
       rewrite* seq_length.
     rewrite* min_l.
   Qed.
-*)
 
-  Lemma delta_typed : forall n c tl1 t2 tl K E T Us,
+  Lemma For_all2_app' : forall (A B:Set) (P:A->B->Prop) v1 v2 u1 u2,
+    For_all2 P (app u1 v1) (app u2 v2) ->
+    length u1 = length u2 ->
+    For_all2 P u1 u2 /\ For_all2 P v1 v2.
+  Proof.
+    induction u1; intros; destruct* u2; try discriminate.
+      simpl in *. auto.
+    simpl in *.
+    destruct H.
+    inversion H0; clear H0.
+    destruct* (IHu1 u2).
+  Qed.
+
+  Lemma delta_typed : forall n c tl1 t2 tl K E Us,
     Delta.rule n c tl1 t2 ->
     list_for_n term n tl ->
     kenv_ok K ->
     ok E ->
-    let (M, TL) := Delta.type c in
-    proper_instance K M Us ->
-    For_all2 (const_arg_inst K E (sch_kinds M) Us tl) tl1 TL ->
-    K ; E |= trm_inst t2 tl ~: T.
+    proper_instance K (fst (Delta.type c)) Us ->
+    For_all2 (const_arg_inst K E (sch_kinds (fst (Delta.type c))) Us tl)
+      tl1 (snd (Delta.type c)) ->
+    K ; E |= trm_inst t2 tl ~: (fst (Delta.type c)) ^^ Us.
   Proof.
     intros.
     clear H0.
     destruct H as [l [k [N [HK [C [TL1 T2]]]]]]. subst.
-    simpl; intros.
+    unfold Delta.matches_rhs.
     unfold trm_inst; simpl.
-
-
-    inversions Typ0. clear Typ0 H1 H4.
-    unfold sch_open in H0. simpl in H0.
-    destruct (fold_arrow_eq _ _ _ _ _ H0); clear H0.
-      generalize (For_all2_length _ _ _ TypA).
+    apply* typing_app.
+      destruct (For_all2_nth _ trm_def typ_def (n:=k) _ _ H4) as [PI Typ].
+        unfold Delta.matches_lhs. autorewrite with list; simpl*. omega.
+      unfold Delta.matches_lhs in Typ.
+      rewrite app_nth1 in Typ; try (autorewrite with list; omega).
+      rewrite (map_nth trm_def 0) in Typ; try (autorewrite with list; omega).
+      rewrite seq_nth in Typ; auto.
+      unfold trm_inst in Typ; simpl in Typ.
+      unfold sch_open in Typ; simpl in Typ.
+      unfold Delta.matches_arg in Typ.
+      rewrite app_nth1 in Typ; try (autorewrite with list; auto).
+      rewrite (map_nth typ_def 0) in Typ; try (autorewrite with list; auto).
+      simpl in Typ. apply Typ.
+    simpl in H4.
+    destruct (For_all2_app' _ _ _ _ _ H4); clear H4.
       autorewrite with list. auto.
-    generalize (For_all2_nth _ trm_def typ_def _ TL TypA (n:=k)); clear TypA.
-    autorewrite with list; intro TypA.
-    generalize (For_all2_nth _ typ_def typ_def _ TL H1 (n:=k)); clear H1.
-    autorewrite with list; intro EQ.
-    rewrite <- EQ in TypA; auto; clear EQ TL.
-    rewrite (map_nth trm_def trm_def) in TypA.
-     rewrite (map_nth trm_def 0) in TypA.
-      rewrite seq_nth in TypA; auto.
-      rewrite (map_nth typ_def 0) in TypA.
-       rewrite seq_nth in TypA; auto.
-       simpl in TypA, H.
-       inversions H; clear H.
-       apply* typing_app.
-       apply* get_kind_for_matches.
-      rewrite* seq_length.
-     rewrite* seq_length.
-    autorewrite with list; auto.
+    destruct H0 as [[PI Typ] _].
+    unfold trm_inst in Typ; simpl in Typ.
+    rewrite* seq_nth. simpl.
+    apply* get_kind_for_matches.
   Qed.
 
   Lemma cons_append : forall (A:Set) (a:A) l, a :: l = (a :: nil) ++ l.
@@ -468,6 +476,7 @@ Module SndHyp.
     elim (le_Sn_O _ H0).
   Qed.
 
+  (*
   Lemma typing_tag_inv : forall K l tl x,
     K; empty |= const_app (Const.tag l) tl ~: typ_fvar x ->
     exists t, exists T, exists k,
@@ -537,15 +546,19 @@ Module SndHyp.
       rewrite H3. apply* For_all2_length.
     simpl in H0. inversions* H0.
   Qed.
+  *)
 
   Lemma const_arity_ok : forall c vl K T,
     list_for_n value (S(Const.arity c)) vl ->
     K ; empty |= const_app c vl ~: T ->
-    exists n:nat, exists t1:trm, exists t2:trm, exists tl:list trm,
-      Delta.rule n t1 t2 /\ list_for_n term n tl /\
-      const_app c vl = trm_inst t1 tl.
+    exists n, exists tl1, exists t2, exists tl,
+      Delta.rule n c tl1 t2 /\ list_for_n term n tl /\
+      For_all2 (fun v t1 => v = trm_inst t1 tl) vl tl1.
   Proof.
     intros.
+    destruct c.
+      
+
     destruct (const_arity_ok0 _ _ (proj1 H) H0) as
       [l [Us [v [vl' [Evl [Ec [Hvl' [PI Typv]]]]]]]]; clear H0.
     subst.

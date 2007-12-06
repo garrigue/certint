@@ -24,9 +24,8 @@ Set Implicit Arguments.
 
 (** Extra hypotheses *)
 
-Definition const_arg_inst K E Ks Us tl t T :=
-  proper_instance K (Sch T Ks) Us /\
-  K ; E |= trm_inst t tl ~: (Sch T Ks) ^^ Us.
+Definition typing_const_arg K E Ks Us t T :=
+  proper_instance K (Sch T Ks) Us /\ K ; E |= t ~: (Sch T Ks) ^^ Us.
 
 Module Type SndHypIntf.
   Parameter const_closed : forall c, sch_fv (delta_scheme c) = {}.
@@ -37,14 +36,19 @@ Module Type SndHypIntf.
     ok E ->
     let (M, TL) := Delta.type c in
     proper_instance K M Us ->
-    For_all2 (const_arg_inst K E (sch_kinds M) Us tl) tl1 TL ->
+    For_all2 (typing_const_arg K E (sch_kinds M) Us)
+      (List.map (trm_inst_rec 0 tl) tl1) TL ->
     K ; E |= trm_inst t2 tl ~: M ^^ Us.
-  Parameter const_arity_ok : forall c vl K T,
+  Parameter const_arity_ok : forall c vl K Us,
     list_for_n value (S(Const.arity c)) vl ->
-    K ; empty |= const_app c vl ~: T ->
+    let (M, TL) := Delta.type c in
+    proper_instance K M Us ->
+    For_all2 (typing_const_arg K empty (sch_kinds M) Us) vl TL ->
     exists n, exists tl1, exists t2, exists tl,
       Delta.rule n c tl1 t2 /\ list_for_n term n tl /\
       For_all2 (fun v t1 => v = trm_inst t1 tl) vl tl1.
+  Parameter const_arity_ok' : forall c,
+    Const.arity c <= length (snd (Delta.type c)) <= S(Const.arity c).
   (*
   Parameter delta_arity : forall n t1 t2,
     Delta.rule n t1 t2 ->
@@ -452,17 +456,16 @@ Proof.
   right; exists x; exists* tl1.
 Qed.
 
-Lemma typing_inst_app_inv : forall K E c M tl tl1 TL TL' T,
-  K; E |= trm_inst (const_app c tl1) tl ~: T ->
+Lemma typing_const_app_inv : forall K E c M tl1 TL TL' T,
+  K; E |= const_app c tl1 ~: T ->
   length TL = length tl1 ->
   Delta.type c = (M, TL ++ TL') ->
   let M' := Sch (fold_right typ_arrow (sch_type M) TL') (sch_kinds M) in
   exists Us, T = sch_open M' Us  /\ proper_instance K M' Us /\
-    For_all2 (const_arg_inst K E (sch_kinds M) Us tl) tl1 TL.
+    For_all2 (typing_const_arg K E (sch_kinds M) Us) tl1 TL.
 Proof.
   induction tl1 using rev_ind; introv Typ Len Delta; inversions Typ; clear Typ;
-    try (unfold const_app, trm_inst in H; rewrite fold_left_app in H;
-         discriminate).
+    try (unfold const_app in H; rewrite fold_left_app in H; discriminate).
     destruct TL; simpl in *; try discriminate.
     unfold delta_scheme in *; rewrite Delta in *; simpl in *.
     exists* Us.
@@ -472,7 +475,7 @@ Proof.
     rewrite plus_comm in Len; discriminate.
   clear IHTL.
   rewrite app_ass in Delta.
-  unfold const_app, trm_inst in H2; rewrite fold_left_app in H2.
+  unfold const_app in H2; rewrite fold_left_app in H2.
   simpl in H2; inversions H2; clear H2.
   destruct* (IHtl1 TL (x0::TL') (typ_arrow S T)) as [Us [He [Hp Hf]]];
     clear IHtl1.
@@ -528,9 +531,10 @@ Proof.
   use (typing_app Typ1 Typ2).
    clear Typ1 IHTyp1 Typ2 IHTyp2.
    rewrite <- H in *.
-   destruct* (typing_inst_app_inv tl tl1 (snd(Delta.type c)) nil H2
+   unfold trm_inst in H2; rewrite trm_inst_app in H2.
+   destruct* (typing_const_app_inv _ (snd(Delta.type c)) nil H2
                 (M:=fst(Delta.type c))) as [Us [He [Hp Ha]]].
-   apply (sym_equal (proj2 (Delta.arity H0))).
+   rewrite map_length; apply (sym_equal (proj2 (Delta.arity H0))).
    destruct (Delta.type c). rewrite <- app_nil_end. simpl*.
    subst.
    use (delta_typed Us H0 H1 (K:=K) (E:=E)).
@@ -540,14 +544,14 @@ Proof.
   auto*.
   induction tl1 using rev_ind.
     use H2.
-    unfold trm_inst, const_app in H5. simpl in H5. inversions H5; clear H5.
+    unfold const_app in H5. simpl in H5. inversions H5; clear H5.
     use (delta_typed Us H3 H4 (K:=K) (E:=E)).
     unfold delta_scheme in *.
     use (proj2 (Delta.arity H3)).
     destruct (Delta.type c) as [M TL]; simpl in *.
     destruct TL; try discriminate.
     apply* H5; clear H5.
-  unfold trm_inst, const_app in H2; rewrite fold_left_app in H2.
+  unfold const_app in H2; rewrite fold_left_app in H2.
   discriminate.
 Qed. 
 
@@ -575,6 +579,43 @@ Proof.
   split3*. constructor; auto. exists* n2.
 Qed.
 
+(*
+Inductive closed_n : nat -> trm -> Prop :=
+  | cln_fvar : forall n x, closed_n n (trm_fvar x)
+  | cln_bvar : forall n m, m < n -> closed_n n (trm_bvar m)
+  | cln_abs : forall n t1, closed_n (S n) t1 -> closed_n n (trm_abs t1)
+  | cln_app  : forall n t1 t2,
+      closed_n n t1 -> closed_n n t2 -> closed_n n (trm_app t1 t2)
+  | cln_let : forall n t1 t2,
+      closed_n n t1 -> closed_n (S n) t2 -> closed_n n (trm_let t1 t2)
+  | cln_cst  : forall n c, closed_n n (trm_cst c).
+
+Lemma closed_n_open : forall x t n,
+  closed_n n ({n ~> x}t) -> closed_n (S n) t.
+Proof.
+  induction t; simpl; intros; inversions H; try constructor;
+    try (destruct* (n0 === n); subst); try omega; try discriminate; auto.
+  inversions H0; omega.
+Qed.
+
+Lemma term_closed_n : forall t,
+  term t -> closed_n 0 t.
+Proof.
+  induction 1; try constructor; auto.
+    pick_fresh x.
+    forward~ (H0 x) as Cls. apply (closed_n_open _ _ Cls).
+  pick_fresh x.
+  forward~ (H1 x) as Cls. apply (closed_n_open _ _ Cls).
+Qed.
+
+Lemma trm_inst_closed : forall tl t n,
+  closed_n n t -> trm_inst_rec n tl t = t.
+Proof.
+  induction 1; simpl; try congruence.
+  destruct* (le_lt_dec n m). elim (le_not_lt _ _ l H).
+Qed.
+*)
+
 Lemma progress_delta : forall K t0 t3 t2 T,
   K; empty |= trm_app (trm_app t0 t3) t2 ~: T ->
   valu 0 (trm_app t0 t3) ->
@@ -583,7 +624,31 @@ Lemma progress_delta : forall K t0 t3 t2 T,
 Proof.
   intros.
   destruct (value_app_const H0) as [c [vl [Hlen [Heq Hv]]]].
-  destruct (const_arity_ok (c:=c) (vl:=vl ++ t2 :: nil) (K:=K) (T:=T)).
+  destruct (const_arity_ok' c).
+  destruct (Const.arity c === length (snd (Delta.type c))).
+    inversions H.
+    rewrite Heq in H8; clear  H H10.
+    use (typing_const_app_inv _ (snd(Delta.type c)) nil H8
+            (M:=fst(Delta.type c))).
+    simpl in H; destruct H.
+      omega.
+      rewrite <- app_nil_end; destruct* (Delta.type c).
+      use (const_arity_ok (c:=c) (vl:=vl ++ t2 :: nil)).
+      use (H4 K x); clear H4.
+      destruct (Delta.type c); simpl in *.
+      destruct H; destruct* H5.
+      split. rewrite app_length. rewrite <- Hlen. simpl; omega.
+      apply* list_forall_concat.
+      apply
+
+   assert (trm_app (trm_app t0 t3) t2 = const_app c (vl ++ t2 :: nil)).
+     rewrite Heq; unfold const_app; rewrite fold_left_app; simpl*.
+   rewrite H5 in *; clear H5.
+
+  use (typing_const_app_inv _ (snd(Delta.type c)) nil H (M:=fst(Delta.type c))).
+  simpl in H2; destruct H2.
+    rewrite <- (proj2 (Delta.arity c)).
+  use (const_arity_ok (c:=c) (vl:=vl ++ t2 :: nil)).
     split. rewrite <- Hlen. rewrite app_length. simpl; ring.
     apply* list_forall_concat.
     rewrite Heq in H.
