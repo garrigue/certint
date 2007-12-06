@@ -6,7 +6,7 @@
 ***************************************************************************)
 
 Set Implicit Arguments.
-Require Import Arith List Metatheory ML_SP_Definitions.
+Require Import List Metatheory ML_SP_Definitions.
 
 Module MkInfra(Cstr:CstrIntf)(Const:CstIntf).
 
@@ -764,6 +764,8 @@ Qed.
 
 (** Properties of constants *)
 
+Definition const_app c vl := fold_left trm_app vl (trm_cst c).
+
 Lemma trm_inst_app : forall c tl pl,
   trm_inst_rec 0 tl (const_app c pl) =
   const_app c (List.map (trm_inst_rec 0 tl) pl).
@@ -862,84 +864,13 @@ Proof.
   destruct H0; split; auto.
 Qed.
 
-Section For_all2.
-  Variables (A B:Set) (P:A->B->Prop).
-
-  Lemma For_all2_map: forall (P':A->B->Prop) f g l1 l2,
-    (forall x y, P x y -> P' (f x) (g y)) ->
-    For_all2 P l1 l2 ->
-    For_all2 P' (List.map f l1) (List.map g l2).
-  Proof.
-    induction l1; introv; elim l2; simpls; auto*.
-  Qed.
-
-  Lemma For_all2_app : forall u1 u2 v1 v2,
-    For_all2 P u1 u2 -> For_all2 P v1 v2 ->
-    For_all2 P (app u1 v1) (app u2 v2).
-  Proof.
-    induction u1; intros; destruct* u2; try elim H.
-    simpl; intros.
-    split*.
-  Qed.
-
-  Lemma For_all2_nth : forall d1 d2 n l1 l2,
-    For_all2 P l1 l2 -> n < length l1 ->
-    P (nth n l1 d1) (nth n l2 d2).
-  Proof.
-    induction n; intros; destruct l1; simpl in H0; try elim (lt_n_O _ H0);
-      destruct l2; try elim H; simpl; intros; auto.
-    apply* IHn. apply* lt_S_n.
-  Qed.
-
-  Lemma For_all2_length : forall l1 l2,
-    For_all2 P l1 l2 -> length l1 = length l2.
-  Proof.
-    induction l1; intros; destruct* l2; try elim H.
-    intros; simpl. rewrite* (IHl1 l2).
-  Qed.
-
-  Lemma For_all2_rev : forall l1 l2,
-    For_all2 P l1 l2 ->  For_all2 P (rev l1) (rev l2).
-  Proof.
-    induction l1; intros; destruct l2; simpl in *; auto; try elim H.
-    clear H; intros.
-    apply* For_all2_app.
-    simpl. auto.
-  Qed.
-
-  Lemma For_all2_In: forall x l1 l2,
-    In x l1 -> For_all2 P l1 l2 -> exists y:B, In y l2 /\ P x y.
-  Proof.
-    induction l1; destruct l2; intros; try contradiction.
-    simpl in *; destruct H; destruct H0.
-      exists b; intuition.
-      rewrite* <- H.
-    destruct (IHl1 l2 H H1).
-    exists* x0.
-  Qed.
-
-  Lemma For_all2_get : forall Xs Ys Zs x y z,
-    For_all2 P Ys Zs ->
-    binds x y (combine Xs Ys) ->
-    binds x z (combine Xs Zs) ->
-    P y z.
-  Proof.
-    induction Xs; destruct Ys; destruct Zs; simpl; intros; auto*;
-      try discriminate.
-    unfold binds in H0, H1; simpl in H0, H1.
-    destruct (eq_var_dec x a).
-    generalize (proj1 H). inversion H0; inversion* H1.
-    apply* (IHXs _ _ _ _ _ (proj2 H) H0 H1).
-  Qed.
-
-  Lemma For_all2_eq : forall (l1 l2: list A),
-    For_all2 (fun x y => x = y) l1 l2 -> l1 = l2.
-  Proof.
-    induction l1; intros; destruct l2; try (elim H); auto.
-    intros; subst.
-    rewrite* (IHl1 l2).
-  Qed.
-End For_all2.
+Lemma For_all2_map: forall (A B:Set)(P P':A->B->Prop) f g l1 l2,
+  (forall x y, P x y -> P' (f x) (g y)) ->
+  For_all2 P l1 l2 ->
+  For_all2 P' (List.map f l1) (List.map g l2).
+Proof.
+  induction l1; introv; elim l2; simpls; auto*.
+Qed.
 
 Lemma list_map_comp : forall (A:Set) (f g:A->A) l,
   List.map f (List.map g l) = List.map (fun x:A => f (g x)) l.
@@ -972,6 +903,17 @@ Proof.
   apply subset_union_weak_r.
 Qed.
 
+Lemma For_all2_In: forall (A B:Set) (P:A->B->Prop) x l1 l2,
+  In x l1 -> For_all2 P l1 l2 -> exists y:B, In y l2 /\ P x y.
+Proof.
+  induction l1; destruct l2; intros; try contradiction.
+  simpl in *; destruct H; destruct H0.
+    exists b; intuition.
+    rewrite* <- H.
+  destruct (IHl1 l2 H H1).
+  exists* x0.
+Qed.
+
 Fixpoint map_get (A:Set) (l:list var) (E:Env.env A) {struct l} : list A :=
   match l with
   | nil => nil
@@ -999,6 +941,20 @@ Proof.
   induction Ys; destruct Ks; simpl; intros; try (elim (binds_empty H)).
   unfold binds in H. simpl in H.
   destruct* (eq_var_dec x a). inversion* H.
+Qed.
+
+Lemma For_all2_get : forall (A B:Set) (P:A->B->Prop) Xs Ys Zs x y z,
+  For_all2 P Ys Zs ->
+  binds x y (combine Xs Ys) ->
+  binds x z (combine Xs Zs) ->
+  P y z.
+Proof.
+  induction Xs; destruct Ys; destruct Zs; simpl; intros; auto*;
+    try discriminate.
+  unfold binds in H0, H1; simpl in H0, H1.
+  destruct (eq_var_dec x a).
+  generalize (proj1 H). inversion H0; inversion* H1.
+  apply* (IHXs _ _ _ _ _ (proj2 H) H0 H1).
 Qed.
 
 Lemma get_none_notin : forall (A : Set) x (S : Env.env A),

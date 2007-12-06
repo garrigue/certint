@@ -274,27 +274,18 @@ Definition kinds_open_vars Ks Xs :=
 
 Definition env := env sch.
 
-Definition const_app c vl := fold_left trm_app vl (trm_cst c).
-
 (** Another functor for delta-rules *)
 
 Module Type DeltaIntf.
-  Parameter type : Const.const -> sch * list typ.
-  Parameter rule : nat -> Const.const -> list trm -> trm -> Prop.
-  Parameter arity : forall n c tl1 t2,
-    rule n c tl1 t2 ->
-    length tl1 = S (Const.arity c) /\ length tl1 = length (snd(type c)).
-  Parameter term : forall n c tl1 t2 tl,
-    rule n c tl1 t2 ->
+  Parameter type : Const.const -> sch.
+  Parameter rule : nat -> trm -> trm -> Prop.
+  Parameter term : forall n t1 t2 tl,
+    rule n t1 t2 ->
     list_for_n term n tl ->
-    term (trm_inst (const_app c tl1) tl) /\ term (trm_inst t2 tl).
+    term (trm_inst t1 tl) /\ term (trm_inst t2 tl).
 End DeltaIntf.
 
 Module MkJudge(Delta:DeltaIntf).
-
-Definition delta_scheme c :=
-  let T := Delta.type c in
-  Sch (fold_right typ_arrow (sch_type(fst T)) (snd T)) (sch_kinds (fst T)).
 
 (** The typing judgment *)
 
@@ -324,8 +315,8 @@ Inductive typing : kenv -> env -> trm -> typ -> Prop :=
   | typing_cst : forall K E Us c,
       kenv_ok K ->
       ok E ->
-      proper_instance K (delta_scheme c) Us ->
-      K ; E |= (trm_cst c) ~: (delta_scheme c ^^ Us)
+      proper_instance K (Delta.type c) Us ->
+      K ; E |= (trm_cst c) ~: (Delta.type c ^^ Us)
 
 where "K ; E |= t ~: T" := (typing K E t T).
 
@@ -356,10 +347,10 @@ Inductive red : trm -> trm -> Prop :=
       term (trm_let t1 t2) ->
       value t1 -> 
       red (trm_let t1 t2) (t2 ^^ t1)
-  | red_delta : forall n c tl1 t2 tl,
-      Delta.rule n c tl1 t2 ->
+  | red_delta : forall n t1 t2 tl,
+      Delta.rule n t1 t2 ->
       list_for_n term n tl ->
-      red (trm_inst (const_app c tl1) tl) (trm_inst t2 tl)
+      red (trm_inst t1 tl) (trm_inst t2 tl)
   | red_let_1 : forall t1 t1' t2, 
       term_body t2 ->
       red t1 t1' -> 

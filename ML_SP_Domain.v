@@ -90,35 +90,27 @@ Module Delta.
   Definition type op :=
     match op with
     | Const.tag t =>
-        (Sch (typ_bvar 1)
-             (None ::
-              Some (Kind (Cstr.C {{t}} None) ((t,typ_bvar 0)::nil)) :: nil),
-         typ_bvar 0 :: nil)
+        Sch (typ_arrow (typ_bvar 0) (typ_bvar 1))
+            (None ::
+             Some (Kind (Cstr.C {{t}} None) ((t,typ_bvar 0)::nil)) :: nil)
     | Const.matches l =>
-        (Sch (typ_bvar 1)
-             (Some (Kind (Cstr.C {} (Some (mkset l)))
+        Sch (fold_right typ_arrow (typ_arrow (typ_bvar 0) (typ_bvar 1))
+                 (map matches_arg (seq 2 (length l))))
+            (Some (Kind (Cstr.C {} (Some (mkset l)))
                    (combine l (map typ_bvar (seq 2 (length l))))) ::
-              map (fun _ => None) (seq 0 (S (length l)))),
-         map matches_arg (seq 2 (length l)) ++ typ_bvar 0 :: nil)
+             map (fun _ => None) (seq 0 (S (length l))))
     end.
   Definition matches_lhs l k :=
-    map trm_bvar (seq 1 (length l)) ++
-    trm_app (trm_cst (Const.tag (nth k l var_default))) (trm_bvar 0) :: nil.
+    trm_app
+      (const_app (Const.matches l) (map trm_bvar (seq 1 (length l))))
+      (trm_app (trm_cst (Const.tag (nth k l var_default)))
+        (trm_bvar 0)).
   Definition matches_rhs k :=
     trm_app (trm_bvar (S k)) (trm_bvar 0).
-  Definition rule n c tl1 t2 :=
+  Definition rule n t1 t2 :=
     exists l, exists k,
-      n = S (length l) /\ k < length l /\ c = Const.matches l /\
-      tl1 = matches_lhs l k /\ t2 = matches_rhs k.
-
-  Lemma arity : forall n c tl1 t2,
-    rule n c tl1 t2 ->
-    length tl1 = S (Const.arity c) /\ length tl1 = length (snd(type c)).
-  Proof.
-    intros.
-    destruct H as [l [k [N [K [C [TL1 T2]]]]]]. subst.
-    unfold matches_lhs. do 2 (autorewrite with list; simpl). omega.
-  Qed.
+      n = S (length l) /\ k < length l /\
+      t1 = matches_lhs l k /\ t2 = matches_rhs k.
 
   Hint Constructors closed_n.
   Lemma closed_n_fold_app : forall n m k t,
@@ -131,19 +123,19 @@ Module Delta.
     apply* cln_app.
     apply cln_bvar. omega.
   Qed.
-  Lemma term : forall n c tl1 t2 tl,
-    rule n c tl1 t2 ->
+  Lemma term : forall n t1 t2 tl,
+    rule n t1 t2 ->
     list_for_n term n tl ->
-    term (trm_inst (const_app c tl1) tl) /\ term (trm_inst t2 tl).
+    term (trm_inst t1 tl) /\ term (trm_inst t2 tl).
   Proof.
     intros.
-    destruct H as [l [k [N [K [C [TL1 T2]]]]]].
+    destruct H as [l [k [N [K [T1 T2]]]]].
     subst.
     destruct H0.
     split; apply* term_trm_inst_closed.
       unfold matches_lhs.
-      unfold const_app. rewrite fold_left_app; simpl.
       apply cln_app.
+      unfold const_app.
       apply* closed_n_fold_app. destruct H0; omega.
       apply* cln_app.
       apply cln_bvar. destruct H0; omega.
@@ -158,12 +150,11 @@ Import JudgInfra.
 Import Judge.
 
 Module SndHyp.
-  Lemma const_closed : forall c, sch_fv (delta_scheme c) = {}.
+  Lemma const_closed : forall c, sch_fv (Delta.type c) = {}.
   Proof.
     intros.
     induction c; unfold sch_fv; simpl.
-      repeat rewrite* union_empty_l.
-    simpl in *.
+      rewrite union_empty_l. rewrite* union_empty_l.
     assert (exists x, x=1). exists 1. auto.
     destruct H. pattern 1 at -1. rewrite <- H.
     generalize x.
@@ -171,7 +162,44 @@ Module SndHyp.
     rewrite union_empty_l. apply IHl.
   Qed.
 
-  (*
+  Section For_all2.
+  Variables (A B:Set) (P:A->B->Prop).
+
+  Lemma For_all2_app : forall u1 u2 v1 v2,
+    For_all2 P u1 u2 -> For_all2 P v1 v2 ->
+    For_all2 P (app u1 v1) (app u2 v2).
+  Proof.
+    induction u1; intros; destruct* u2; try elim H.
+    simpl; intros.
+    split*.
+  Qed.
+
+  Lemma For_all2_nth : forall d1 d2 n l1 l2,
+    For_all2 P l1 l2 -> n < length l1 ->
+    P (nth n l1 d1) (nth n l2 d2).
+  Proof.
+    induction n; intros; destruct* l1; try elim (lt_n_O _ H0);
+      destruct l2; try elim H; simpl; intros; auto.
+    apply* IHn. apply* lt_S_n.
+  Qed.
+
+  Lemma For_all2_length : forall l1 l2,
+    For_all2 P l1 l2 -> length l1 = length l2.
+  Proof.
+    induction l1; intros; destruct* l2; try elim H.
+    intros; simpl. rewrite* (IHl1 l2).
+  Qed.
+
+  Lemma For_all2_rev : forall l1 l2,
+    For_all2 P l1 l2 ->  For_all2 P (rev l1) (rev l2).
+  Proof.
+    induction l1; intros; destruct l2; simpl in *; auto; try elim H.
+    clear H; intros.
+    apply* For_all2_app.
+    simpl. auto.
+  Qed.
+  End For_all2.
+
   Lemma fold_arrow_eq : forall T1 TL1 T2 TL2 Us,
     typ_open (fold_right typ_arrow T1 TL1) Us = fold_right typ_arrow T2 TL2 ->
     length TL1 = length TL2 ->
@@ -201,7 +229,6 @@ Module SndHyp.
     split*. apply* For_all2_app.
     simpl. split*.
   Qed.
-  *)
 
   Lemma map_nth : forall (A B:Set) d1 d2 (f:A->B) k l,
     k < length l -> nth k (map f l) d1 = f (nth k l d2).
@@ -229,7 +256,7 @@ Module SndHyp.
   Require Import Min.
 
   Hint Rewrite combine_length combine_nth : list.
-(*
+
   Lemma get_kind_for_matches : forall k l t K E Us,
     k < length l ->
     proper_instance K (Delta.type (Const.matches l)) Us ->
@@ -281,25 +308,22 @@ Module SndHyp.
       rewrite* seq_length.
     rewrite* min_l.
   Qed.
-*)
 
-  Lemma delta_typed : forall n c tl1 t2 tl K E T Us,
-    Delta.rule n c tl1 t2 ->
+  Lemma delta_typed : forall n t1 t2 tl K E T,
+    Delta.rule n t1 t2 ->
     list_for_n term n tl ->
-    kenv_ok K ->
-    ok E ->
-    let (M, TL) := Delta.type c in
-    proper_instance K M Us ->
-    For_all2 (const_arg_inst K E (sch_kinds M) Us tl) tl1 TL ->
+    K ; E |= trm_inst t1 tl ~: T ->
     K ; E |= trm_inst t2 tl ~: T.
   Proof.
     intros.
     clear H0.
-    destruct H as [l [k [N [HK [C [TL1 T2]]]]]]. subst.
-    simpl; intros.
+    destruct H as [l [k [HN [HK [T1 T2]]]]].
+    subst.
+    inversions H1; clear H1.
+    rewrite trm_inst_app in H4.
+    unfold const_app in H4.
+    destruct (fold_app_inv _ _ H4) as [TL [Typ0 TypA]]; clear H4.
     unfold trm_inst; simpl.
-
-
     inversions Typ0. clear Typ0 H1 H4.
     unfold sch_open in H0. simpl in H0.
     destruct (fold_arrow_eq _ _ _ _ _ H0); clear H0.
