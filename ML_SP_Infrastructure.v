@@ -17,24 +17,7 @@ Import Defs.
 (* ********************************************************************** *)
 (** ** Free Variables *)
 
-(** Computing free variables of a type. *)
-
-Fixpoint typ_fv (T : typ) {struct T} : vars :=
-  match T with
-  | typ_bvar i      => {}
-  | typ_fvar x      => {{x}}
-  | typ_arrow T1 T2 => (typ_fv T1) \u (typ_fv T2)
-  end.
-
-(** Computing free variables of a list of terms. *)
-
-Definition typ_fv_list :=
-  List.fold_right (fun t acc => typ_fv t \u acc) {}.
-
 (** Variants looking up a kinding environment *)
-
-Definition kind_fv k :=
-  typ_fv_list (kind_types k).
 
 Definition kind_fv_list :=
   List.fold_right (fun t acc => kind_fv t \u acc) {}.
@@ -60,16 +43,6 @@ Definition typ_fvk K T :=
 
 Definition typ_fvk_list K Ts :=
   close_fvars (length K) K (dom K) (typ_fv_list Ts).
-
-(** Computing free variables of a type scheme. *)
-
-Definition sch_fv M := 
-  typ_fv_list (sch_type M :: flat_map kind_types (sch_kinds M)).
-
-(** Computing free type variables of the values of an environment. *)
-
-Definition env_fv := 
-  fv_in sch_fv.
 
 (** Computing free variables of a term. *)
 

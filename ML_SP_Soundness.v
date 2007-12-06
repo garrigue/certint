@@ -114,32 +114,6 @@ Proof.
   apply* typing_weaken_kinds.
 Qed.
 
-(** Extra hypotheses *)
-
-Module Type SndHypIntf.
-  Parameter const_closed : forall c, sch_fv (Delta.type c) = {}.
-  Parameter delta_typed : forall n t1 t2 tl K E T,
-    Delta.rule n t1 t2 ->
-    list_for_n term n tl ->
-    K ; E |= trm_inst t1 tl ~: T ->
-    K ; E |= trm_inst t2 tl ~: T.
-  Parameter const_arity_ok : forall c vl K T,
-    list_for_n value (S(Const.arity c)) vl ->
-    K ; empty |= const_app c vl ~: T ->
-    exists n:nat, exists t1:trm, exists t2:trm, exists tl:list trm,
-      Delta.rule n t1 t2 /\ list_for_n term n tl /\
-      const_app c vl = trm_inst t1 tl.
-  Parameter delta_arity : forall n t1 t2,
-    Delta.rule n t1 t2 ->
-    exists c, exists pl, t1 = const_app c pl /\ length pl = S(Const.arity c).
-End SndHypIntf.
-
-Module Mk3(SH:SndHypIntf).
-Import SH.
-
-(* ********************************************************************** *)
-(** Type substitution preserves typing *)
-
 Definition well_subst K K' S :=
   forall Z k,
     binds Z k K ->
@@ -248,6 +222,9 @@ Proof.
   elim (binds_fresh B0). apply get_none_notin. apply* map_get_none.
 Qed.
 
+(* ********************************************************************** *)
+(** Type substitution preserves typing *)
+
 Lemma typing_typ_subst : forall F K'' S K K' E t T,
   disjoint (dom S) (env_fv E \u fv_in kind_fv K) ->
   env_prop type S ->
@@ -290,7 +267,7 @@ Proof.
   (* Cst *)
   rewrite* sch_subst_open.
   assert (disjoint (dom S) (sch_fv (Delta.type c))).
-    intro x. rewrite* const_closed.
+    intro x. rewrite* Delta.closed.
   rewrite* sch_subst_fresh.
   apply* typing_cst.
     apply* kenv_ok_subst.
@@ -493,6 +470,29 @@ Proof.
      apply* (proj2 H1 x).
    apply* (proj2 H0 x).
 Qed.
+
+(* ********************************************************************** *)
+(** Extra hypotheses for main results *)
+
+Module Type SndHypIntf.
+  Parameter delta_typed : forall n t1 t2 tl K E T,
+    Delta.rule n t1 t2 ->
+    list_for_n term n tl ->
+    K ; E |= trm_inst t1 tl ~: T ->
+    K ; E |= trm_inst t2 tl ~: T.
+  Parameter const_arity_ok : forall c vl K T,
+    list_for_n value (S(Const.arity c)) vl ->
+    K ; empty |= const_app c vl ~: T ->
+    exists n:nat, exists t1:trm, exists t2:trm, exists tl:list trm,
+      Delta.rule n t1 t2 /\ list_for_n term n tl /\
+      const_app c vl = trm_inst t1 tl.
+  Parameter delta_arity : forall n t1 t2,
+    Delta.rule n t1 t2 ->
+    exists c, exists pl, t1 = const_app c pl /\ length pl = S(Const.arity c).
+End SndHypIntf.
+
+Module Mk3(SH:SndHypIntf).
+Import SH.
 
 (* ********************************************************************** *)
 (** Preservation: typing is preserved by reduction *)

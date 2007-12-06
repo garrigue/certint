@@ -97,6 +97,19 @@ Module Delta.
                    (combine l (map typ_bvar (seq 2 (length l))))) ::
              map (fun _ => None) (seq 0 (S (length l))))
     end.
+
+  Lemma closed : forall c, sch_fv (Delta.type c) = {}.
+  Proof.
+    intros.
+    induction c; unfold sch_fv; simpl.
+      rewrite union_empty_l. rewrite* union_empty_l.
+    assert (exists x, x=1). exists 1. auto.
+    destruct H. pattern 1 at -1. rewrite <- H.
+    generalize x.
+    induction l; simpl; intros; rewrite union_empty_l; rewrite* union_empty_l.
+    rewrite union_empty_l. apply IHl.
+  Qed.
+
   Definition matches_lhs l k :=
     trm_app
       (const_app (Const.matches l) (map trm_bvar (seq 1 (length l))))
@@ -146,20 +159,7 @@ Import Sound2.
 Import JudgInfra.
 Import Judge.
 
-Module SndHyp.
-  Lemma const_closed : forall c, sch_fv (Delta.type c) = {}.
-  Proof.
-    intros.
-    induction c; unfold sch_fv; simpl.
-      rewrite union_empty_l. rewrite* union_empty_l.
-    assert (exists x, x=1). exists 1. auto.
-    destruct H. pattern 1 at -1. rewrite <- H.
-    generalize x.
-    induction l; simpl; intros; rewrite union_empty_l; rewrite* union_empty_l.
-    rewrite union_empty_l. apply IHl.
-  Qed.
-
-  Section For_all2.
+Section For_all2.
   Variables (A B:Set) (P:A->B->Prop).
 
   Lemma For_all2_app : forall u1 u2 v1 v2,
@@ -208,8 +208,9 @@ Module SndHyp.
     apply* For_all2_app.
     simpl. auto.
   Qed.
-  End For_all2.
+End For_all2.
 
+Module SndHyp.
   Lemma fold_arrow_eq : forall T1 TL1 T2 TL2 Us,
     typ_open (fold_right typ_arrow T1 TL1) Us = fold_right typ_arrow T2 TL2 ->
     length TL1 = length TL2 ->
@@ -407,6 +408,197 @@ Module SndHyp.
     rewrite* IHt1. rewrite* IHt2.
     rewrite* IHt1. rewrite* IHt2.
   Qed.
+
+(*
+  Lemma typing_rename : forall K E t1 x T1 T,
+    x \notin (dom E \u trm_fv t1) ->
+    K ; E & x ~ T1 |= t1 ^ x ~: T ->
+    forall y,
+      y \notin (dom E \u trm_fv t1 \u {{x}}) ->
+      K ; E & y ~ T1 |= t1 ^ y ~: T.
+  Proof.
+    intros.
+    replace (E & y ~ T1) with (E & y ~ T1 & nil) by simpl*.
+    replace (t1 ^ y) with (trm_subst x (trm_fvar y) (t1 ^ x)).
+      apply* (typing_trm_subst nil (M:=T1)).
+      rewrite concat_assoc. simpl (x ~ T1 & nil).
+      apply* typing_weaken.
+      destruct (ok_concat_inv _ _ (proj42 (typing_regular H0))).
+      apply* disjoint_ok.
+        simpl; intro.
+        case_eq (S.mem x0 ({{y}} \u dom E)); intros.
+          right; intro.
+          destruct (S.union_1 H5).
+            use (proj1 (in_singleton _ _) H6); subst; clear H5 H6.
+            destruct (S.union_1 (S.mem_2 H4)).
+              use (proj1 (in_singleton _ _) H5); subst; clear H5.
+              elim H1; auto with sets.
+            elim H; auto with sets.
+          elim (in_empty H6).
+        left; intro.
+        rewrite (S.mem_1 H5) in H4. discriminate.
+      exists (dom K \u fv_in kind_fv K \u env_fv E \u typ_fv (sch_type T1)).
+      intros Xs Fr.
+      unfold sch_open_vars, typ_open_vars.
+      fold (sch_open T1 (typ_fvars Xs)).
+      apply* typing_var.
+        split.
+          unfold kinds_open_vars, kinds_open.
+          apply* disjoint_ok. apply* ok_combine_fresh.
+          rewrite mkset_dom.
+          apply disjoint_comm.
+          apply* (fresh_disjoint (sch_arity T1)).
+          rewrite map_length. rewrite <- (fresh_length _ _ _ Fr).
+          reflexivity.
+        (* impossible... *)
+  
+  Lemma typing_abs_inv : forall K E t1 U T,
+    K ; E |= trm_abs t1 ~: typ_arrow U T ->
+    forall x, x \notin (dom E \u trm_fv t1) ->
+      K ; (E & x ~ Sch U nil) |= (t1 ^ x) ~: T.
+  Proof.
+    intros.
+    gen_eq (trm_abs t1) as t; gen_eq (typ_arrow U T) as T0; gen x.
+    induction H; intros; try discriminate.
+      inversions H3; inversions H4; clear H3 H4.
+      destruct (var_fresh (dom E \u trm_fv t1 \u L)) as [y Fr].
+      exists* L.
+    subst.
+    pick_freshes (length Ks) Xs.
+    destruct* (H0 Xs) as [L' R].
+    exists L'.
+    intros; apply (typing_gc Ks L).
+    intros.
+    destruct* (H0 Xs0) as [L'' R']; clear H0 R Fr.
+    apply* R'.
+*)    
+
+  Lemma fv_in_concat : forall (A : Set) (fv : A -> vars) E F,
+    fv_in fv (E & F) = fv_in fv F \u fv_in fv E.
+  Proof.
+    induction F; simpl.
+      rewrite* union_empty_l.
+    destruct a. rewrite IHF. rewrite* union_assoc.
+  Qed.
+
+  Lemma fv_in_combine : forall Xs Ks,
+    length Xs = length Ks ->
+    fv_in kind_fv (combine Xs Ks) = kind_fv_list Ks.
+  Proof.
+    induction Xs; intros; destruct Ks; try discriminate; simpl in *.
+      auto.
+    rewrite* IHXs.
+  Qed.
+
+  Lemma notin_typ_open : forall x T Us,
+    x \notin typ_fv T -> x \notin typ_fv_list Us ->
+    x \notin typ_fv (typ_open T Us).
+  Proof.
+    induction T; simpl; intros; auto.
+      gen n; induction Us; simpl in *; intros; destruct* n.
+    apply* notin_union_l.
+  Qed.
+
+  Lemma notin_kinds_open : forall x Ks Us,
+    x \notin kind_fv_list Ks ->
+    x \notin typ_fv_list Us ->
+    x \notin kind_fv_list (kinds_open Ks Us).
+  Proof.
+    induction Ks; simpl; intros.
+      auto.
+    apply* notin_union_l.
+    unfold kind_open, kind_fv in *.
+    destruct a as [[kc kr]|]; simpl in *.
+      induction kr; simpl. auto.
+      destruct a; simpl in *.
+      apply* notin_union_l.
+      apply* notin_typ_open.
+      auto*.
+  Qed.
+
+  Lemma notin_dec : forall x E, x \in E \/ x \notin E.
+    intros.
+    case_eq (S.mem x E); intros.
+      use (S.mem_2 H).
+    right; intro.
+    rewrite (S.mem_1 H0) in H. discriminate.
+  Qed.
+
+  Lemma typ_fv_list_fvars : forall Xs,
+    typ_fv_list (typ_fvars Xs) = mkset Xs.
+  Proof.
+    induction Xs; simpl; auto.
+    rewrite* IHXs.
+  Qed.
+
+  Lemma disjoint_fresh : forall n Xs L' L,
+    fresh L n Xs ->
+    disjoint (mkset Xs) L' ->
+    fresh L' n Xs.
+  Proof.
+    induction n; intros; destruct Xs; use (fresh_length _ _ _ H);
+      try discriminate.
+    simpl in *.
+    split. elim (H0 v); intro; auto. elim H2; auto with sets.
+    apply* IHn.
+    intro.
+    destruct (x == v). subst.
+      elim (fresh_disjoint _ _ _ (proj2 H) v); intro; auto.
+      elim (H0 v); intro; auto.
+    elim (H0 x); intro; auto.
+  Qed.
+
+  Lemma typing_gc_rename : forall Xs Ks K E t T L,
+    L = dom K \u fv_in kind_fv K \u kind_fv_list Ks \u env_fv E \u typ_fv T ->
+    fresh L (length Ks) Xs ->
+    K & kinds_open_vars Ks Xs; E |= t ~: T ->
+    forall Xs',
+      fresh (L \u mkset Xs) (length Ks) Xs' ->
+      K & kinds_open_vars Ks Xs'; E |= t ~: T.
+  Proof.
+    intros.
+    rewrite <- (typ_subst_fresh (combine Xs (typ_fvars Xs')) T).
+    assert (disjoint (mkset Xs) (mkset Xs')).
+      intro.
+      destruct (notin_dec x (mkset Xs')).
+        left; intro. destruct (fresh_union_r _ _ _ _ H2).
+        use (fresh_disjoint _ _ _ H6 x).
+      auto.
+    apply* typing_typ_substs.
+      use (fresh_disjoint _ _ _ H0). rewrite H in H4.
+      rewrite mkset_dom.
+      intro x; destruct (H4 x). left*.
+      elim (H3 x); intro; auto.
+      right.
+      rewrite fv_in_concat. rewrite dom_concat.
+      repeat apply* notin_union_l.
+        unfold kinds_open_vars.
+        rewrite fv_in_combine.
+        apply* notin_kinds_open.
+        rewrite* typ_fv_list_fvars.
+        unfold kinds_open; autorewrite with list.
+        rewrite* (fresh_length _ _ _ H2).
+      unfold kinds_open_vars, kinds_open.
+      rewrite* mkset_dom. rewrite map_length. rewrite* (fresh_length _ _ _ H2).
+      unfold typ_fvars; rewrite map_length. rewrite <- (fresh_length _ _ _ H2).
+      rewrite* (fresh_length _ _ _ H0).
+      clear; gen Xs; induction Xs'; destruct Xs; simpl; intro; intros;
+        try elim (binds_empty H).
+        unfold binds in H; simpl in H.
+        destruct (x == v). inversion* H.
+        apply* (IHXs' Xs x).
+      apply well_subst_open_vars.
+      rewrite fv_in_concat.
+      apply* fresh_union_l.
+      apply* disjoint_fresh.
+      intro.
+      destruct (notin_dec x (mkset Xs)).
+      elim (H3 x); intro; auto.
+      right. unfold kinds_open_vars.
+      rewrite fv_in_combine.
+      apply* notin_kinds_open.
+
+      
 
   Lemma typing_abs_inv0 : forall K E t1 U T,
     K ; E |= trm_abs t1 ~: typ_arrow U T ->
