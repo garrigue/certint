@@ -1194,26 +1194,26 @@ Hint Constructors typing valu red.
 
 (** A typing relation is restricted to well-formed objects. *)
 
-Lemma typing_regular : forall K E e T,
-  typing K E e T -> kenv_ok K /\ ok E /\ term e /\ type T.
+Lemma typing_regular : forall gc K E e T,
+  typing gc K E e T -> kenv_ok K /\ ok E /\ term e /\ type T.
 Proof.
   split4; induction* H.
   (* ok *)
   pick_fresh y. apply* (H1 y).
   pick_fresh y. apply* (H2 y).
-  pick_freshes (length Ks) Xs. forward~ (H0 Xs).
+  pick_freshes (length Ks) Xs. forward~ (H1 Xs).
     intro. split.
-      destruct* (ok_concat_inv _ _ (proj1 H1)).
-    intros x k B. apply (proj2 H1 x k).
-    apply* binds_concat_ok. destruct* H1.
+      destruct* (ok_concat_inv _ _ (proj1 H2)).
+    intros x k B. apply (proj2 H2 x k).
+    apply* binds_concat_ok. destruct* H2.
   pick_fresh y. forward~ (H1 y) as G. inversions* G.
   pick_fresh y. forward~ (H2 y) as G. inversions* G.
-  pick_freshes (length Ks) Xs. forward~ (H0 Xs).
+  pick_freshes (length Ks) Xs. forward~ (H1 Xs).
   (* term *) 
   apply_fresh* term_let as y.
     pick_freshes (sch_arity M) Xs.
     forward~ (H0 Xs) as G.
-  pick_freshes (length Ks) Xs. forward~ (H0 Xs).
+  pick_freshes (length Ks) Xs. forward~ (H1 Xs).
   (* type *)
   pick_fresh y. unfold proper_instance in H2. auto*.
   pick_fresh y. forward~ (H1 y).
@@ -1224,7 +1224,7 @@ Proof.
   destruct H1 as [[Hlen HT] [Hc _]].
   unfold scheme in Hc; unfold sch_open; simpl in *.
   apply* typ_open_types.
-  pick_freshes (length Ks) Xs. forward~ (H0 Xs).
+  pick_freshes (length Ks) Xs. forward~ (H1 Xs).
 Qed.
 
 Lemma kenv_ok_is_ok : forall K, kenv_ok K -> ok K.
@@ -1258,24 +1258,24 @@ Qed.
 
 Hint Extern 1 (kenv_ok ?K) =>
   match goal with
-  | H: typing K _ _ _ |- _ => apply (proj41 (typing_regular H))
+  | H: typing _ K _ _ _ |- _ => apply (proj41 (typing_regular H))
   end.
 
 Hint Extern 1 (ok ?E) =>
   match goal with
-  | H: typing _ E _ _ |- _ => apply (proj42 (typing_regular H))
+  | H: typing _ _ E _ _ |- _ => apply (proj42 (typing_regular H))
   end.
 
 Hint Extern 1 (term ?t) =>
   match goal with
-  | H: typing _ _ t _ |- _ => apply (proj43 (typing_regular H))
+  | H: typing _ _ _ t _ |- _ => apply (proj43 (typing_regular H))
   | H: red t _ |- _ => apply (proj1 (red_regular H))
   | H: red _ t |- _ => apply (proj2 (red_regular H))
   | H: value t |- _ => apply (value_regular H)
   end.
 
 Hint Extern 1 (type ?T) => match goal with
-  | H: typing _ _ _ T |- _ => apply (proj44 (typing_regular H))
+  | H: typing _ _ _ _ T |- _ => apply (proj44 (typing_regular H))
   end.
 
 End MkJudgInfra.

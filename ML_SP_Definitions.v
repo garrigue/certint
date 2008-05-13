@@ -318,40 +318,41 @@ Module MkJudge(Delta:DeltaIntf).
 
 (** The typing judgment *)
 
-Reserved Notation "K ; E |= t ~: T" (at level 69).
+Reserved Notation "K ; E | gc |= t ~: T" (at level 69).
 
-Inductive typing : kenv -> env -> trm -> typ -> Prop :=
+Inductive typing(gc:bool) : kenv -> env -> trm -> typ -> Prop :=
   | typing_var : forall K E x M Us,
       kenv_ok K ->
       ok E -> 
       binds x M E -> 
       proper_instance K M Us ->
-      K ; E |= (trm_fvar x) ~: (M ^^ Us)
+      K ; E | gc |= (trm_fvar x) ~: (M ^^ Us)
   | typing_abs : forall L K E U T t1, 
       type U ->
       (forall x, x \notin L -> 
-        K ; (E & x ~ Sch U nil) |= (t1 ^ x) ~: T) -> 
-      K ; E |= (trm_abs t1) ~: (typ_arrow U T)
+        K ; (E & x ~ Sch U nil) | gc |= (t1 ^ x) ~: T) -> 
+      K ; E | gc |= (trm_abs t1) ~: (typ_arrow U T)
   | typing_let : forall M L1 L2 K E T2 t1 t2,
       (forall Xs, fresh L1 (sch_arity M) Xs ->
-         (K & kinds_open_vars (sch_kinds M) Xs); E |= t1 ~: (M ^ Xs)) ->
-      (forall x, x \notin L2 -> K ; (E & x ~ M) |= (t2 ^ x) ~: T2) -> 
-      K ; E |= (trm_let t1 t2) ~: T2
+         (K & kinds_open_vars (sch_kinds M) Xs); E | gc |= t1 ~: (M ^ Xs)) ->
+      (forall x, x \notin L2 -> K ; (E & x ~ M) | gc |= (t2 ^ x) ~: T2) -> 
+      K ; E | gc |= (trm_let t1 t2) ~: T2
   | typing_app : forall K E S T t1 t2, 
-      K ; E |= t1 ~: (typ_arrow S T) ->
-      K ; E |= t2 ~: S ->   
-      K ; E |= (trm_app t1 t2) ~: T
+      K ; E | gc |= t1 ~: (typ_arrow S T) ->
+      K ; E | gc |= t2 ~: S ->   
+      K ; E | gc |= (trm_app t1 t2) ~: T
   | typing_cst : forall K E Us c,
       kenv_ok K ->
       ok E ->
       proper_instance K (Delta.type c) Us ->
-      K ; E |= (trm_cst c) ~: (Delta.type c ^^ Us)
+      K ; E | gc |= (trm_cst c) ~: (Delta.type c ^^ Us)
   | typing_gc : forall Ks L K E t T,
+      gc= true ->
       (forall Xs, fresh L (length Ks) Xs ->
-        K & kinds_open_vars Ks Xs; E |= t ~: T) ->
-      K ; E |= t ~: T
+        K & kinds_open_vars Ks Xs; E | gc |= t ~: T) ->
+      K ; E | gc |= t ~: T
 
-where "K ; E |= t ~: T" := (typing K E t T).
+where "K ; E | gc |= t ~: T" := (typing gc K E t T).
 
 
 (* ********************************************************************** *)
@@ -406,12 +407,12 @@ Notation "t --> t'" := (red t t') (at level 68).
 (** Goal is to prove preservation and progress *)
 
 Definition preservation := forall K E t t' T,
-  K ; E |= t ~: T ->
+  K ; E | true |= t ~: T ->
   t --> t' ->
-  K ; E |= t' ~: T.
+  K ; E | true |= t' ~: T.
 
 Definition progress := forall K t T, 
-  K ; empty |= t ~: T ->
+  K ; empty | true |= t ~: T ->
      value t
   \/ exists t', t --> t'.
 
