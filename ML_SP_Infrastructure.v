@@ -1146,16 +1146,24 @@ Hint Resolve map_coherent.
 Lemma sch_subst_type : forall S M,
   env_prop type S -> scheme M -> scheme (sch_subst S M).
 Proof.
-  unfold scheme, sch_subst. intros S [T Ks] TU TS.
-  simpls. destruct TS as [L K]. exists (L \u dom S).
-  unfold sch_arity in *; simpl; rewrite map_length; introv Fr.
-    simpls; destruct* (K Xs); clear K. destruct* (fresh_union_r _ _ _ _ Fr).
-  split.
-    rewrite* typ_subst_open_vars.
+  unfold scheme. intros S [T Ks] TU [[L K] TK].
+  simpls. split.
+    exists (L \u dom S).
+    unfold sch_arity in *; simpl; rewrite map_length; introv Fr.
+      simpls; destruct* (K Xs); clear K. destruct* (fresh_union_r _ _ _ _ Fr).
+    split.
+      rewrite* typ_subst_open_vars.
+    apply* list_forall_map.
+    clear H0; intros.
+    unfold kind_subst; apply* All_kind_types_map.
+    intros; rewrite* typ_subst_open_vars.
+  simpl sch_kinds in *.
   apply* list_forall_map.
-  clear H0; intros.
-  unfold kind_subst; apply* All_kind_types_map.
-  intros; rewrite* typ_subst_open_vars.
+  intros.
+  destruct x; simpl; auto.
+  unfold kind_ok in H0.
+  destruct c as [kc kr].
+  auto*.
 Qed.
 
 Hint Resolve sch_subst_type.

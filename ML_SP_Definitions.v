@@ -143,6 +143,12 @@ Definition kind_map f K :=
 
 Definition kind_open K Vs := kind_map (fun T => typ_open T Vs) K.
 
+Definition kind_ok o :=
+  match o with
+  | None => True
+  | Some k => Cstr.valid (kind_cstr k) /\ coherent k
+  end.
+
 (** Body of a scheme *)
 
 Definition typ_body T Ks :=
@@ -154,7 +160,7 @@ Definition typ_body T Ks :=
 (** Definition of a well-formed scheme *)
 
 Definition scheme M :=
-   typ_body (sch_type M) (sch_kinds M).
+   typ_body (sch_type M) (sch_kinds M) /\ list_forall kind_ok (sch_kinds M).
 
 (* ********************************************************************** *)
 (** ** Description of terms *)
@@ -235,10 +241,7 @@ Definition trm_inst t tl := trm_inst_rec 0 tl t.
 Definition kenv := env kind.
 
 Definition kenv_ok K :=
-  ok K /\
-  env_prop (fun o => All_kind_types type o /\
-            match o with None => True
-            | Some k => Cstr.valid (kind_cstr k) /\ coherent k end) K.
+  ok K /\ env_prop (fun o => All_kind_types type o /\ kind_ok o) K.
 
 (** Proper instanciation *)
 
