@@ -892,36 +892,6 @@ Proof.
   rewrite IHKs1. rewrite* <- union_assoc.
 Qed.
 
-(*
-Fixpoint split_kenv (L:vars) (Kall K:kenv) {struct K} : kenv * kenv :=
-  (* L = mkset Xs, Kall = K0 & kov M Xs & K *)
-  match K with
-  | nil => (empty, empty)
-  | (x, k)::K' =>
-    let r := split_kenv L Kall K' in
-    if S.is_empty (S.inter (typ_fvk Kall (typ_fvar x)) L) then
-      (fst r & x ~ k, snd r)
-    else
-      (fst r, snd r & x ~ k)
-  end.
-Lemma split_kenv_ok : forall K M Xs K' E t1,
-  K & kinds_open_vars (sch_kinds M) Xs & K'; E
-    | false |= t1 ~: sch_open_vars M Xs ->
-  exists Ks, exists K'', exists Xs1,
-    fresh (fv_in kind_fv K'') (length (Xs ++ Xs1)) (Xs ++ Xs1) /\
-    disjoint (dom K'')
-      (fv_in kind_fv K \u kind_fv_list Ks \u dom E \u sch_fv M) /\
-    K & K'' & kinds_open_vars (sch_kinds M ++ Ks) (Xs ++ Xs1); E
-      | false |= t1 ~: typ_open_vars (sch_type M) Xs.
-Proof.
-  intros.
-  remember
-    (split_kenv (mkset Xs) (K & kinds_open_vars (sch_kinds M) Xs & K') K') as r.
-  destruct r as [KX' K''].
-
-End.
-*)
-
 Lemma dom_kinds_open_vars : forall Ks Xs,
   length Ks = length Xs ->
   dom (kinds_open_vars Ks Xs) = mkset Xs.
@@ -1100,7 +1070,14 @@ Proof.
   exists L'.
   intros.
   destruct (@cut var (length Ks') Xs0) as [Xs1 [Xs2 [Len Eq]]].
-  
+    use (fresh_length _ _ _ H).
+    rewrite app_length in H1. omega.
+  rewrite Eq.
+  rewrite* kinds_open_vars_shift.
+    rewrite <- concat_assoc.
+    subst.
+End.  
+
 Lemma kind_map_map : forall f f' k,
   kind_map f (kind_map f' k) = kind_map (fun x => f (f' x)) k.
 Proof.
