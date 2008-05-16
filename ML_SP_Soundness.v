@@ -1067,15 +1067,21 @@ Proof.
       apply* ok_disjoint.
     apply* fresh_length.
   exists (Ks' ++ shift_kinds (length Ks') Ks0).
+  destruct (var_freshes (L \u L1) (length Ks')) as [Xs' HXs'].
   exists L'.
   intros.
+  rewrite <- (typ_subst_fresh (combine (Xs' ++ Xs) (typ_fvars Xs0))).
+    apply* typing_typ_substs.
+          rewrite mkset_dom.
   destruct (@cut var (length Ks') Xs0) as [Xs1 [Xs2 [Len Eq]]].
     use (fresh_length _ _ _ H).
     rewrite app_length in H1. omega.
   rewrite Eq.
   rewrite* kinds_open_vars_shift.
+    apply* typing_typ_substs.
     rewrite <- concat_assoc.
     subst.
+    
 End.  
 
 Lemma kind_map_map : forall f f' k,
