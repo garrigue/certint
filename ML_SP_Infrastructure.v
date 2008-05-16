@@ -19,9 +19,6 @@ Import Defs.
 
 (** Variants looking up a kinding environment *)
 
-Definition kind_fv_list :=
-  List.fold_right (fun t acc => kind_fv t \u acc) {}.
-
 Fixpoint close_fvars (n:nat)(K:kenv)(VK:vars)(Vs:vars) {struct n} : vars :=
   match n with
   | 0 => Vs
@@ -594,9 +591,8 @@ Proof.
     simpl. apply (f_equal (Sch T)).
     induction* K. unfold sch_fv in *; simpl in *; rewrite* IHK.
       rewrite* kind_subst_fresh.
-      rewrite fv_list_map in H; auto*.
+      unfold kind_fv in H.
       intro x; destruct* (H x).
-    rewrite fv_list_map in H.
     intro x; destruct* (H x).
   intro x; destruct* (H x).
   right; unfold sch_fv in H0; simpl in *. auto.

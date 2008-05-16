@@ -295,10 +295,13 @@ Definition typ_fv_list :=
 Definition kind_fv k :=
   typ_fv_list (kind_types k).
 
+Definition kind_fv_list :=
+  List.fold_right (fun t acc => kind_fv t \u acc) {}.
+
 (** Computing free variables of a type scheme. *)
 
 Definition sch_fv M := 
-  typ_fv_list (sch_type M :: flat_map kind_types (sch_kinds M)).
+  typ_fv (sch_type M) \u kind_fv_list (sch_kinds M).
 
 (** Computing free type variables of the values of an environment. *)
 

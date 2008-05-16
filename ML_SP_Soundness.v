@@ -841,57 +841,263 @@ Proof.
   unfold kind_fv; simpl. auto with sets.
 Qed.
 
-Lemma fv_in_kinds_open_vars : forall M Xs,
-  sch_arity M = length Xs ->
-  fv_in kind_fv (kinds_open_vars (sch_kinds M) Xs) << sch_fv M \u mkset Xs.
+Lemma fv_in_kinds_open_vars : forall Ks Xs,
+  length Ks = length Xs ->
+  fv_in kind_fv (kinds_open_vars Ks Xs) << kind_fv_list Ks \u mkset Xs.
 Proof.
   unfold kinds_open_vars.
   intros; rewrite fv_in_combine.
     unfold kinds_open.
-    unfold sch_fv.
-    induction (sch_kinds M); simpl. auto with sets.
-      apply subset_union_l2.
-        apply* subset_trans.
-          apply kind_fv_open.
-          apply subset_union_l2; auto with sets.
-          unfold kind_fv.
-          rewrite <- union_assoc; rewrite union_comm_assoc.
-          destruct a as [[kc kr]|]; simpl.
-          intro.
-          clear; induction kr; simpl; intros.
-            elim (in_empty H).
-          destruct (S.union_1 H); auto with sets.
-          destruct (S.union_1 (IHkr H0)); auto with sets.
-        auto with sets.
+    clear; induction Ks; simpl. auto with sets.
+    apply subset_union_l2.
       apply* subset_trans.
-      clear; simpl.
-      apply subset_union_l2; auto with sets.
-      apply subset_union_l2; rewrite <- union_assoc; auto with sets.
-      induction (kind_types a); simpl.
-        rewrite union_comm_assoc. auto with sets.
-      apply* subset_trans.
-      apply subset_union_l2; auto with sets.
-      intro; intros.
-      rewrite <- union_assoc. auto with sets.
+        apply kind_fv_open.
+        apply subset_union_l2; auto with sets.
+        unfold kind_fv.
+        rewrite <- union_assoc; rewrite union_comm_assoc.
+        destruct a as [[kc kr]|]; simpl.
+        intro.
+        clear; induction kr; simpl; intros.
+          elim (in_empty H).
+        destruct (S.union_1 H); auto with sets.
+      auto with sets.
+    apply* subset_trans.
+    clear; simpl.
+    apply subset_union_l2; auto with sets.
+    rewrite union_comm. rewrite union_assoc. auto with sets.
   unfold kinds_open. rewrite map_length. rewrite <- H. reflexivity.
 Qed.
 
+Lemma disjoint_fresh : forall n Xs L' L,
+  fresh L n Xs ->
+  disjoint (mkset Xs) L' ->
+  fresh L' n Xs.
+Proof.
+  induction n; intros; destruct Xs; use (fresh_length _ _ _ H);
+    try discriminate.
+  simpl in *.
+  split. elim (H0 v); intro; auto. elim H2; auto with sets.
+  apply* IHn.
+  intro.
+  destruct (x == v). subst.
+    elim (fresh_disjoint _ _ _ (proj2 H) v); intro; auto.
+    elim (H0 v); intro; auto.
+  elim (H0 x); intro; auto.
+Qed.
+
+Lemma kind_fv_list_app : forall Ks1 Ks2,
+  kind_fv_list (Ks1 ++ Ks2) = kind_fv_list Ks1 \u kind_fv_list Ks2.
+Proof.
+  induction Ks1; intros; simpl. rewrite* union_empty_l.
+  rewrite IHKs1. rewrite* <- union_assoc.
+Qed.
+
+(*
+Fixpoint split_kenv (L:vars) (Kall K:kenv) {struct K} : kenv * kenv :=
+  (* L = mkset Xs, Kall = K0 & kov M Xs & K *)
+  match K with
+  | nil => (empty, empty)
+  | (x, k)::K' =>
+    let r := split_kenv L Kall K' in
+    if S.is_empty (S.inter (typ_fvk Kall (typ_fvar x)) L) then
+      (fst r & x ~ k, snd r)
+    else
+      (fst r, snd r & x ~ k)
+  end.
+Lemma split_kenv_ok : forall K M Xs K' E t1,
+  K & kinds_open_vars (sch_kinds M) Xs & K'; E
+    | false |= t1 ~: sch_open_vars M Xs ->
+  exists Ks, exists K'', exists Xs1,
+    fresh (fv_in kind_fv K'') (length (Xs ++ Xs1)) (Xs ++ Xs1) /\
+    disjoint (dom K'')
+      (fv_in kind_fv K \u kind_fv_list Ks \u dom E \u sch_fv M) /\
+    K & K'' & kinds_open_vars (sch_kinds M ++ Ks) (Xs ++ Xs1); E
+      | false |= t1 ~: typ_open_vars (sch_type M) Xs.
+Proof.
+  intros.
+  remember
+    (split_kenv (mkset Xs) (K & kinds_open_vars (sch_kinds M) Xs & K') K') as r.
+  destruct r as [KX' K''].
+
+End.
+*)
+
+Theorem typing_remove_gc : forall t K E T,
+  K ; E |true|= t ~: T ->
+  forall L, exists Ks, exists L',
+    forall Xs, fresh (L \u L') (length Ks) Xs ->
+      K & kinds_open_vars Ks Xs; E |false|= t ~: T.
+Proof.
+  intro.
+  induction t; introv Typ L; inversions Typ.
+  (* bvar *)
+  use (proj43 (typing_regular Typ)). inversion H1.
+  (* fvar *)
+  exists (nil(A:=kind)).
+  exists {}.
+  intros.
+  destruct* Xs.
+  (* gc *)
+  clear H.
+  remember true as gc.
+  remember (trm_fvar v) as t.
+  gen K L0.
+  induction 1; intros; try discriminate.
+    exists (nil(A:=kind)).
+    exists {}.
+    intros.
+    destruct* Xs.
+  subst. clear H.
+  destruct (var_freshes L0 (length Ks0)) as [Xs HXs].
+  destruct (H1 Xs HXs (refl_equal (trm_fvar v)) (L1 \u mkset Xs))
+     as [Ks' [L' AbsH]]; clear H1.
+    intros.
+    apply* typing_weaken_kinds'.
+    assert (Fr: fresh L1 (length Ks) Xs0) by auto.
+    use (proj41 (typing_regular (H2 Xs0 Fr))); clear Fr.
+    apply* kenv_ok_open_fresh.
+      use (H0 Xs HXs).
+      destruct H1.
+      split. destruct* (ok_concat_inv _ _ H1).
+      intro; intros. apply* (H3 x a).
+    rewrite dom_concat.
+Lemma dom_kinds_open_vars : forall Ks Xs,
+  length Ks = length Xs ->
+  dom (kinds_open_vars Ks Xs) = mkset Xs.
+Proof.
+  unfold kinds_open_vars.
+  intros; rewrite* mkset_dom.
+  unfold kinds_open. rewrite map_length. rewrite* H.
+Qed.
+    rewrite (dom_kinds_open_vars _ _ (fresh_length _ _ _ HXs)).
+    apply* fresh_union_l.
+    apply* disjoint_fresh.
+    rewrite* <- (dom_kinds_open_vars Ks Xs0).
+      apply disjoint_comm.
+      apply* ok_disjoint.
+    apply* fresh_length.
+Fixpoint shift_bvars (n:nat) (T:typ) {struct T} : typ :=
+  match T with
+  | typ_bvar i => typ_bvar (n+i)
+  | typ_fvar x => T
+  | typ_arrow T1 T2 => typ_arrow (shift_bvars n T1) (shift_bvars n T2)
+  end.
+Definition shift_kinds n Ks := List.map (kind_map (shift_bvars n)) Ks.
+  exists (Ks' ++ shift_kinds (length Ks') Ks0).
+  exists L'.
+  intros.
+Lemma combine_app : forall (A B:Set) (u2:list A) (v2:list B) u1 v1,
+  length u1 = length v1 ->
+  combine (u1 ++ u2) (v1 ++ v2) = combine u1 v1 ++ combine u2 v2.
+Proof.
+  induction u1; destruct v1; simpl; intros; try discriminate.
+    auto.
+  inversion H; rewrite* IHu1.
+Qed.
+Lemma kinds_open_vars_shift : forall Xs Ks Xs' Ks',
+  length Ks' = length Xs' ->
+  kenv_ok (kinds_open_vars Ks' Xs') ->
+  kinds_open_vars (Ks' ++ shift_kinds (length Ks') Ks) (Xs' ++ Xs) =
+  kinds_open_vars Ks Xs & kinds_open_vars Ks' Xs'.
+Proof.
+  intros.
+  unfold kinds_open_vars.
+  unfold concat.
+  unfold kinds_open.
+  rewrite map_app.
+  rewrite combine_app.
+  replace (typ_fvars (Xs' ++ Xs)) with (typ_fvars Xs' ++ typ_fvars Xs)
+    by (unfold typ_fvars; rewrite* map_app).
+  set (Us := typ_fvars Xs).
+  set (Us' := typ_fvars Xs').
+  replace (length Ks') with (length Us') by
+    (unfold Us'; unfold typ_fvars; rewrite map_length; rewrite* H).
+  clearbody Us; clearbody Us'.
+  gen Ks'; induction Xs'; destruct Ks'; simpl; intros; try discriminate.
+    clear.
+    gen Ks; induction Xs; destruct Ks; simpl; intros; try reflexivity.
+    rewrite IHXs.
+Lemma kind_open_shift : forall Us Us' k,
+  kind_open (kind_map (shift_bvars (length Us')) k) (Us' ++ Us) =
+  kind_open k Us.
+Proof.
+  intros.
+  unfold kind_open.
+  unfold kind_map.
+  destruct k as [[kc kr]|]; auto.
+  induction kr; auto.
+  destruct a.
+  simpl in *.
+  inversion* IHkr.
+  clear.
+Lemma typ_open_shift : forall Us Us' T,
+  typ_open (shift_bvars (length Us') T) (Us' ++ Us) = typ_open T Us.
+Proof.
+  induction T; simpl; auto.
+    induction Us'; auto.
+  rewrite IHT1; rewrite* IHT2.
+Qed.
+  rewrite* typ_open_shift.
+Qed.
+    rewrite* kind_open_shift.
+  rewrite IHXs'. clear IHXs'.
+      
+
+Lemma kind_map_map : forall f f' k,
+  kind_map f (kind_map f' k) = kind_map (fun x => f (f' x)) k.
+Proof.
+  intros.
+  destruct k as [[kc kr]|]; auto.
+  induction kr; auto.
+  simpl in *.
+  inversion* IHkr.
+Qed.
+  rewrite kind_map_map.
+  apply (f_equal (fun f:typ->typ => kind_map f k)).
+
+Lemma ckind_map
+      
+  
+    
+  
+
+    Search fresh.
+  (* Abs *)
+  destruct (var_fresh (L \u trm_fv t1)) as [x Hx].
+  assert (Hx' : x \notin L) by auto.
+  destruct* (H1 x Hx' L0) as [Ks [Lk AbsH]]; clear H0 H1 Hx'.
+  exists Ks. exists Lk.
+  intros.
+  apply* (@typing_abs false (L \u dom E \u trm_fv t1 \u {{x}})).
+  intros.
+  replace (E & x0 ~ Sch U nil) with (E & x0 ~ Sch U nil & empty)
+    by (simpl; auto).
+  rewrite* (@trm_subst_intro x t1 (trm_fvar x0)).
+  apply* typing_rename.
+  simpl.
+  apply (proj2 (notin_union x0 (dom E \u {} \u {{x}}) (trm_fv (t1 ^ x)))).
+  split*.
+  intro.
+  use (trm_fv_open (trm_fvar x) t1 0 H2).
+  simpl in H3; destruct (S.union_1 H3); elim H1; auto with sets.
+
 Theorem typing_remove_gc : forall K E t T,
   K ; E |true|= t ~: T ->
-  exists Ks, exists L,
-    forall Xs, fresh L (length Ks) Xs ->
+  forall L, exists Ks, exists L',
+    forall Xs, fresh (L \u L') (length Ks) Xs ->
       K & kinds_open_vars Ks Xs; E |false|= t ~: T.
 Proof.
   remember true as gc.
-  induction 1.
+  induction 1; intros.
   (* Var *)
   exists (nil(A:=kind)). exists {}.
   intros. destruct Xs. simpl. apply* typing_var.
   use (fresh_length _ _ _ H3).
   (* Abs *)
-  destruct (var_fresh (L \u dom E \u trm_fv t1)) as [x Hx].
-  destruct* (H1 x) as [Ks [L' AbsH]]; clear H0 H1.
-  exists Ks. exists L'.
+  destruct (var_fresh (L \u trm_fv t1)) as [x Hx].
+  assert (Hx' : x \notin L) by auto.
+  destruct* (H1 x Hx' L0) as [Ks [Lk AbsH]]; clear H0 H1 Hx'.
+  exists Ks. exists Lk.
   intros.
   apply* (@typing_abs false (L \u dom E \u trm_fv t1 \u {{x}})).
   intros.
@@ -907,10 +1113,12 @@ Proof.
   simpl in H3; destruct (S.union_1 H3); elim H1; auto with sets.
   (* Let *)
   destruct (var_fresh (L2 \u dom E \u trm_fv t2)) as [x Hx].
-  destruct* (H2 x) as [Ks [Lk Hlet]]; clear H1 H2.
-  destruct (var_freshes (L1 \u dom K \u fv_in kind_fv K \u env_fv E)
-    (sch_arity M)) as [Xs HXs].
-  destruct* (H0 Xs) as [Ks' [Lk' Harg]]; clear H H0.
+  assert (Hx' : x \notin L2) by auto.
+  destruct* (H2 x Hx' L) as [Ks [Lk Hlet]]; clear H1 H2 Hx'.
+  destruct (var_freshes (L1 \u dom K \u fv_in kind_fv K \u env_fv E
+              \u sch_fv M \u kind_fv_list Ks) (sch_arity M)) as [Xs HXs].
+  assert (Fr': fresh L1 (sch_arity M) Xs) by auto.
+  destruct* (H0 Xs Fr' (L \u mkset Xs)) as [Ks' [Lk' Harg]]; clear H H0 Fr'.
   exists (Ks ++ Ks'). exists (Lk \u Lk').
   intros.
   apply* (@typing_let false M (L1 \u dom K \u mkset Xs \umkset Xs0)
@@ -923,38 +1131,48 @@ Proof.
       replace (typ_fvars Xs1) with (List.map (typ_subst S) (typ_fvars Xs)).
         rewrite <- typ_subst_open.
         apply (@typing_typ_substs false (kinds_open_vars (sch_kinds M) Xs)).
+            clear Hlet Harg.
             unfold S. rewrite mkset_dom. repeat rewrite dom_concat.
             repeat rewrite fv_in_concat.
             apply (fresh_disjoint (length Xs)).
-            repeat apply* fresh_union_l.
-Lemma fresh_disjoint : forall L2 n Xs L1,
-  fresh L2 n Xs ->
-  disjoint (mkset Xs) L1 ->
-  fresh L1 n Xs.
-Proof.
-  induction n; destruct Xs; intros; try contradiction; auto*.
-  constructor.
-    simpl in H0.
-    intro. destruct (H0 v). elim H2; auto with sets. elim (H2 H1).
-  simpl in H. destruct H.
-  apply* IHn.
-  intro. destruct (H0 x). simpl in H2; auto with sets.
-  destruct (x == v).
-    subst. left.
-    clear -H1; induction Xs. simpl. auto with sets.
-    simpl.
-    intro. destruct (S.union_1 H).
-  right.
-  intro. destruct (S.union_1 H3). contradiction.
-  
+               repeat apply* fresh_union_l.
+               apply* disjoint_fresh.
+                 apply* fresh_resize.
+               intro.
+               destruct* (in_vars_dec x0 (mkset Xs)).
+               right.
+               intro.
+               use (fv_in_kinds_open_vars (sch_kinds M) Xs1
+                      (fresh_length _ _ _ H0) H2); clear H2.
+               destruct* (S.union_1 H3); clear H3.
+                 destruct* (fresh_disjoint _ _ _ HXs x0).
+                 assert (x0 \in sch_fv M).
+                   unfold sch_fv. unfold typ_fv_list.
+                   simpl. unfold kind_fv_list in H2.
+                   apply (S.union_3 (typ_fv (sch_type M)) H2).
+                 elim H3. auto with sets.
+               destruct* (fresh_disjoint _ _ _ H0 x0).
+               elim H3. auto with sets.
+              eapply disjoint_fresh.
+                apply* fresh_resize.
+              intro.
+              destruct* (in_vars_dec x0 (mkset Xs)).
+              right; intro.
+              use (fv_in_kinds_open_vars _ Xs0 (fresh_length _ _ _ H) H2);
+                clear H2.
+              destruct* (S.union_1 H3); clear H3.
+              rewrite kind_fv_list_app in H2.
+              destruct* (S.union_1 H2); clear H2.
+               destruct* (fresh_disjoint _ _ _ HXs x0).
+                 elim H2. auto with sets.
+End.
 
-(*
 Lemma typing_hide_gc : forall K E t T,
   K ; E |true|= t ~: T ->
   forall t',
   (forall K',
-    K & K'; E |false|= t ~: T ->
-    K & K'; E |false|= t' ~: T) ->
+    K' ; E |false|= t ~: T ->
+    K' ; E |false|= t' ~: T) ->
   K ; E |true|= t' ~: T.
 Proof.
   remember true as gc.
@@ -964,8 +1182,9 @@ Proof.
   use (H3 (empty(A:=kind))).
   (* Abs *)
   destruct (var_fresh L) as [x Hx].
+  use (H1 x Hx); clear H1.
   apply* H1
-*)
+
   
 (* ********************************************************************** *)
 (** Extra hypotheses for main results *)
