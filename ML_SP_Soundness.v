@@ -973,6 +973,17 @@ Proof.
   rewrite* typ_open_shift.
 Qed.
 
+Lemma typ_open_extra : forall Us Us' T,
+  type (typ_open T Us) ->
+  typ_open T (Us ++ Us') = typ_open T Us.
+Proof.
+  induction T; simpl; intros; auto.
+    gen Us; induction n; destruct Us; simpl; intros; auto; inversion H.
+  inversions H.
+  rewrite* IHT1.
+  rewrite* IHT2.
+Qed.
+
 Lemma kinds_open_vars_shift : forall Xs Ks Xs' Ks',
   length Ks' = length Xs' ->
   kenv_ok (kinds_open_vars Ks' Xs') ->
@@ -984,7 +995,6 @@ Proof.
   unfold concat.
   unfold kinds_open.
   rewrite map_app.
-  rewrite combine_app.
   replace (typ_fvars (Xs' ++ Xs)) with (typ_fvars Xs' ++ typ_fvars Xs)
     by (unfold typ_fvars; rewrite* map_app).
   set (Us := typ_fvars Xs).
@@ -993,21 +1003,52 @@ Proof.
   replace (length Ks') with (length Us') by
     (unfold Us'; unfold typ_fvars; rewrite map_length; rewrite* H).
   clearbody Us; clearbody Us'.
+  rewrite combine_app.
   gen Ks'; induction Xs'; destruct Ks'; simpl; intros; try discriminate.
     clear.
     gen Ks; induction Xs; destruct Ks; simpl; intros; try reflexivity.
     rewrite IHXs.
     rewrite* kind_open_shift.
-  rewrite IHXs'. clear IHXs'.
+  rewrite IHXs'; clear IHXs'.
       destruct H0.
       destruct* (H1 a (kind_open k Us')).
       unfold binds. simpl. case_var*.
-      assert (kind_open k (Us' ++ Us) = kind_open k Us').
-        clear -H2.
-        destruct k as [[kc kr]|]; simpl; auto.
-        induction* kr.
+      replace (kind_open k (Us' ++ Us)) with (kind_open k Us'). auto.
+      clear -H2.
+      destruct k as [[kc kr]|]; simpl; auto.
+      apply (f_equal (fun x => Some (Kind kc x))).
+      induction kr; auto.
+      simpl. rewrite IHkr.
+        destruct a. simpl.
+        rewrite* typ_open_extra.
+        unfold All_kind_types in H2.
+        simpl in H2.
+        destruct* H2.
+      unfold All_kind_types in *.
+      simpl in *.
+      destruct* H2.
+    inversion* H.
+   split; destruct H0.
+     inversion* H0.
+   intro; intros.
+   apply* (H1 x).
+   apply (binds_concat_ok (a ~ kind_open k Us') H2 H0).
+   rewrite map_length.
+   rewrite* H.
+Qed.
 
-
+Definition cut (A:Set) (n:nat) (l:list A) :
+  n <= length l ->
+  exists l1, exists l2, length l1 = n /\ l = l1 ++ l2.
+Proof.
+  induction n; intros.
+    exists (nil(A:=A)). exists l. simpl; auto.
+  destruct l.
+    simpl in H. elimtype False. omega.
+  destruct (IHn l) as [l1 [l2 [L E]]]. simpl in H; omega.
+  exists (a::l1). exists l2.
+  subst; simpl; auto.
+Qed.
 
 Theorem typing_remove_gc : forall t K E T,
   K ; E |true|= t ~: T ->
@@ -1058,8 +1099,8 @@ Proof.
   exists (Ks' ++ shift_kinds (length Ks') Ks0).
   exists L'.
   intros.
-      
-
+  destruct (@cut var (length Ks') Xs0) as [Xs1 [Xs2 [Len Eq]]].
+  
 Lemma kind_map_map : forall f f' k,
   kind_map f (kind_map f' k) = kind_map (fun x => f (f' x)) k.
 Proof.
