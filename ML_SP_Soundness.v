@@ -922,6 +922,93 @@ Proof.
 End.
 *)
 
+Lemma dom_kinds_open_vars : forall Ks Xs,
+  length Ks = length Xs ->
+  dom (kinds_open_vars Ks Xs) = mkset Xs.
+Proof.
+  unfold kinds_open_vars.
+  intros; rewrite* mkset_dom.
+  unfold kinds_open. rewrite map_length. rewrite* H.
+Qed.
+
+Fixpoint shift_bvars (n:nat) (T:typ) {struct T} : typ :=
+  match T with
+  | typ_bvar i => typ_bvar (n+i)
+  | typ_fvar x => T
+  | typ_arrow T1 T2 => typ_arrow (shift_bvars n T1) (shift_bvars n T2)
+  end.
+
+Definition shift_kinds n Ks := List.map (kind_map (shift_bvars n)) Ks.
+
+Lemma combine_app : forall (A B:Set) (u2:list A) (v2:list B) u1 v1,
+  length u1 = length v1 ->
+  combine (u1 ++ u2) (v1 ++ v2) = combine u1 v1 ++ combine u2 v2.
+Proof.
+  induction u1; destruct v1; simpl; intros; try discriminate.
+    auto.
+  inversion H; rewrite* IHu1.
+Qed.
+
+Lemma typ_open_shift : forall Us Us' T,
+  typ_open (shift_bvars (length Us') T) (Us' ++ Us) = typ_open T Us.
+Proof.
+  induction T; simpl; auto.
+    induction Us'; auto.
+  rewrite IHT1; rewrite* IHT2.
+Qed.
+
+Lemma kind_open_shift : forall Us Us' k,
+  kind_open (kind_map (shift_bvars (length Us')) k) (Us' ++ Us) =
+  kind_open k Us.
+Proof.
+  intros.
+  unfold kind_open.
+  unfold kind_map.
+  destruct k as [[kc kr]|]; auto.
+  induction kr; auto.
+  destruct a.
+  simpl in *.
+  inversion* IHkr.
+  clear.
+  rewrite* typ_open_shift.
+Qed.
+
+Lemma kinds_open_vars_shift : forall Xs Ks Xs' Ks',
+  length Ks' = length Xs' ->
+  kenv_ok (kinds_open_vars Ks' Xs') ->
+  kinds_open_vars (Ks' ++ shift_kinds (length Ks') Ks) (Xs' ++ Xs) =
+  kinds_open_vars Ks Xs & kinds_open_vars Ks' Xs'.
+Proof.
+  introv.
+  unfold kinds_open_vars.
+  unfold concat.
+  unfold kinds_open.
+  rewrite map_app.
+  rewrite combine_app.
+  replace (typ_fvars (Xs' ++ Xs)) with (typ_fvars Xs' ++ typ_fvars Xs)
+    by (unfold typ_fvars; rewrite* map_app).
+  set (Us := typ_fvars Xs).
+  set (Us' := typ_fvars Xs').
+  intros.
+  replace (length Ks') with (length Us') by
+    (unfold Us'; unfold typ_fvars; rewrite map_length; rewrite* H).
+  clearbody Us; clearbody Us'.
+  gen Ks'; induction Xs'; destruct Ks'; simpl; intros; try discriminate.
+    clear.
+    gen Ks; induction Xs; destruct Ks; simpl; intros; try reflexivity.
+    rewrite IHXs.
+    rewrite* kind_open_shift.
+  rewrite IHXs'. clear IHXs'.
+      destruct H0.
+      destruct* (H1 a (kind_open k Us')).
+      unfold binds. simpl. case_var*.
+      assert (kind_open k (Us' ++ Us) = kind_open k Us').
+        clear -H2.
+        destruct k as [[kc kr]|]; simpl; auto.
+        induction* kr.
+
+
+
 Theorem typing_remove_gc : forall t K E T,
   K ; E |true|= t ~: T ->
   forall L, exists Ks, exists L',
@@ -961,14 +1048,6 @@ Proof.
       split. destruct* (ok_concat_inv _ _ H1).
       intro; intros. apply* (H3 x a).
     rewrite dom_concat.
-Lemma dom_kinds_open_vars : forall Ks Xs,
-  length Ks = length Xs ->
-  dom (kinds_open_vars Ks Xs) = mkset Xs.
-Proof.
-  unfold kinds_open_vars.
-  intros; rewrite* mkset_dom.
-  unfold kinds_open. rewrite map_length. rewrite* H.
-Qed.
     rewrite (dom_kinds_open_vars _ _ (fresh_length _ _ _ HXs)).
     apply* fresh_union_l.
     apply* disjoint_fresh.
@@ -976,71 +1055,9 @@ Qed.
       apply disjoint_comm.
       apply* ok_disjoint.
     apply* fresh_length.
-Fixpoint shift_bvars (n:nat) (T:typ) {struct T} : typ :=
-  match T with
-  | typ_bvar i => typ_bvar (n+i)
-  | typ_fvar x => T
-  | typ_arrow T1 T2 => typ_arrow (shift_bvars n T1) (shift_bvars n T2)
-  end.
-Definition shift_kinds n Ks := List.map (kind_map (shift_bvars n)) Ks.
   exists (Ks' ++ shift_kinds (length Ks') Ks0).
   exists L'.
   intros.
-Lemma combine_app : forall (A B:Set) (u2:list A) (v2:list B) u1 v1,
-  length u1 = length v1 ->
-  combine (u1 ++ u2) (v1 ++ v2) = combine u1 v1 ++ combine u2 v2.
-Proof.
-  induction u1; destruct v1; simpl; intros; try discriminate.
-    auto.
-  inversion H; rewrite* IHu1.
-Qed.
-Lemma kinds_open_vars_shift : forall Xs Ks Xs' Ks',
-  length Ks' = length Xs' ->
-  kenv_ok (kinds_open_vars Ks' Xs') ->
-  kinds_open_vars (Ks' ++ shift_kinds (length Ks') Ks) (Xs' ++ Xs) =
-  kinds_open_vars Ks Xs & kinds_open_vars Ks' Xs'.
-Proof.
-  intros.
-  unfold kinds_open_vars.
-  unfold concat.
-  unfold kinds_open.
-  rewrite map_app.
-  rewrite combine_app.
-  replace (typ_fvars (Xs' ++ Xs)) with (typ_fvars Xs' ++ typ_fvars Xs)
-    by (unfold typ_fvars; rewrite* map_app).
-  set (Us := typ_fvars Xs).
-  set (Us' := typ_fvars Xs').
-  replace (length Ks') with (length Us') by
-    (unfold Us'; unfold typ_fvars; rewrite map_length; rewrite* H).
-  clearbody Us; clearbody Us'.
-  gen Ks'; induction Xs'; destruct Ks'; simpl; intros; try discriminate.
-    clear.
-    gen Ks; induction Xs; destruct Ks; simpl; intros; try reflexivity.
-    rewrite IHXs.
-Lemma kind_open_shift : forall Us Us' k,
-  kind_open (kind_map (shift_bvars (length Us')) k) (Us' ++ Us) =
-  kind_open k Us.
-Proof.
-  intros.
-  unfold kind_open.
-  unfold kind_map.
-  destruct k as [[kc kr]|]; auto.
-  induction kr; auto.
-  destruct a.
-  simpl in *.
-  inversion* IHkr.
-  clear.
-Lemma typ_open_shift : forall Us Us' T,
-  typ_open (shift_bvars (length Us') T) (Us' ++ Us) = typ_open T Us.
-Proof.
-  induction T; simpl; auto.
-    induction Us'; auto.
-  rewrite IHT1; rewrite* IHT2.
-Qed.
-  rewrite* typ_open_shift.
-Qed.
-    rewrite* kind_open_shift.
-  rewrite IHXs'. clear IHXs'.
       
 
 Lemma kind_map_map : forall f f' k,
