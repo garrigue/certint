@@ -1093,6 +1093,14 @@ Proof.
   unfold kind_fv. auto with sets.
 Qed.
 
+Lemma binds_dom : forall (A:Set) Z (k:A) K, binds Z k K -> Z \in dom K.
+Proof.
+  unfold binds; induction K; intros.
+    discriminate.
+  simpl in H.
+  destruct a. destruct (Z == v); simpl; subst; auto with sets.
+Qed.
+
 Lemma typing_nrm_let : forall L1 M Xs K E t1 x L2 t2 T,
   fresh (L1 \u dom K \u fv_in kind_fv K \u env_fv E \u sch_fv M)
           (sch_arity M) Xs ->
@@ -1132,62 +1140,101 @@ Proof.
           unfold typ_fvars; rewrite map_length.
           apply* fresh_length.
         replace (typ_fvars Xs0) with (List.map (typ_subst S) (typ_fvars Xs)).
-          rewrite <- typ_subst_open.
+          rewrite* <- typ_subst_open.
           apply* (@typing_typ_substs false (kinds_open_vars (sch_kinds M) Xs)).
             clear H H2.
-            rewrite DomS.
-            unfold S. rewrite mkset_dom. repeat rewrite dom_concat.
+            rewrite DomS. repeat rewrite dom_concat.
             repeat rewrite fv_in_concat.
             apply (fresh_disjoint (length Xs)).
             repeat apply* fresh_union_l.
               apply* disjoint_fresh.
                 apply* fresh_resize.
-             intro.
-             destruct* (in_vars_dec x0 (mkset Xs)).
-             right.
-             intro.
-             use (fv_in_kinds_open_vars (sch_kinds M) Xs0
-                  (fresh_length _ _ _ H3) H2); clear H2.
-             destruct* (S.union_1 H4); clear H4.
-               destruct* (fresh_disjoint _ _ _ H0 x0).
-               assert (x0 \in sch_fv M).
-                 unfold sch_fv. unfold typ_fv_list.
-                 simpl. unfold kind_fv_list in H0.
-                 apply (S.union_3 (typ_fv (sch_type M)) H2).
-               elim H4. auto with sets.
-             destruct* (fresh_disjoint _ _ _ H3 x0).
-             elim H4. auto with sets.
-           eapply disjoint_fresh.
-             apply* fresh_resize.
-           intro.
-           destruct* (in_vars_dec x0 (mkset Xs)).
-           right; intro.
-           rewrite dom_kinds_open_vars in H2.
-           destruct* (fresh_disjoint _ _ _ H3 x0).
-             elim H4. auto with sets.
-           apply* fresh_length.
-         rewrite <- (fresh_length _ _ _ H0).
-         unfold typ_fvars; rewrite map_length.
-         apply* fresh_length.
-       intro; intros.
-       destruct k; try apply wk_any.
-       binds_cases H4.
-         rewrite typ_subst_fresh.
-           rewrite kind_subst_fresh.
-             apply* wk_kind. apply entails_refl.
-           unfold S; rewrite mkset_dom.
-           apply* fresh_disjoint.
-           apply* fresh_sub.
-           apply* subset_trans. apply (fv_in_kenv B0).
-           intro; intros; auto with sets.
-          rewrite <- (fresh_length _ _ _ H0).
-           unfold typ_fvars; rewrite map_length.
-           apply* fresh_length.
-         
-
-           destruct* (fresh_disjoint _ _ _ H3 x0).
-             elim H4. auto with sets.
-           apply* fresh_length.
+              intro.
+              destruct* (in_vars_dec x0 (mkset Xs)).
+              right.
+              intro.
+              use (fv_in_kinds_open_vars (sch_kinds M) Xs0
+                   (fresh_length _ _ _ H3) H2); clear H2.
+              destruct* (S.union_1 H4); clear H4.
+                destruct* (fresh_disjoint _ _ _ H0 x0).
+                assert (x0 \in sch_fv M).
+                  unfold sch_fv. unfold typ_fv_list.
+                  simpl. unfold kind_fv_list in H0.
+                  apply (S.union_3 (typ_fv (sch_type M)) H2).
+                elim H4. auto with sets.
+              destruct* (fresh_disjoint _ _ _ H3 x0).
+              elim H4. auto with sets.
+            eapply disjoint_fresh.
+              apply* fresh_resize.
+            intro.
+            destruct* (in_vars_dec x0 (mkset Xs)).
+            right; intro.
+            rewrite dom_kinds_open_vars in H2.
+              destruct* (fresh_disjoint _ _ _ H3 x0).
+              elim H4. auto with sets.
+            apply* fresh_length.
+Lemma well_subst_rename : forall L1 K E M Xs Xs0,
+  fresh (L1 \u dom K \u fv_in kind_fv K \u env_fv E \u sch_fv M)
+        (sch_arity M) Xs ->
+  fresh (L1 \u dom K \u mkset Xs) (sch_arity M) Xs0 ->
+  let S := combine Xs (typ_fvars Xs0) in
+  well_subst
+    (K & kinds_open_vars (sch_kinds M) Xs0 & kinds_open_vars (sch_kinds M) Xs)
+    (K & kinds_open_vars (sch_kinds M) Xs0) S.
+Proof.
+  intros; intro; intros.
+  assert (DomS: dom S = mkset Xs).
+    unfold S; rewrite mkset_dom. auto.
+    rewrite <- (fresh_length _ _ _ H).
+    unfold typ_fvars; rewrite map_length.
+    apply* fresh_length.
+  destruct k; try apply wk_any.
+  binds_cases H1.
+      rewrite typ_subst_fresh.
+        rewrite kind_subst_fresh.
+          apply* wk_kind. apply entails_refl.
+        rewrite DomS.
+        apply* fresh_disjoint.
+        apply* fresh_sub.
+        apply* subset_trans. apply (fv_in_kenv B0).
+        intro; intros; auto with sets.
+      rewrite DomS.
+      simpl.
+      apply* fresh_disjoint.
+      apply* fresh_sub.
+      apply* subset_trans.
+        intro; intros.
+        rewrite (proj1 (in_singleton _ _) H1) in *.
+        apply (binds_dom B0).
+      intro; intros; auto with sets.
+    rewrite typ_subst_fresh.
+      rewrite kind_subst_fresh.
+        apply* wk_kind. apply entails_refl.
+      rewrite DomS.
+      intro.
+      destruct* (in_vars_dec x (mkset Xs)).
+      right; intro.
+      use (fv_in_kenv B1 H2).
+      clear H2.
+      forward~ (fv_in_kinds_open_vars (sch_kinds M) Xs0); intros.
+        unfold sch_arity in H3. apply* fresh_length.
+        apply H3.
+      destruct (S.union_1 H2); clear H2.
+        destruct* (fresh_disjoint _ _ _ H x).
+        elim H2; unfold sch_fv; auto with sets.
+      destruct* (fresh_disjoint _ _ _ H0 x).
+      elim H2; auto with sets.
+    rewrite DomS. simpl.
+    intro.
+    destruct* (x == Z).
+    subst; left; intro.
+    destruct* (fresh_disjoint _ _ _ H0 Z).
+      elim H2.
+      use (binds_dom B1).
+      rewrite dom_kinds_open_vars in H3; auto.
+      apply* fresh_length.
+    elim H2; auto with sets.
+  
 Qed.
 
 Theorem typing_canonize : forall t K E T,
