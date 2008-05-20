@@ -1350,6 +1350,24 @@ Proof.
   unfold S; apply* well_kinded_rename.
 Qed.
 
+Lemma kenv_ok_concat_inv : forall K1 K2,
+  kenv_ok (K1 & K2) -> kenv_ok K1 /\ kenv_ok K2.
+Proof.
+  intros.
+  split; split; destruct H; destruct* (ok_concat_inv _ _ H);
+    intro; intros; apply* (H0 x a).
+Qed.
+
+Lemma kenv_ok_concat : forall K1 K2,
+  kenv_ok K1 -> kenv_ok K2 -> disjoint (dom K1) (dom K2) -> kenv_ok (K1 & K2).
+Proof.
+  intros.
+  split. apply* disjoint_ok.
+  intro; intros.
+  binds_cases H2. apply (proj2 H x a B).
+  apply (proj2 H0 x a B0).
+Qed.
+
 Lemma typing_nrm_let : forall L1 M Xs K E t1 x L2 t2 T,
   fresh (L1 \u dom K \u fv_in kind_fv K \u env_fv E \u sch_fv M)
           (sch_arity M) Xs ->
@@ -1424,7 +1442,81 @@ Proof.
             apply* fresh_length.
           unfold S; apply* well_subst_rename.
         apply* typing_weaken_kinds.
+        destruct (kenv_ok_concat_inv _ _ (proj41 (typing_regular H))).
+        apply* kenv_ok_concat.
+          apply* kenv_ok_concat.
+            split.
+              unfold kinds_open_vars.
+              apply* ok_combine_fresh.
+            destruct H5.
+            clear -H0 H3 H6.
+Lemma env_prop_list_forall : forall (A:Set) (P:A->Prop) l1 l2,
+  fresh {} (length l2) l1 ->
+  env_prop P (combine l1 l2) -> list_forall P l2.
+Proof.
+  induction l1; destruct l2; intros; try contradiction.
+    auto.
+  constructor.
+   simpl in H; destruct H.
+   apply* IHl1. 
+   intro; intros. apply* (H0 x a1).
+   unfold binds; simpl.
+   destruct (x==a).
+     subst.
+     use (in_combine_l _ _ _ _ (in_binds H2)).
+     elim (in_fresh a l1); auto.
+   apply H2.
+  apply (H0 a).
+  unfold binds; simpl. destruct* (a==a).
 Qed.
+Lemma kinds_prop_rename : forall M Xs Xs0,
+  fresh {} (sch_arity M) Xs ->
+  fresh {} (sch_arity M) Xs0 ->
+  env_prop (fun o : kind => All_kind_types type o /\ kind_ok o)
+           (kinds_open_vars (sch_kinds M) Xs) ->
+  env_prop (fun o : kind => All_kind_types type o /\ kind_ok o)
+           (kinds_open_vars (sch_kinds M) Xs0).
+Proof.
+  unfold kinds_open_vars in *.
+  intros.
+  apply list_forall_env_prop.
+  assert (fresh {} (length (kinds_open (sch_kinds M) (typ_fvars Xs))) Xs).
+    unfold sch_arity in *.
+    unfold kinds_open. rewrite* map_length.
+  use (env_prop_list_forall _ _ H2 H1).
+  assert (length Xs = length Xs0).
+    rewrite <- (fresh_length _ _ _ H).
+    apply* fresh_length.
+  clear H1 H2.
+  induction (sch_kinds M). simpl. auto.
+  simpl in *.
+  inversions H3; clear H3.
+  constructor; auto.
+  clear IHl H5.
+  destruct H6.
+  unfold kind_open in *.
+  unfold All_kind_types in *.
+  destruct a as [[kc kr]|]; simpl in *.
+  split.
+    clear H2.
+    rewrite map_map in *.
+    induction kr; simpl in *. auto.
+    destruct H1; split*.
+    clear -H1 H4.
+    induction (snd a); simpl in *; auto.
+      gen Xs Xs0; induction n; destruct Xs; destruct Xs0;
+        simpl in *; intros; try discriminate; auto.
+      apply (IHn Xs H1 Xs0). inversion* H4.
+    inversions H1.
+    constructor; auto.
+  destruct H2; split*.
+  clear H1 H2.
+  intro; simpl; intros.
+
+Qed.
+
+Qed.
+
 
 Theorem typing_canonize : forall t K E T,
   K ; E |true|= t ~: T -> typing_nrm K E t T.
@@ -1505,13 +1597,6 @@ Proof.
   use (proj41 (typing_regular (H2 Xs0 Fr))); clear Fr H2.
   use (proj41 (typing_regular (H0 Xs H3))); clear H0.
   apply* kenv_ok_open_fresh.
-Lemma kenv_ok_concat_inv : forall K1 K2,
-  kenv_ok (K1 & K2) -> kenv_ok K1 /\ kenv_ok K2.
-Proof.
-  intros.
-  split; split; destruct H; destruct* (ok_concat_inv _ _ H);
-    intro; intros; apply* (H0 x a).
-Qed.
     destruct* (kenv_ok_concat_inv _ _ H4).
   rewrite dom_concat.
   apply* fresh_union_l.
