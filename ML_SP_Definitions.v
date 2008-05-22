@@ -326,7 +326,21 @@ Module MkJudge(Delta:DeltaIntf).
 
 Reserved Notation "K ; E | gc |= t ~: T" (at level 69).
 
-Inductive typing(gc:bool) : kenv -> env -> trm -> typ -> Prop :=
+Inductive gc_kind : Set := GcAny | GcLet.
+Definition gc_info : Set := (bool * gc_kind)%type.
+Fixpoint gc_ok (gc:gc_info) := fst gc = true. 
+Fixpoint gc_raise (gc:gc_info) : gc_info :=
+  match snd gc with
+  | GcLet => (true, GcLet)
+  | _ => gc
+  end.
+Fixpoint gc_lower (gc:gc_info) : gc_info :=
+  match snd gc with
+  | GcLet => (false, GcLet)
+  | _ => gc
+  end.
+
+Inductive typing(gc:gc_info) : kenv -> env -> trm -> typ -> Prop :=
   | typing_var : forall K E x M Us,
       kenv_ok K ->
       ok E -> 
@@ -336,16 +350,18 @@ Inductive typing(gc:bool) : kenv -> env -> trm -> typ -> Prop :=
   | typing_abs : forall L K E U T t1, 
       type U ->
       (forall x, x \notin L -> 
-        K ; (E & x ~ Sch U nil) | gc |= (t1 ^ x) ~: T) -> 
+        K ; (E & x ~ Sch U nil) | gc_lower gc |= (t1 ^ x) ~: T) -> 
       K ; E | gc |= (trm_abs t1) ~: (typ_arrow U T)
   | typing_let : forall M L1 L2 K E T2 t1 t2,
       (forall Xs, fresh L1 (sch_arity M) Xs ->
-         (K & kinds_open_vars (sch_kinds M) Xs); E | gc |= t1 ~: (M ^ Xs)) ->
-      (forall x, x \notin L2 -> K ; (E & x ~ M) | gc |= (t2 ^ x) ~: T2) -> 
+         (K & kinds_open_vars (sch_kinds M) Xs); E | gc_raise gc |=
+           t1 ~: (M ^ Xs)) ->
+      (forall x, x \notin L2 ->
+         K ; (E & x ~ M) | gc_lower gc |= (t2 ^ x) ~: T2) -> 
       K ; E | gc |= (trm_let t1 t2) ~: T2
   | typing_app : forall K E S T t1 t2, 
-      K ; E | gc |= t1 ~: (typ_arrow S T) ->
-      K ; E | gc |= t2 ~: S ->   
+      K ; E | gc_lower gc |= t1 ~: (typ_arrow S T) ->
+      K ; E | gc_lower gc |= t2 ~: S ->   
       K ; E | gc |= (trm_app t1 t2) ~: T
   | typing_cst : forall K E Us c,
       kenv_ok K ->
@@ -353,7 +369,7 @@ Inductive typing(gc:bool) : kenv -> env -> trm -> typ -> Prop :=
       proper_instance K (Delta.type c) Us ->
       K ; E | gc |= (trm_cst c) ~: (Delta.type c ^^ Us)
   | typing_gc : forall Ks L K E t T,
-      gc= true ->
+      gc_ok gc ->
       (forall Xs, fresh L (length Ks) Xs ->
         K & kinds_open_vars Ks Xs; E | gc |= t ~: T) ->
       K ; E | gc |= t ~: T
@@ -413,12 +429,12 @@ Notation "t --> t'" := (red t t') (at level 68).
 (** Goal is to prove preservation and progress *)
 
 Definition preservation := forall K E t t' T,
-  K ; E | true |= t ~: T ->
+  K ; E | (true,GcAny) |= t ~: T ->
   t --> t' ->
-  K ; E | true |= t' ~: T.
+  K ; E | (true,GcAny) |= t' ~: T.
 
 Definition progress := forall K t T, 
-  K ; empty | true |= t ~: T ->
+  K ; empty | (true,GcAny) |= t ~: T ->
      value t
   \/ exists t', t --> t'.
 
