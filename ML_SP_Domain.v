@@ -1,6 +1,6 @@
 (***************************************************************************
 * Preservation and Progress for mini-ML with structural polymorphism       *
-* Jacques Garrigue, October 2007                                           *
+* Jacques Garrigue, May 2008                                               *
 ***************************************************************************)
 
 Set Implicit Arguments.

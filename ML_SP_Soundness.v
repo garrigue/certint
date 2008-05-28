@@ -1,6 +1,8 @@
 (***************************************************************************
 * Preservation and Progress for mini-ML (CBV) - Proofs                     *
-* Arthur Charguéraud, March 2007, Coq v8.1                                 *
+* Arthur Chargueraud, March 2007, Coq v8.1                                 *
+* Extension to structural polymorphism                                     *
+* Jacques Garrigue, October 2007 - May 2008                                *
 ***************************************************************************)
 
 Set Implicit Arguments.
