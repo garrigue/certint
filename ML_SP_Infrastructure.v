@@ -990,12 +990,7 @@ Qed.
 
 Lemma ok_cons : forall (A:Set) (E:Env.env A) x (a:A),
   ok E -> x # E -> ok ((x,a) :: E).
-Proof.
-  intros.
-  assert (r: E = nil ++ E). simpl*.
-  rewrite r; rewrite app_comm_cons.
-  apply* (ok_push (A:=A) a (E:=E) (x:=x)).
-Qed.
+Proof. exact ok_push. Qed.
 
 Lemma disjoint_ok : forall (A:Set) (E F:Env.env A),
   ok E -> ok F -> disjoint (dom E) (dom F) -> ok (E & F).
