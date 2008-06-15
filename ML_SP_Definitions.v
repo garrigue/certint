@@ -352,14 +352,14 @@ Inductive typing(gc:gc_info) : kenv -> env -> trm -> typ -> Prop :=
   | typing_abs : forall L K E U T t1, 
       type U ->
       (forall x, x \notin L -> 
-        K ; (E & x ~ Sch U nil) | gc_lower gc |= (t1 ^ x) ~: T) -> 
+        K ; (E & x ~ Sch U nil) | gc_raise gc |= (t1 ^ x) ~: T) -> 
       K ; E | gc |= (trm_abs t1) ~: (typ_arrow U T)
   | typing_let : forall M L1 L2 K E T2 t1 t2,
       (forall Xs, fresh L1 (sch_arity M) Xs ->
          (K & kinds_open_vars (sch_kinds M) Xs); E | gc_raise gc |=
            t1 ~: (M ^ Xs)) ->
       (forall x, x \notin L2 ->
-         K ; (E & x ~ M) | gc_lower gc |= (t2 ^ x) ~: T2) -> 
+         K ; (E & x ~ M) | gc_raise gc |= (t2 ^ x) ~: T2) -> 
       K ; E | gc |= (trm_let t1 t2) ~: T2
   | typing_app : forall K E S T t1 t2, 
       K ; E | gc_lower gc |= t1 ~: (typ_arrow S T) ->
