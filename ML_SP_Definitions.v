@@ -137,7 +137,7 @@ Definition ckind_map f k :=
     Kind kc (List.map (fun XT:var*typ => (fst XT, f (snd XT))) kr)
   end.
 
-Definition kind_map f K :=
+Definition kind_map f (K:kind) : kind :=
   match K with
   | None => None
   | Some k => Some (ckind_map f k)
