@@ -1645,14 +1645,14 @@ Proof.
     rewrite* mkset_dom. unfold kinds_open.
     rewrite map_length. rewrite* (fresh_length _ _ _ Fr).
   split.
-    rewrite H5. apply* (fresh_disjoint (length Ks')).
+    rewrite H5. disjoint_solve.
   replace (sch_open (Sch U Ks) Us)
     with (sch_open (Sch U (Ks++Ks')) (Us ++ typ_fvars Xs)).
     apply* typing_var.
       destruct H.
       split.
         apply* disjoint_ok. apply* ok_combine_fresh.
-        apply disjoint_comm. rewrite H5; apply* (fresh_disjoint (length Ks')).
+        rewrite H5; disjoint_solve.
       intro; intros.
       binds_cases H7. apply* (H6 x0).
       eapply env_weaker_ok.
@@ -1958,13 +1958,8 @@ Proof.
         clear -HD1 HXs.
         assert (disjoint (dom S) (kind_fv_list Ks'))
           by (unfold Ks', S; apply disjoint_S_Ks').
-        assert (length Ks = length Xs) by auto.
-        rewrite* <- (domS_eq K1 Ks Xs).
-        intro v; destruct* (H v).
-        rewrite* (domS_eq K1 _ _ H0).
-        destruct* (HD1 v).
-        destruct* (fresh_disjoint _ _ _ HXs v).
-      unfold sch_arity in *; simpl length in *.
+        simpl in S; unfold S in H.
+        rewrite (domS_eq K1 Ks Xs) in H; auto. disjoint_solve.
       rewrite* <- LenS.
      simpl.
      unfold sch_open_vars, typ_open_vars in *.
@@ -1988,9 +1983,8 @@ Proof.
       assert (disjoint (dom S) (kind_fv_list Ks'))
         by (unfold Ks'; unfold S; apply* disjoint_S_Ks').
       assert (disjoint (dom S) (kind_fv_list Ks)).
-        unfold S; rewrite domS_eq. unfold sch_fv in *.
+        unfold S; rewrite* domS_eq. unfold sch_fv in *.
         simpl sch_kinds in *. disjoint_solve.
-        apply (fresh_length _ _ _ HXs).
       assert (disjoint (dom S) (kind_fv_list (Ks ++ Ks'))).
         clear -H1 H3; disjoint_solve. rewrite* kind_fv_list_app.
       clear H1 H3.
@@ -2001,15 +1995,13 @@ Proof.
         eapply ok_fresh. apply H0.
           unfold kinds_open; rewrite* map_length.
         rewrite mkset_app.
-        unfold S in H4; rewrite domS_eq in H4.
+        unfold S in H4; rewrite domS_eq in H4; auto.
         rewrite <- (combine_fst_snd K1) in H4.
-        rewrite mkset_dom in H4. auto.
+        rewrite mkset_dom in H4; auto.
         unfold list_fst, list_snd; repeat rewrite* map_length.
-        apply (fresh_length _ _ _ HXs).
       apply* kenv_ok_rename.
-    rewrite dom_kinds_open_vars.
+    rewrite* dom_kinds_open_vars.
     clear -H2. rewrite dom_concat; disjoint_solve.
-    apply (fresh_length _ _ _ H2).
   intros.
   simpl gc_raise.
   replace (F & x0 ~ Sch U (Ks++Ks')) with (F & x0 ~ Sch U (Ks++Ks') & empty)
@@ -2053,9 +2045,8 @@ Qed.
   exists (kinds_open_vars Ks Xs & K').
   rewrite dom_concat.
   split.
-    rewrite dom_kinds_open_vars. disjoint_solve.
-    apply (fresh_length _ _ _ Hs).
-  rewrite <- concat_assoc. auto.
+    rewrite* dom_kinds_open_vars. disjoint_solve.
+  rewrite* <- concat_assoc.
 Qed.
 
 (* End of removing GC *)
