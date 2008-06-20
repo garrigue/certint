@@ -1,0 +1,18 @@
+The files ML_SP_* contain a proof of soundness for structural
+polymorphism based on local constraints [1]
+  ML_SP_Definitions: basic definitions
+  ML_SP_Infrastructure: structural lemmas on kinds and types
+  ML_SP_Soundness: lemmas on derivations and proof of type soundnes
+  ML_SP_Domain: proof of lemmas concerning polymorphic variants
+
+All these development are extensions of the original proofs of Arthur
+Chargueraud, accompanying "Engineering formal metatheory".
+Other files are included almost identical from it.
+The above 4 files were either heavily edited, or completely new
+(ML_SP_Domain).
+
+You can compile these developments with "sh build.sh"
+
+[1] Jacques Garrigue: Simple Type Inference for Structural Polymorphism.
+    FOOL 9, Portland, Oregon, January 2002.
+    http://www.math.nagoya-u.ac.jp/~garrigue/papers/#strucpoly

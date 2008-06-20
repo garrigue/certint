@@ -2,7 +2,7 @@
 * Preservation and Progress for mini-ML (CBV) - Proofs                     *
 * Arthur Chargueraud, March 2007, Coq v8.1                                 *
 * Extension to structural polymorphism                                     *
-* Jacques Garrigue, October 2007 - May 2008                                *
+* Jacques Garrigue, October 2007 - June 2008                               *
 ***************************************************************************)
 
 Set Implicit Arguments.
@@ -76,15 +76,18 @@ Ltac disjoint_solve :=
 Hint Extern 1 (?n = length ?Xs) =>
   match goal with
   | H : fresh _ n Xs |- _ => apply (fresh_length _ _ _ H)
+  | H : fresh _ (sch_arity ?Ks) Xs |- _ =>
+    match n with length (sch_kinds Ks) => apply (fresh_length _ _ _ H) end
   end.
 
 Hint Extern 1 (length ?Xs = ?n) =>
   match goal with
   | H : fresh _ n Xs |- _ => apply (fresh_length _ _ _ H)
+  | H : fresh _ (sch_arity ?Ks) Xs |- _ =>
+    match n with length (sch_kinds Ks) => apply (fresh_length _ _ _ H) end
   end.
 
-
-Lemma mkset_kinds_open_vars : forall Xs Ks,
+Lemma dom_kinds_open_vars : forall Xs Ks,
   length Ks = length Xs ->
   dom (kinds_open_vars Ks Xs) = mkset Xs.
 Proof.
@@ -109,8 +112,7 @@ Proof.
     split. apply* disjoint_ok.
       unfold kinds_open_vars.
       apply* ok_combine_fresh.
-      unfold sch_arity in *.
-      rewrite* mkset_kinds_open_vars. disjoint_solve.
+      rewrite* dom_kinds_open_vars. disjoint_solve.
     intro; intros.
     destruct Ok as [_ Ok].
     destruct (binds_concat_inv H0) as [[Fr B]|B]; clear H0.
@@ -129,7 +131,7 @@ Proof.
   split.
     apply* disjoint_ok. destruct* (typing_regular Typ). destruct* H0.
       destruct* (ok_concat_inv _ _ H0).
-    rewrite* mkset_kinds_open_vars. disjoint_solve; auto.
+    rewrite* dom_kinds_open_vars. disjoint_solve; auto.
   intros x a B.
   elim (binds_concat_inv B).
     intros [Hx Ha]. apply* (proj2 Ok x).
@@ -201,7 +203,7 @@ Proof.
   introv WS Fr.
   assert (KxYs: disjoint (dom K \u dom K'')
                          (dom (kinds_open_vars Ks Ys))).
-    rewrite* mkset_kinds_open_vars. disjoint_solve.
+    rewrite* dom_kinds_open_vars. disjoint_solve.
   intro x; intros.
   rewrite map_concat. rewrite <- concat_assoc.
   destruct* (binds_concat_inv H) as [[N B]|B]; clear H.
@@ -214,7 +216,7 @@ Proof.
       simpl in H; apply H.
     apply entails_refl.
   intro; elim (binds_fresh B); clear B.
-  rewrite* mkset_kinds_open_vars.
+  rewrite* dom_kinds_open_vars.
   assert (disjoint (dom S) (mkset Ys)) by disjoint_solve.
   destruct* (H0 x).
 Qed.
@@ -451,10 +453,9 @@ Proof.
          unfold kinds_open_vars.
          apply* ok_combine_fresh.
        rewrite dom_concat.
-       unfold sch_arity in *.
-       repeat rewrite* mkset_kinds_open_vars.
+       repeat rewrite* dom_kinds_open_vars.
        use (ok_disjoint _ _ (proj1 (proj41 (typing_regular H5)))).
-       rewrite mkset_kinds_open_vars in H0; auto. disjoint_solve.
+       rewrite dom_kinds_open_vars in H0; auto. disjoint_solve.
      intro; intros.
      destruct (binds_concat_inv H0) as [[Fr B]|B]; clear H0.
        apply* (proj2 (proj41 (typing_regular (H Xs H3))) x).
@@ -476,8 +477,7 @@ Proof.
    clear Typu Typu' Typx H0.
    split*. apply* disjoint_ok.
      unfold kinds_open_vars. apply* ok_combine_fresh.
-     unfold sch_arity in *.
-     rewrite dom_concat; repeat rewrite* mkset_kinds_open_vars. disjoint_solve.
+     rewrite dom_concat; repeat rewrite* dom_kinds_open_vars. disjoint_solve.
    intros x a B.
    destruct (binds_concat_inv B); clear B.
      apply* (proj2 H2 x).
@@ -587,7 +587,23 @@ Qed.
 (* ********************************************************************** *)
 (** Removing Gc through inversion *)
 
-(* about 1500 lines... *)
+(* About 1500 lines... *)
+(* Note: this part of the development is not needed, as we rather use
+   the above canonization lemma, which is sufficient for our needs.
+   This just demonstrates how difficult it is to remove _all_ uses
+   of typing_gc in this approach.
+   It could of course be used in place of the canonization lemma, as
+   it is actually stronger than it. *)
+
+(* Idea of the proof: in order to prove that if K; E |= t ~: T using
+   typing_gc then we can find K' such that K,K'; E |= t ~: T without it,
+   we prove by induction that K,K'; F |= t ~: T for any F "weaker" than E,
+   i.e. where any binding (x : Sch U Ks) of E may be replaced by a binding
+   (x : Sch U (Ks ++ Ks')). This way, in the Let rule, we can transfer
+   the extra kinds of the kinding environment to the type environment of
+   the right derivation.
+   On paper, the proof is straightforward. Here, we need renaming for both
+   terms and types, and to prove a lot of technical properties on the way. *)
 
 Lemma trm_fv_open : forall t' t n,
   trm_fv (trm_open_rec n t' t) << trm_fv t \u trm_fv t'.
@@ -758,7 +774,7 @@ Proof.
   intros.
   split*.
     apply* disjoint_ok.
-    rewrite* mkset_kinds_open_vars. disjoint_solve.
+    rewrite* dom_kinds_open_vars. disjoint_solve.
   intros x a B.
   binds_cases B.
     apply* (proj2 H x).
@@ -774,15 +790,6 @@ Lemma For_all2_imp : forall (A B:Set) (P P':A->B->Prop) l1 l2,
   For_all2 P' l1 l2.
 Proof.
   induction l1; destruct l2; simpl; intros; intuition.
-Qed.
-
-Lemma dom_kinds_open_vars : forall Ks Xs,
-  length Ks = length Xs ->
-  dom (kinds_open_vars Ks Xs) = mkset Xs.
-Proof.
-  unfold kinds_open_vars.
-  intros; rewrite* mkset_dom.
-  unfold kinds_open. rewrite map_length. rewrite* H.
 Qed.
 
 Lemma typing_kenv_incl : forall gc K E t T,
@@ -804,7 +811,6 @@ Proof.
     apply* kenv_ok_concat.
     assert (fresh L1 (sch_arity M) Xs) by auto.
     destruct* (kenv_ok_concat_inv _ _ (proj1 (typing_regular (H Xs H6)))).
-    unfold sch_arity in *.
     rewrite* dom_kinds_open_vars. disjoint_solve.
   apply* H0.
   intro; intros.
