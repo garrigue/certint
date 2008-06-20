@@ -11,7 +11,8 @@ Other files are included almost identical from it.
 The above 4 files were either heavily edited, or completely new
 (ML_SP_Domain).
 
-You can compile these developments with "sh build.sh"
+All the above development were checked with coq 8.1pl3.
+You can compile them with "sh build.sh"
 
 [1] Jacques Garrigue: Simple Type Inference for Structural Polymorphism.
     FOOL 9, Portland, Oregon, January 2002.
