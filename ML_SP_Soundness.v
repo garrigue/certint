@@ -876,7 +876,7 @@ Proof.
     replace (kinds_open_vars (sch_kinds M) Ys) with
       (map(kind_subst S)(combine Ys (kinds_open (sch_kinds M) (typ_fvars Xs)))).
       apply* typing_typ_subst.
-        rewrite* DS. disjoint_solve.
+        rewrite DS. disjoint_solve.
       instantiate (1 := kinds_open_vars (sch_kinds M) Xs).
       intro; intros.
       destruct k as [[kc kr]|].
@@ -1924,8 +1924,7 @@ Proof.
   assert (Hx': x \notin L2) by auto.
   destruct* (H2 x Hx' LK (F & x ~ Sch U (Ks ++ Ks'))) as [K2 [HD2 Typ2]];
     clear H2 Hx'.
-  exists K2; split.
-    intro v; destruct* (HD1 v); destruct* (HD2 v).
+  exists K2; split. disjoint_solve.
   assert (LenS: length (Ks ++ Ks') = length (Xs ++ list_fst K1)).
     repeat rewrite app_length; unfold list_fst; rewrite map_length.
     unfold Ks', list_snd; repeat rewrite map_length.
