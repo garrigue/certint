@@ -52,49 +52,6 @@ Proof.
                         (well_kinded_weaken K K' K'' H) FM).
 Qed.
 
-Ltac disjoint_solve_from_one v :=
-  match goal with
-  | H: disjoint _ _ |- _ => destruct (H v); clear H
-  | H: fresh _ _ _ |- _ => destruct (fresh_disjoint _ _ _ H v); clear H
-  | H: ok (_ & _) |- _ => destruct (ok_disjoint _ _ H v); clear H
-  | H: kenv_ok (_ & _) |- _ => destruct (ok_disjoint _ _ (proj1 H) v); clear H
-  end.
-
-Ltac disjoint_solve_from v :=
-  repeat (disjoint_solve_from_one v;
-    try solve [left ; notin_solve];
-    try solve [right ; notin_solve]).
-
-Ltac disjoint_solve :=
-  match goal with
-    |- disjoint ?L1 ?L2 =>
-      let v := fresh "v" in intro v; disjoint_solve_from v
-  end.
-
-(* Hint Extern 1 (disjoint _ _) => try solve [disjoint_solve]. *)
-
-Hint Extern 1 (?n = length ?Xs) =>
-  match goal with
-  | H : fresh _ n Xs |- _ => apply (fresh_length _ _ _ H)
-  | H : fresh _ (sch_arity ?Ks) Xs |- _ =>
-    match n with length (sch_kinds Ks) => apply (fresh_length _ _ _ H) end
-  end.
-
-Hint Extern 1 (length ?Xs = ?n) =>
-  match goal with
-  | H : fresh _ n Xs |- _ => apply (fresh_length _ _ _ H)
-  | H : fresh _ (sch_arity ?Ks) Xs |- _ =>
-    match n with length (sch_kinds Ks) => apply (fresh_length _ _ _ H) end
-  end.
-
-Lemma dom_kinds_open_vars : forall Xs Ks,
-  length Ks = length Xs ->
-  dom (kinds_open_vars Ks Xs) = mkset Xs.
-Proof.
-  intros. unfold kinds_open_vars; rewrite* mkset_dom.
-  unfold kinds_open, typ_fvars; repeat rewrite* map_length.
-Qed.
-
 Lemma typing_weaken_kinds : forall gc K K' K'' E t T,
   K & K''; E |gc|= t ~: T ->
   kenv_ok (K & K' & K'') ->
@@ -352,7 +309,7 @@ Proof.
     rewrite* kind_subst_fresh.
       rewrite* (fresh_subst {}).
       rewrite* <- H0.
-    rewrite* mkset_dom.
+    rewrite* dom_combine.
     apply (fresh_disjoint (length Ks)).
     apply* (kind_fv_fresh k Ks).
   apply* list_forall_env_prop.
@@ -375,11 +332,11 @@ Proof.
       destruct k; try constructor.
       eapply wk_kind. apply B.
       apply entails_refl.
-     rewrite mkset_dom in N.
-      rewrite* mkset_dom.
+     rewrite dom_combine in N.
+      rewrite* dom_combine.
      unfold kinds_open, typ_fvars. rewrite* map_length.
      rewrite* (fresh_length _ _ _ Fr).
-    rewrite* mkset_dom.
+    rewrite* dom_combine.
     apply* (fresh_disjoint (length Ks)).
     apply (fresh_sub (length Ks) Xs Fr (fv_in_spec kind_fv B)).
    unfold kinds_open_vars, kinds_open in *.
@@ -415,7 +372,7 @@ Proof.
   unfolds has_scheme_vars sch_open_vars. simpls.
   intro WK.
   apply* (@typing_typ_substs gc (kinds_open_vars Ks Xs)).
-      rewrite* mkset_dom. disjoint_solve.
+      rewrite* dom_combine. disjoint_solve.
     apply list_forall_env_prop. destruct* TV.
   apply* well_subst_open_vars.
 Qed.
@@ -518,16 +475,6 @@ Proof.
   gen_eq (true,GcLet) as gc.
   induction H1; intros; subst; try solve [apply* H].
   apply* H0.
-Qed.
-
-Lemma kenv_ok_concat : forall K1 K2,
-  kenv_ok K1 -> kenv_ok K2 -> disjoint (dom K1) (dom K2) -> kenv_ok (K1 & K2).
-Proof.
-  intros.
-  split. apply* disjoint_ok.
-  intro; intros.
-  binds_cases H2. apply (proj2 H x a B).
-  apply (proj2 H0 x a B0).
 Qed.
 
 Lemma kenv_ok_concat_inv : forall K1 K2,
@@ -748,7 +695,7 @@ Proof.
   subst.
   destruct (fresh_disjoint _ _ _ H0 v0).
     elim H2.
-    rewrite <- (mkset_dom Ys Ks).
+    rewrite <- (dom_combine Ys Ks).
       apply (binds_dom HG).
     rewrite <- (fresh_length _ _ _ H0). rewrite* H3.
   elim H2; auto with sets.
@@ -779,6 +726,16 @@ Proof.
   binds_cases B.
     apply* (proj2 H x).
   apply* (proj2 H0 x).
+Qed.
+
+Lemma kenv_ok_concat : forall K1 K2,
+  kenv_ok K1 -> kenv_ok K2 -> disjoint (dom K1) (dom K2) -> kenv_ok (K1 & K2).
+Proof.
+  intros.
+  split. apply* disjoint_ok.
+  intro; intros.
+  binds_cases H2. apply (proj2 H x a B).
+  apply (proj2 H0 x a B0).
 Qed.
 
 Definition env_incl (A:Set) E1 E2 :=
@@ -864,7 +821,7 @@ Proof.
   intros.
   set (S := combine Xs (typ_fvars Ys)).
   assert (DS: dom S = mkset Xs).
-    unfold S; rewrite mkset_dom. auto.
+    unfold S; rewrite dom_combine. auto.
     unfold typ_fvars; rewrite map_length. apply* fresh_length.
   assert (TS: env_prop type S).
     unfold S; apply list_forall_env_prop.
@@ -915,7 +872,7 @@ Proof.
         rewrite DS; simpl.
         destruct (fresh_disjoint _ _ _ H0 Z).
           use (binds_dom B0).
-          rewrite mkset_dom in H3. elim (H2 H3).
+          rewrite dom_combine in H3. elim (H2 H3).
         symmetry; unfold kinds_open, typ_fvars.
         repeat rewrite map_length.
         unfold sch_arity in H.
@@ -936,7 +893,7 @@ Proof.
           apply* fresh_length.
         destruct (binds_rename _ _ _ _ H5 H H4) as [x' [_ HB]].
         apply (H3 _ _ HB).
-      rewrite mkset_dom. rewrite dom_concat. rewrite dom_kinds_open_vars.
+      rewrite dom_combine. rewrite dom_concat. rewrite dom_kinds_open_vars.
         disjoint_solve.
       apply (fresh_length _ _ _ H).
       unfold kinds_open; rewrite map_length.
@@ -1591,7 +1548,7 @@ Proof.
   inversions H. 
   apply* (IHXs Us).
   inversion H0.
-  rewrite mkset_dom in H6; auto.
+  rewrite dom_combine in H6; auto.
   intro v; destruct* (H1 v).
   destruct* (a == v). subst*.
 Qed.
@@ -1642,7 +1599,7 @@ Proof.
   destruct (var_freshes (LK \u dom K) (length Ks')) as [Xs Fr].
   exists (combine Xs (kinds_open Ks' (Us ++ typ_fvars Xs))).
   assert (dom (combine Xs (kinds_open Ks' (Us ++ typ_fvars Xs))) = mkset Xs).
-    rewrite* mkset_dom. unfold kinds_open.
+    rewrite* dom_combine. unfold kinds_open.
     rewrite map_length. rewrite* (fresh_length _ _ _ Fr).
   split.
     rewrite H5. disjoint_solve.
@@ -1949,7 +1906,7 @@ Proof.
         rewrite mkset_app.
         unfold sch_fv in *; simpl S.union in *.
         assert (mkset (list_fst K1) = dom K1).
-          rewrite <- (mkset_dom (list_fst K1) (list_snd K1)).
+          rewrite <- (dom_combine (list_fst K1) (list_snd K1)).
             rewrite* combine_fst_snd. 
           unfold list_fst, list_snd; repeat rewrite* map_length.
         rewrite H5.
@@ -1996,7 +1953,7 @@ Proof.
         rewrite mkset_app.
         unfold S in H4; rewrite domS_eq in H4; auto.
         rewrite <- (combine_fst_snd K1) in H4.
-        rewrite mkset_dom in H4; auto.
+        rewrite dom_combine in H4; auto.
         unfold list_fst, list_snd; repeat rewrite* map_length.
       apply* kenv_ok_rename.
     rewrite* dom_kinds_open_vars.
