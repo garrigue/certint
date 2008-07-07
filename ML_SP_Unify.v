@@ -5,7 +5,7 @@
 
 Require Import List Metatheory.
 Require Import ML_SP_Definitions ML_SP_Infrastructure.
-Require Import ML_SP_Soundness.
+(* Require Import ML_SP_Soundness. *)
 
 Set Implicit Arguments.
 
@@ -742,6 +742,56 @@ Proof.
   omega.
 Qed.
 
+Lemma cardinal_remove : forall a L,
+  a \in L ->
+  S (S.cardinal (S.remove a L)) = S.cardinal L.
+Proof.
+  intros.
+  repeat rewrite S.cardinal_1.
+  remember (S.elements L) as elts.
+  use (S.elements_1 H); clear H.
+  rewrite <- Heqelts in H0.
+  gen L; induction elts; simpl; intros.
+    inversion H0.
+  inversions H0.
+    rewrite <- H1 in *; clear H1.
+    assert (S.elements (S.remove a L) = elts).
+      apply sort_lt_ext.
+          apply S.elements_3.
+        use (S.elements_3 L).
+        rewrite <- Heqelts in H.
+        inversions* H.
+      intro; split; intro.
+        use (S.elements_2 H).
+        use (S.remove_3 H1).
+        use (S.elements_1 H2).
+        rewrite <- Heqelts in H3.
+        inversions* H3.
+        elim (S.remove_1 (sym_eq H5) H1).
+      apply S.elements_1.
+      apply S.remove_2.
+        intro.
+        rewrite H1 in Heqelts.
+        use (sort_lt_nodup (S.elements_3 L)).
+        rewrite <- Heqelts in H2.
+        inversions* H2.
+      apply S.elements_2.
+      rewrite* <- Heqelts.
+    rewrite* H.
+  use (IHelts H1 (S.remove a0 L)).
+
+Lemma cardinal_decr : forall v T S pairs,
+  S.cardinal (all_fv (add_binding v T S) pairs) <
+  S.cardinal (all_fv S ((typ_fvar v, T) :: pairs)).
+Proof.
+  intros.
+
+Lemma size_pairs_decr : forall v T S pairs,
+  size_pairs (add_binding v T S) pairs < size_pairs S ((typ_fvar v,T)::pairs).
+Proof.
+  intros.
+  unfold size_pairs.
+
 Lemma unify_complete0 : forall h pairs S0 S,
   is_subst S0 ->
   is_subst S ->
@@ -750,7 +800,6 @@ Lemma unify_complete0 : forall h pairs S0 S,
   size_pairs S0 pairs < h ->
   exists S',
     unify pairs S0 h = Some S' /\
-    (forall T1 T2, In (T1, T2) pairs -> typ_subst S' T1 = typ_subst S' T2) /\
     (forall x y,
       typ_subst S' (typ_fvar x) = typ_subst S' (typ_fvar y) ->
       typ_subst S (typ_subst S0 (typ_fvar x)) =
@@ -766,14 +815,20 @@ Proof.
   destruct h. elimtype False; omega.
   destruct a.
   simpl unify.
+  clear IHpairs.
   case_eq (typ_subst S0 t); introv R1; case_eq (typ_subst S0 t0); introv R2.
           destruct (n === n0).
            subst.
-           destruct* (IHpairs _ _ H0 H1).
+           assert (h < Datatypes.S h) by omega.
+           destruct* (H _ H4 pairs _ _ H0 H1).
            use (size_pairs_grows S0 (t,t0) pairs). omega.
-          destruct* (IHpairs _ _ H0 H1).
-          use (size_pairs_grows S0 (t,t0) pairs). omega.
-
+          assert (In (t,t0) ((t,t0)::pairs)) by simpl*.
+          use (H2 _ _ H4).
+          rewrite R1 in H5; rewrite R2 in H5.
+          simpl in H5. inversions H5. auto*.
+         case_eq (S.mem v (typ_fv (typ_bvar n))); intros.
+          simpl in H4. elim (in_empty (S.mem_2 H4)).
+  
 
 Theorem unify_complete : forall T1 T2 S,
   typ_subst S T1 = typ_subst S T2 ->
