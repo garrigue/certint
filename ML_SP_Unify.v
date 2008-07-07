@@ -755,30 +755,53 @@ Proof.
     inversion H0.
   inversions H0.
     rewrite <- H1 in *; clear H1.
-    assert (S.elements (S.remove a L) = elts).
-      apply sort_lt_ext.
-          apply S.elements_3.
-        use (S.elements_3 L).
-        rewrite <- Heqelts in H.
-        inversions* H.
-      intro; split; intro.
-        use (S.elements_2 H).
-        use (S.remove_3 H1).
-        use (S.elements_1 H2).
-        rewrite <- Heqelts in H3.
-        inversions* H3.
-        elim (S.remove_1 (sym_eq H5) H1).
-      apply S.elements_1.
-      apply S.remove_2.
-        intro.
-        rewrite H1 in Heqelts.
-        use (sort_lt_nodup (S.elements_3 L)).
-        rewrite <- Heqelts in H2.
-        inversions* H2.
-      apply S.elements_2.
-      rewrite* <- Heqelts.
-    rewrite* H.
-  use (IHelts H1 (S.remove a0 L)).
+Lemma elements_tl : forall a elts L,
+  S.elements L = a :: elts -> S.elements (S.remove a L) = elts.
+Proof.
+  intros.
+  apply sort_lt_ext.
+      apply S.elements_3.
+    use (S.elements_3 L).
+    rewrite H in H0.
+    inversions* H0.
+  intro; split; intro.
+    use (S.elements_2 H0).
+    use (S.remove_3 H1).
+    use (S.elements_1 H2).
+    rewrite H in H3.
+    inversions* H3.
+    elim (S.remove_1 (sym_eq H5) H1).
+  apply S.elements_1.
+  apply S.remove_2.
+    intro.
+    rewrite H1 in H.
+    use (sort_lt_nodup (S.elements_3 L)).
+    rewrite H in H2.
+    inversions* H2.
+  apply S.elements_2.
+  rewrite* H.
+Qed.
+    rewrite* (@elements_tl a elts L).
+  use (elements_tl (sym_eq Heqelts)).
+  rewrite <- (IHelts H1 _ (sym_eq H)).
+Lemma remove_remove : forall L a b,
+  S.remove a (S.remove b L) = S.remove b (S.remove a L).
+Proof.
+  intro.
+  assert (forall a b x, x \in S.remove a (S.remove b L) ->
+                        x \in S.remove b (S.remove a L)).
+    intros.
+    use (S.remove_3 H).
+    use (S.remove_3 H0).
+    apply* S.remove_2.
+      intro.
+      elim (S.remove_1 H2 H0).
+    apply* S.remove_2.
+    intro.
+    elim (S.remove_1 H2 H).
+  intros.
+  apply eq_ext; intro; split; intro; auto.
+Qed.
 
 Lemma cardinal_decr : forall v T S pairs,
   S.cardinal (all_fv (add_binding v T S) pairs) <
