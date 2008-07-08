@@ -1062,20 +1062,13 @@ Lemma unify_complete0 : forall h pairs S0 S,
   (forall T1 T2, In (T1, T2) pairs ->
     typ_subst S (typ_subst S0 T1) = typ_subst S (typ_subst S0 T2)) ->
   size_pairs S0 pairs < h ->
-  exists S',
-    unify pairs S0 h = Some S' /\
-    (forall x y,
-      typ_subst S' (typ_fvar x) = typ_subst S' (typ_fvar y) ->
-      typ_subst S (typ_subst S0 (typ_fvar x)) =
-      typ_subst S (typ_subst S0 (typ_fvar y))).
+  exists S', unify pairs S0 h = Some S'.
 Proof.
   induction h using math_ind.
   induction pairs; intros.
     exists S0; intuition.
-        destruct h. elimtype False; omega.
-        simpl. auto.
-      elim H4.
-    rewrite* H4.
+    destruct h. elimtype False; omega.
+    simpl. auto.
   destruct h. elimtype False; omega.
   destruct a.
   simpl unify.
@@ -1092,7 +1085,45 @@ Proof.
           simpl in H5. inversions H5. auto*.
          case_eq (S.mem v (typ_fv (typ_bvar n))); intros.
           simpl in H4. elim (in_empty (S.mem_2 H4)).
-  
+         assert (v # S0).
+          use (typ_subst_disjoint t0 H0).
+          rewrite R2 in H5.
+          simpl in H5. destruct* (H5 v).
+         assert (disjoint {} ({{v}} \u dom S0)) by (intro x; auto).
+         assert (size_pairs (add_binding v (typ_bvar n) S0) pairs < h).
+          use (size_pairs_decr (typ_bvar n) S0 pairs H5 H6).
+          replace (size_pairs S0 ((typ_fvar v, typ_bvar n) :: pairs))
+            with (size_pairs S0 ((t, t0) :: pairs)) in H7.
+            omega.
+          unfold size_pairs, all_size, all_fv; simpl.
+          rewrite* get_notin_dom.
+          rewrite R1.
+          rewrite R2.
+          simpl.
+          repeat rewrite union_empty_l.
+          auto.
+         assert (h < Datatypes.S h) by omega.
+         destruct* (H _ H8 pairs (add_binding v (typ_bvar n) S0) S); clear H.
+           apply* add_binding_is_subst. simpl; intro; auto.
+         clear H7 H8.
+         intros.
+         repeat rewrite* typ_subst_add_binding.
+         assert (In (t,t0) ((t,t0)::pairs)) by simpl*.
+         use (H2 _ _ H7); clear H7.
+         rewrite R1 in H8; rewrite R2 in H8.
+         assert (forall T,
+             typ_subst S (typ_subst (v ~ typ_bvar n) T) = typ_subst S T).
+           clear -H8; induction T; simpl; try congruence.
+           destruct* (v0 == v).
+           subst. apply H8.
+         repeat rewrite* H7.
+        assert (In (t,t0) ((t,t0)::pairs)) by simpl*.
+        use (H2 _ _ H4).
+        rewrite R1 in H5; rewrite R2 in H5. discriminate.
+
+         
+          
+Qed.
 
 Theorem unify_complete : forall T1 T2 S,
   typ_subst S T1 = typ_subst S T2 ->
