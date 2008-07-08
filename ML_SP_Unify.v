@@ -402,32 +402,51 @@ Definition all_fv S pairs :=
   accum typ_fv S.union {} (all_types S pairs).
 Check all_fv.
 
-Fixpoint typ_depth (T : typ) : nat :=
+Fixpoint typ_size (T : typ) : nat :=
   match T with
-  | typ_arrow T1 T2 => S (typ_depth T1 + typ_depth T2)
+  | typ_arrow T1 T2 => S (typ_size T1 + typ_size T2)
   | _ => 1
   end.
 
-Require Import Max.
+Definition all_size S pairs :=
+  accum typ_size plus 0 (all_types S pairs).
 
-Definition max_depth S pairs :=
-  accum typ_depth max 0 (all_types S pairs).
-
-Definition sum_depth S pairs :=
-  accum typ_depth plus 0 (all_types S pairs).
-
-Fixpoint exp2 (n:nat) :=
+Fixpoint pow2exp (m n:nat) {struct n} :=
   match n with
-  | 0 => 1
-  | S n' => exp2 n' + exp2 n'
+  | 0 => m
+  | S n' => pow2exp (m*m) n'
   end.
 
-Definition size_pairs S pairs :=
-  S.cardinal (all_fv S pairs) * exp2 (max_depth S pairs) + sum_depth S pairs.
-
-Definition id := Env.empty (A:=typ).
+Lemma pow2exp_min : forall n m, m <= pow2exp m n.
+Proof.
+  induction n; intros; simpl. omega.
+  use (IHn (m*m)).
+  destruct m; simpl in *. auto.
+  set (m*S m) in *. omega.
+Qed.
 
 Require Import Arith Omega.
+
+Lemma pow2exp_lt_le : forall m n s t,
+  s < t -> m <= n -> pow2exp s m < pow2exp t n.
+Proof.
+  induction m; destruct n; simpl; intros; try omega.
+    use (pow2exp_min n (t*t)).
+    assert (s < t * t).
+      destruct t; try omega.
+      simpl. set (t*S t). omega.
+    omega.
+  apply IHm.
+    eapply le_lt_trans; try apply* mult_lt_compat_r.
+      apply mult_le_compat_l. omega.
+    omega.
+  omega.
+Qed.
+
+Definition size_pairs S pairs :=
+  pow2exp (all_size S pairs) (S.cardinal (all_fv S pairs)).
+
+Definition id := Env.empty (A:=typ).
 
 Lemma wf_lt : well_founded lt.
 Proof (Wf_nat.well_founded_ltof _ (fun n:nat => n)).
@@ -482,6 +501,11 @@ Proof.
     try (rewrite <- H; auto with sets); elim (in_empty H0).
 Qed.
 
+Definition sort_lt_all :=
+  InfA_alt S.E.eq_refl S.E.eq_sym S.E.lt_trans
+     Var_as_OT_Facts.lt_eq Var_as_OT_Facts.eq_lt.
+Check sort_lt_all.
+
 Lemma sort_lt_notin : forall a l0,
   sort S.E.lt l0 ->
   lelistA S.E.lt a l0 ->
@@ -489,8 +513,7 @@ Lemma sort_lt_notin : forall a l0,
 Proof.
   intros.
   intro.
-  use (proj1 (InfA_alt S.E.eq_refl S.E.eq_sym S.E.lt_trans
-        Var_as_OT_Facts.lt_eq Var_as_OT_Facts.eq_lt a H) H0 _ H1).
+  use (proj1 (sort_lt_all a H) H0 _ H1).
   elim (S.E.lt_not_eq _ _ H2). reflexivity.
 Qed.
 
@@ -707,54 +730,20 @@ Proof.
   elim (n (S.E.eq_sym _ _ H0)).
 Qed.
 
-Lemma exp2_le : forall m n, m <= n -> exp2 m <= exp2 n.
-Proof.
-  induction m; destruct n; intros; try omega.
-    clear; induction (S n). auto.
-    simpl in *; omega.
-  simpl.
-  assert (m <= n) by omega.
-  use (IHm n H0).
-  omega.
-Qed.
-
 Lemma size_pairs_grows : forall S p pairs,
   size_pairs S pairs < size_pairs S (p :: pairs).
 Proof.
   intros.
   unfold size_pairs.
-  unfold all_fv, max_depth, sum_depth.
+  unfold all_fv, all_size.
   simpl.
   rewrite union_assoc.
   rewrite cardinal_union.
-  remember (accum typ_depth max 0 (all_types S pairs)) as md.
-  assert (exp2 md <= exp2
-     (max (typ_depth (typ_subst S (fst p)))
-        (max (typ_depth (typ_subst S (snd p))) md))).
-    apply exp2_le.
-    eapply le_trans; apply le_max_r.
-  assert (0 < typ_depth (typ_subst S (fst p))).
-    clear; destruct (typ_subst S (fst p)); simpl; omega.
-  destruct (typ_depth (typ_subst S (fst p))).
-    elimtype False; omega.
-  apply plus_le_lt_compat.
-    apply mult_le_compat; omega.
+  apply pow2exp_lt_le.
+    destruct (typ_subst S (fst p)); simpl; omega.
   omega.
 Qed.
 
-Lemma cardinal_remove : forall a L,
-  a \in L ->
-  S (S.cardinal (S.remove a L)) = S.cardinal L.
-Proof.
-  intros.
-  repeat rewrite S.cardinal_1.
-  remember (S.elements L) as elts.
-  use (S.elements_1 H); clear H.
-  rewrite <- Heqelts in H0.
-  gen L; induction elts; simpl; intros.
-    inversion H0.
-  inversions H0.
-    rewrite <- H1 in *; clear H1.
 Lemma elements_tl : forall a elts L,
   S.elements L = a :: elts -> S.elements (S.remove a L) = elts.
 Proof.
@@ -781,9 +770,7 @@ Proof.
   apply S.elements_2.
   rewrite* H.
 Qed.
-    rewrite* (@elements_tl a elts L).
-  use (elements_tl (sym_eq Heqelts)).
-  rewrite <- (IHelts H1 _ (sym_eq H)).
+
 Lemma remove_remove : forall L a b,
   S.remove a (S.remove b L) = S.remove b (S.remove a L).
 Proof.
@@ -803,18 +790,272 @@ Proof.
   apply eq_ext; intro; split; intro; auto.
 Qed.
 
+Lemma remove_idem : forall a L,
+  S.remove a (S.remove a L) = S.remove a L.
+Proof.
+  intros; apply eq_ext; intro; split; intro.
+    apply* S.remove_3.
+  apply* S.remove_2.
+  intro. elim (S.remove_1 H0 H).
+Qed.
+
+Lemma elements_remove : forall a L,
+  S.elements (S.remove a L) = removeA eq_var_dec a (S.elements L).
+Proof.
+  intros.
+  remember (S.elements L) as elts.
+  gen L; induction elts; simpl; intros.
+    remember (S.elements (S.remove a L)) as elt1.
+    destruct* elt1.
+    assert (e \in L).
+      apply (@S.remove_3 L a).
+      apply S.elements_2.
+      rewrite <- Heqelt1.
+      auto.
+    use (S.elements_1 H).
+    rewrite <- Heqelts in H0.
+    inversion H0.
+  destruct (a == a0).
+    subst.
+    rewrite <- (IHelts (S.remove a0 L)).
+      rewrite* remove_idem.
+    apply sym_eq.
+    apply* elements_tl.
+  rewrite <- (IHelts (S.remove a0 L)).
+    apply sort_lt_ext. apply S.elements_3.
+      constructor.
+        apply S.elements_3.
+      remember (S.elements (S.remove a (S.remove a0 L))) as elts2.
+      destruct* elts2.
+      constructor.
+      assert (e \in S.remove a (S.remove a0 L)).
+        apply S.elements_2.
+        rewrite* <- Heqelts2.
+      use (S.remove_3 H).
+      use (S.elements_1 H0).
+      use (S.elements_3 L).
+      rewrite <- Heqelts in H2.
+      inversions H2.
+      use (proj1 (sort_lt_all _ H5) H6).
+      apply* H3.
+      rewrite* <- (@elements_tl a0 elts L).
+    intros.
+    split; intro.
+      destruct (a1 == a0).
+        auto.
+      apply InA_cons_tl.
+      apply S.elements_1.
+      use (S.elements_2 H).
+      apply S.remove_2.
+        intro. elim (S.remove_1 H1 H0).
+      apply S.remove_2.
+        intro; elim n0; auto.
+      apply (S.remove_3 H0).
+    destruct (a0 == a1).
+      subst.
+      assert (a1 \in L).
+        apply S.elements_2.
+        rewrite* <- Heqelts.
+      apply S.elements_1.
+      apply* S.remove_2.
+    inversions H. elim n0; auto.
+    apply S.elements_1.
+    rewrite remove_remove in H1.
+    use (S.elements_2 H1).
+    apply (S.remove_3 H0).
+  rewrite* <- (@elements_tl a0 elts L).
+Qed.
+
+Lemma cardinal_remove : forall a L,
+  a \in L ->
+  S (S.cardinal (S.remove a L)) = S.cardinal L.
+Proof.
+  intros.
+  repeat rewrite S.cardinal_1.
+  rewrite elements_remove.
+  use (sort_lt_nodup (S.elements_3 L)).
+  use (S.elements_1 H).
+  clear H; induction H1.
+    rewrite H.
+    simpl.
+    destruct* (y == y).
+    inversions H0.
+    clear -H3; induction l. auto.
+    simpl.
+    destruct (y==a). elim H3; auto.
+    simpl; rewrite* IHl.
+  simpl.
+  inversions H0.
+  destruct* (a==y). 
+  subst*.
+Qed.
+
+Lemma remove_subset : forall x L1 L2, L1 << L2 ->
+  forall y, y \in S.remove x L1 -> y \in S.remove x L2.
+Proof.
+  intros.
+  apply S.remove_2.
+    intro Hx; elim (S.remove_1 Hx H0).
+  apply H; apply* S.remove_3.
+Qed.
+
+Lemma typ_fv_decr : forall v T S T1,
+  v # S -> disjoint (typ_fv T) ({{v}} \u dom S) ->
+  typ_fv (typ_subst (add_binding v T S) T1) <<
+  S.remove v (typ_fv T \u typ_fv (typ_subst S T1)).
+Proof.
+  intros.
+  rewrite* typ_subst_add_binding.
+  induction (typ_subst S T1); simpl in *; intros x Hx.
+      elim (in_empty Hx).
+    destruct (v0 == v).
+      subst.
+      apply* S.remove_2.
+        intro Hv; rewrite <- Hv in Hx. destruct* (H0 v).
+        elim H1; auto with sets.
+      auto with sets.
+    apply* S.remove_2.
+      intro Hv; rewrite <- Hv in Hx.
+      revert Hx; simpl*.
+    simpl in Hx; auto with sets.
+  destruct (S.union_1 Hx); [use (IHt1 _ H1) | use (IHt2 _ H1)];
+    apply* remove_subset;
+    intros y Hy; destruct (S.union_1 Hy); auto with sets.
+Qed.
+
+Lemma all_fv_decr : forall v T S pairs,
+  v # S -> disjoint (typ_fv T) ({{v}} \u dom S) ->
+  all_fv (add_binding v T S) pairs <<
+  S.remove v (all_fv S ((typ_fvar v, T) :: pairs)).
+Proof.
+  unfold all_fv.
+  induction pairs; intros.
+    simpl. intros x Hx. elim (in_empty Hx).
+  simpl.
+  intros x Hx.
+  rewrite* get_notin_dom.
+  destruct (S.union_1 Hx).
+    use (typ_fv_decr _ _ _ H H0 H1).
+    apply* remove_subset.
+    intros y Hy.
+    destruct (S.union_1 Hy).
+      rewrite <- (@typ_subst_fresh S T) in H3; auto with sets.
+      disjoint_solve.
+    auto with sets.
+  destruct (S.union_1 H1); clear Hx H1.
+    use (typ_fv_decr _ _ _ H H0 H2).
+    apply* remove_subset.
+    intros y Hy.
+    destruct (S.union_1 Hy).
+      rewrite <- (@typ_subst_fresh S T) in H3; auto with sets.
+      disjoint_solve.
+    auto with sets.
+  use (IHpairs H H0 _ H2).
+  apply* remove_subset.
+  simpl.
+  rewrite* get_notin_dom.
+  intros y Hy.
+  clear H1 H2.
+  simpl in Hy.
+  destruct (S.union_1 Hy). auto with sets.
+  destruct (S.union_1 H1); auto with sets.
+Qed.
+
+Lemma cardinal_subset : forall L1 L2,
+  L1 << L2 -> S.cardinal L1 <= S.cardinal L2.
+Proof.
+  intro.
+  repeat rewrite S.cardinal_1.
+  remember (S.elements L1) as elts1.
+  gen L1; induction elts1; simpl; intros.
+    omega.
+  use (elements_tl (sym_eq Heqelts1)).
+  use (IHelts1 _ (sym_eq H0) (S.remove a L2)).
+  use (H1 (remove_subset H)).
+  assert (a \in L2).
+    apply H.
+    apply S.elements_2.
+    rewrite* <- Heqelts1.
+  rewrite <- (cardinal_remove H3).
+  omega.
+Qed.
+   
 Lemma cardinal_decr : forall v T S pairs,
+  v # S -> disjoint (typ_fv T) ({{v}} \u dom S) ->
   S.cardinal (all_fv (add_binding v T S) pairs) <
   S.cardinal (all_fv S ((typ_fvar v, T) :: pairs)).
 Proof.
   intros.
+  use (all_fv_decr T S pairs H H0).
+  use (le_lt_n_Sm _ _ (cardinal_subset H1)).
+  rewrite cardinal_remove in H2. auto.
+  unfold all_fv.
+  simpl. rewrite* get_notin_dom.
+  simpl; auto with sets.
+Qed.
+
+Lemma typ_subst_decr : forall v T S T1,
+  v # S ->
+  typ_size (typ_subst (add_binding v T S) T1) <=
+  typ_size T * typ_size (typ_subst S T1).
+Proof.
+  intros.
+  rewrite* typ_subst_add_binding.
+  induction (typ_subst S T1); simpl. destruct T; simpl; omega.
+    destruct (v0 == v). omega.
+    destruct T; simpl; omega.
+  assert (0 < typ_size T).
+    destruct T; simpl; omega.
+  destruct (typ_size T). omega.
+  simpl in *.
+  rewrite mult_comm in *.
+  simpl.
+  rewrite mult_plus_distr_r.
+  omega.
+Qed.
+
+Lemma typ_subst_decr_all : forall v T S pairs,
+  v # S ->
+  all_size (add_binding v T S) pairs <= typ_size T * all_size S pairs.
+Proof.
+  unfold all_size; induction pairs; intros; simpl. omega.
+  repeat rewrite mult_plus_distr_l.
+  use (IHpairs H); clear IHpairs.
+  use (typ_subst_decr T S (fst a) H).
+  use (typ_subst_decr T S (snd a) H).
+  omega.
+Qed.
 
 Lemma size_pairs_decr : forall v T S pairs,
+  v # S -> disjoint (typ_fv T) ({{v}} \u dom S) ->
   size_pairs (add_binding v T S) pairs < size_pairs S ((typ_fvar v,T)::pairs).
 Proof.
   intros.
   unfold size_pairs.
-
+  use (cardinal_decr T S pairs H H0).
+  set (S.cardinal (all_fv (add_binding v T S) pairs)) in *.
+  set (S.cardinal (all_fv S ((typ_fvar v, T) :: pairs))) in *.
+  clearbody n n0.
+  destruct n0; try omega.
+  simpl.
+  apply pow2exp_lt_le; try omega.
+  use (typ_subst_decr_all T S pairs H).
+  assert (typ_size T < all_size S ((typ_fvar v, T) :: pairs)).
+    unfold all_size; simpl.
+    rewrite* get_notin_dom.
+    rewrite (typ_subst_fresh S T); try disjoint_solve.
+    simpl; omega.
+  assert (all_size S pairs < all_size S ((typ_fvar v, T) :: pairs)).
+    unfold all_size; simpl.
+    rewrite* get_notin_dom.
+    simpl; omega.
+  eapply le_lt_trans. apply H2.
+  rewrite mult_comm.
+  eapply le_lt_trans; try (eapply mult_lt_compat_r; try apply H4).
+    apply mult_le_compat_l. omega.
+  destruct T; simpl; omega.
+Qed.
+  
 Lemma unify_complete0 : forall h pairs S0 S,
   is_subst S0 ->
   is_subst S ->
