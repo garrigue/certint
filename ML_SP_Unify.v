@@ -385,6 +385,148 @@ Proof.
   disjoint_solve.
 Qed.
 
+Lemma typ_subst_prebind : forall v T S T1,
+  typ_subst S T = typ_subst S (typ_fvar v) ->
+  typ_subst S (typ_subst (v~T) T1) = typ_subst S T1.
+Proof.
+  induction T1; intros.
+      simpl*.
+    simpl. destruct (v0 == v).
+      subst*.
+    reflexivity.
+  simpl.
+  rewrite* IHT1_1. rewrite* IHT1_2.
+Qed.
+
+Lemma typ_subst_res_fresh : forall S T v,
+  is_subst S -> typ_subst S T = typ_fvar v -> v # S.
+Proof.
+  intros.
+  use (typ_subst_disjoint T H).
+  rewrite H0 in H1.
+  simpl in H1. destruct* (H1 v).
+Qed.
+
+Definition mgu_spec pairs S0 S S' :=
+  is_subst S0 ->
+  (forall T1 T2, In (T1,T2) pairs ->
+    typ_subst S' (typ_subst S0 T1) = typ_subst S' (typ_subst S0 T2)) ->
+  forall T1 T2,
+    typ_subst S T1 = typ_subst S T2 ->
+    typ_subst S' (typ_subst S0 T1) = typ_subst S' (typ_subst S0 T2).
+
+Lemma unify_mgu_step : forall S0 pairs S S' h t t0 v T,
+  typ_subst S0 t = typ_fvar v ->
+  typ_subst S0 t0 = T ->
+  unify pairs (add_binding v T S0) h = Some S ->
+  S.mem v (typ_fv T) = false ->
+  (forall S0, unify pairs S0 h = Some S -> mgu_spec pairs S0 S S') ->
+  mgu_spec ((t,t0)::pairs) S0 S S'.
+Proof.
+  intros until T.
+  intros R1 R2 HU R3 IHh HS0 Heq.
+  intros.
+  assert (BS': typ_subst S' T = typ_subst S' (typ_fvar v)).
+    assert (In (t, t0) ((t,t0)::pairs)) by simpl*.
+    use (Heq _ _ H0); clear H0.
+    rewrite R1 in H1; rewrite R2 in H1.
+    auto.
+  assert (Hv: v # S0) by apply* typ_subst_res_fresh.
+  assert (typ_subst S' (typ_subst (add_binding v T S0) T1) =
+          typ_subst S' (typ_subst (add_binding v T S0) T2)).
+    apply* IHh.
+      apply* add_binding_is_subst.
+      assert (disjoint {{v}} (typ_fv T)).
+        intro x; destruct* (x == v); subst.
+        right; intro. rewrite (S.mem_1 H0) in R3. discriminate.
+      use (typ_subst_disjoint t0 HS0).
+      rewrite R2 in H1.
+      disjoint_solve.
+    intros.
+    repeat rewrite* typ_subst_add_binding.
+    assert (In (T0, T3) ((t,t0)::pairs)) by simpl*.
+      use (Heq _ _ H1); clear H1.
+    repeat rewrite* typ_subst_prebind.
+  do 2 rewrite typ_subst_add_binding in H0; auto.
+  do 2 rewrite typ_subst_prebind in H0; auto.
+Qed.
+
+Lemma unify_mgu0 : forall h pairs S0 S S',
+  unify pairs S0 h = Some S -> mgu_spec pairs S0 S S'.
+Proof.
+  induction h; intros; intro; intros. discriminate.
+  simpl in H.
+  destruct pairs.
+    inversions H; clear H.
+    rewrite* H2.
+  destruct p.
+  case_rewrite (typ_subst S0 t) R1; case_rewrite (typ_subst S0 t0) R2;
+    try case_rewrite (S.mem v (typ_fv (typ_bvar n))) R3;
+    try case_rewrite (S.mem v (typ_fv (typ_arrow t1 t2))) R3.
+        destruct* (n === n0). unfold mgu_spec in IHh; auto*.
+        discriminate.
+       apply* (unify_mgu_step (S':=S') _ R2 R1 H).
+       simpl; intros.
+       destruct H3.
+         inversions H3; symmetry; apply* H1.
+       apply* H1.
+      apply* (unify_mgu_step (S':=S') _ R1 R2 H).
+     destruct (v == v0).
+       subst v0.
+       unfold mgu_spec in IHh; auto*.
+     apply* (unify_mgu_step (S':=S') _ R1 R2 H).
+     simpl. case_eq (S.mem v {{v0}}); intro; auto.
+     elim n; rewrite* (S.singleton_1 (S.mem_2 H3)).
+    apply* (unify_mgu_step (S':=S') _ R1 R2 H).
+   apply* (unify_mgu_step (S':=S') _ R2 R1 H).
+   simpl; intros.
+   destruct H3.
+     inversions H3; symmetry; apply* H1.
+   apply* H1.
+  apply* (IHh _ _ _ S' H).
+  simpl; intros.
+  assert (In (t,t0) ((t,t0)::pairs)) by simpl*.
+  pose (H1 _ _ H4).
+  rewrite <- (typ_subst_idem t H0) in e.
+  rewrite <- (typ_subst_idem t0 H0) in e.
+  rewrite R1 in e; rewrite R2 in e; simpl in e.
+  inversions e.
+  destruct H3. inversions* H3.
+  destruct* H3. inversions* H3.
+Qed.
+
+Definition id := Env.empty (A:=typ).
+
+Lemma typ_subst_id : forall T, typ_subst id T = T.
+Proof.
+  intro.
+  apply typ_subst_fresh.
+  simpl. intro; auto.
+Qed.
+
+Lemma is_subst_id : is_subst id.
+Proof.
+  unfold id, is_subst. intro; intros. elim (binds_empty H).
+Qed.
+
+Theorem unify_mgu : forall h S S' T1 T2,
+  unify ((T1,T2)::nil) id h = Some S ->
+  typ_subst S' T1 = typ_subst S' T2 ->
+  forall T3 T4,
+    typ_subst S T3 = typ_subst S T4 ->
+    typ_subst S' T3 = typ_subst S' T4.
+Proof.
+  intros.
+  rewrite <- (typ_subst_id T3).
+  rewrite <- (typ_subst_id T4).
+  apply* (unify_mgu0 _ _ S' H is_subst_id).
+  simpl; intros.
+  destruct* H2.
+  inversions H2.
+  repeat rewrite typ_subst_id.
+  auto.
+Qed.
+
 Section Accum.
   Variables A B : Set.
   Variables (f : A -> B) (op : B->B->B) (unit : B).
@@ -450,8 +592,6 @@ Qed.
 
 Definition size_pairs S pairs :=
   pow2exp (all_size S pairs) (S.cardinal (all_fv S pairs)).
-
-Definition id := Env.empty (A:=typ).
 
 Lemma wf_lt : well_founded lt.
 Proof (Wf_nat.well_founded_ltof _ (fun n:nat => n)).
@@ -1060,15 +1200,6 @@ Proof.
     apply mult_le_compat_l. omega.
   destruct T; simpl; omega.
 Qed.
-  
-Lemma typ_subst_res_fresh : forall S T v,
-  is_subst S -> typ_subst S T = typ_fvar v -> v # S.
-Proof.
-  intros.
-  use (typ_subst_disjoint T H).
-  rewrite H0 in H1.
-  simpl in H1. destruct* (H1 v).
-Qed.
 
 Lemma size_pairs_comm : forall S T1 T2 pairs,
   size_pairs S ((T1,T2)::pairs) = size_pairs S ((T2,T1)::pairs).
@@ -1136,202 +1267,147 @@ Proof.
     simpl in H0. omega.
   simpl in H.
   clear H0.
-  destruct (S.union_1 H).
-    case_eq (typ_size T1); intros. destruct T1; discriminate.
-    destruct n. destruct T1. elim (in_empty H0).
-        rewrite (S.singleton_1 H0).
-        simpl; omega.
-      destruct T1_1; simpl in H1; omega.
-    assert (1 < typ_size T1) by omega.
-    use (IHT1 H0 H2).
-    simpl; simpl in H3. omega.
-  case_eq (typ_size T2); intros. destruct T2; discriminate.
-  destruct n. destruct T2. elim (in_empty H0).
-      rewrite (S.singleton_1 H0).
-      simpl; omega.
-    destruct T2_1; simpl in H1; omega.
-  assert (1 < typ_size T2) by omega.
-  use (IHT2 H0 H2).
-  simpl; simpl in H3. omega.
+  assert (forall T, v \in typ_fv T -> T = T1 \/ T = T2 ->
+             typ_size (typ_subst S (typ_fvar v)) <
+             typ_size (typ_subst S (typ_arrow  T1 T2))).
+    intros.
+    case_eq (typ_size T); intros. destruct T; discriminate.
+    destruct n. destruct T. elim (in_empty H0).
+        rewrite (S.singleton_1 H0) in H1.
+        destruct H1; subst; simpl; omega.
+      destruct T3; simpl in H2; omega.
+    assert (typ_size (typ_subst S (typ_fvar v)) < typ_size (typ_subst S T)).
+      assert (1 < typ_size T) by omega.
+      destruct H1; subst*.
+    destruct H1; subst; simpl in *; omega.
+  destruct (S.union_1 H); apply* (H0 _ H1).
+Qed.
+
+Lemma unify_complete_step : forall pairs S0 S v T h t t0,
+  typ_subst S0 t = typ_fvar v ->
+  typ_subst S0 t0 = T ->
+  size_pairs S0 ((t,t0)::pairs) < Datatypes.S h ->
+  is_subst S0 ->
+  (forall S0, is_subst S0 ->
+    size_pairs S0 pairs < h ->
+    (forall T1 T2 : typ,
+      In (T1, T2) pairs ->
+      typ_subst S (typ_subst S0 T1) = typ_subst S (typ_subst S0 T2)) ->
+    exists S' : Env.env typ, unify pairs S0 h = Some S') ->
+  (forall T1 T2 : typ,
+    In (T1, T2) ((t, t0) :: pairs) ->
+    typ_subst S (typ_subst S0 T1) = typ_subst S (typ_subst S0 T2)) ->
+  T <> typ_fvar v ->
+  S.mem v (typ_fv T) = false /\
+  exists S', unify pairs (add_binding v T S0) h = Some S'.
+Proof.
+  intros until t0; intros R1 R2 Hsz HS0 IHh Heq HT.
+  case_eq (S.mem v (typ_fv T)); intros.
+    elimtype False.
+    use (S.mem_2 H).
+    assert (In (t,t0) ((t,t0)::pairs)) by simpl*.
+    use (Heq _ _ H1); clear H1.
+    rewrite R1 in H2; rewrite R2 in H2.
+    clear -H0 H2 HT.
+    destruct T. elim (in_empty H0).
+      elim HT; rewrite* (S.singleton_1 H0).
+    assert (1 < typ_size (typ_arrow T1 T2)).
+      destruct T1; simpl; omega.
+    use (typ_subst_no_cycle S _ H0 H).
+    rewrite H2 in H1; omega.
+  split*.
+  rewrite <- R2 in H.
+  use (size_pairs_decr' _ _ _ HS0 H Hsz R1).
+  rewrite R2 in H0; simpl in H0.
+  use (typ_subst_res_fresh _ HS0 R1).
+  destruct* (IHh (add_binding v T S0)); clear IHh.
+    apply* add_binding_is_subst.
+    use (typ_subst_disjoint t0 HS0).
+    rewrite R2 in *; simpl in *.
+    assert (disjoint {{v}} (typ_fv T)).
+      intro x; destruct (x == v); subst; auto.
+    disjoint_solve.
+  clear HT H H0.
+  intros.
+  apply* typ_subst_eq_add.
+  rewrite <- R1. rewrite <- R2.
+  apply* Heq.
 Qed.
 
 Lemma unify_complete0 : forall h pairs S0 S,
   is_subst S0 ->
-  is_subst S ->
   (forall T1 T2, In (T1, T2) pairs ->
     typ_subst S (typ_subst S0 T1) = typ_subst S (typ_subst S0 T2)) ->
   size_pairs S0 pairs < h ->
   exists S', unify pairs S0 h = Some S'.
 Proof.
-  induction h using math_ind.
-  induction pairs; intros.
+  induction h.
+    intros; elimtype False; omega.
+  destruct pairs; introv HS0 Heq Hsz.
     exists S0; intuition.
-    destruct h. elimtype False; omega.
-    simpl. auto.
-  destruct h. elimtype False; omega.
-  destruct a.
+  destruct p.
   simpl unify.
-  clear IHpairs.
   case_eq (typ_subst S0 t); introv R1; case_eq (typ_subst S0 t0); introv R2.
           destruct (n === n0).
            subst.
-           assert (h < Datatypes.S h) by omega.
-           destruct* (H _ H4 pairs _ _ H0 H1).
+           destruct* (IHh pairs _ S HS0).
            use (size_pairs_grows S0 (t,t0) pairs). omega.
           assert (In (t,t0) ((t,t0)::pairs)) by simpl*.
-          use (H2 _ _ H4).
-          rewrite R1 in H5; rewrite R2 in H5.
-          simpl in H5. inversions H5. auto*.
-         case_eq (S.mem v (typ_fv (typ_bvar n))); intros.
-          simpl in H4. elim (in_empty (S.mem_2 H4)).
-         rewrite <- R1 in H4.
-         rewrite size_pairs_comm in H3.
-         use (size_pairs_decr' _ _ _ H0 H4 H3 R2).
-         rewrite R1 in H5.
-         assert (h < Datatypes.S h) by omega.
-         use (typ_subst_res_fresh _ H0 R2).
-         destruct* (H _ H6 pairs (add_binding v (typ_bvar n) S0) S); clear H.
-           apply* add_binding_is_subst. simpl; intro; auto.
-         clear H4 H5 H6.
-         intros.
-         apply* typ_subst_eq_add.
-         rewrite <- R1. rewrite <- R2.
-         symmetry. apply* H2.
+          use (Heq _ _ H).
+          rewrite R1 in H0; rewrite R2 in H0.
+          simpl in H0. inversions* H0.
+         rewrite size_pairs_comm in Hsz.
+         destruct* (unify_complete_step S R2 R1 Hsz).
+           simpl; intros. destruct H; subst.
+             inversions H; symmetry; apply* Heq.
+           apply* Heq.
+          intro; discriminate. 
+         rewrite* H.
         assert (In (t,t0) ((t,t0)::pairs)) by simpl*.
-        use (H2 _ _ H4).
-        rewrite R1 in H5; rewrite R2 in H5. discriminate.
-       case_eq (S.mem v (typ_fv (typ_bvar n))); intros.
-         elim (in_empty (S.mem_2 H4)).
-       rewrite <- R2 in H4.
-       use (size_pairs_decr' _ _ _ H0 H4 H3 R1).
-       rewrite R2 in H5.
-       assert (h < Datatypes.S h) by omega.
-       use (typ_subst_res_fresh _ H0 R1).
-       destruct* (H _ H6 pairs (add_binding v (typ_bvar n) S0) S); clear H.
-         apply* add_binding_is_subst. simpl; intro; auto.
-       clear H4 H5 H6.
-       intros.
-       apply* typ_subst_eq_add.
-       rewrite <- R1. rewrite <- R2.
-       apply* H2.
+        use (Heq _ _ H).
+        rewrite R1 in H0; rewrite R2 in H0. discriminate.
+       destruct* (unify_complete_step S R1 R2 Hsz).
+        intro; discriminate.
+       rewrite* H.
       destruct (v == v0).
        subst.
-       assert (h < Datatypes.S h) by omega.
-       destruct* (H _ H4 pairs _ _ H0 H1).
+       destruct* (IHh pairs _ S HS0).
        use (size_pairs_grows S0 (t,t0) pairs). omega.
-      case_eq (S.mem v (typ_fv (typ_subst S0 t0))); intros.
-        use (S.mem_2 H4).
-        rewrite R2 in H5; simpl in H5.
-        elim n.
-        symmetry.
-        apply* S.singleton_1.
-      use (size_pairs_decr' _ _ _ H0 H4 H3 R1).
-      rewrite R2 in H5.
-      assert (h < Datatypes.S h) by omega.
-      use (typ_subst_res_fresh _ H0 R1).
-      destruct* (H _ H6 pairs (add_binding v (typ_fvar v0) S0) S); clear H.
-        apply* add_binding_is_subst.
-        use (typ_subst_disjoint t0 H0).
-        rewrite R2 in H; simpl in *.
-        assert (disjoint {{v}} {{v0}}).
-          intro x; destruct (x == v); subst; auto.
-        disjoint_solve.
-      clear H4 H5 H6.
-      intros.
-      apply* typ_subst_eq_add.
-      rewrite <- R1. rewrite <- R2.
-      apply* H2.
-     case_eq (S.mem v (typ_fv (typ_arrow t1 t2))); intros.
-       use (S.mem_2 H4).
-       assert (In (t,t0) ((t,t0)::pairs)) by simpl*.
-       use (H2 _ _ H6); clear H6.
-       rewrite R1 in H7; rewrite R2 in H7.
-       clear -H1 H5 H7. elimtype False.
-       assert (1 < typ_size (typ_arrow t1 t2)).
-         destruct t1; simpl; omega.
-         use (typ_subst_no_cycle S _ H5 H).
-         rewrite H7 in H0.
-         omega.
-     rewrite <- R2 in H4.
-     use (size_pairs_decr' _ _ _ H0 H4 H3 R1).
-     rewrite R2 in H5; simpl in H5.
-     assert (h < Datatypes.S h) by omega.
-     use (typ_subst_res_fresh _ H0 R1).
-     destruct* (H _ H6 pairs (add_binding v (typ_arrow t1 t2) S0) S); clear H.
-       apply* add_binding_is_subst.
-       use (typ_subst_disjoint t0 H0).
-       rewrite R2 in H; simpl in *.
-       assert (disjoint {{v}} (typ_fv t1 \u typ_fv t2)).
-         intro x; destruct (x == v); subst; auto.
-         right; intro.
-         rewrite R2 in H4.
-         simpl in H4.
-         rewrite (S.mem_1 H8) in H4.
-         discriminate.
-       disjoint_solve.
-     clear H4 H5 H6.
-     intros.
-     apply* typ_subst_eq_add.
-     rewrite <- R1. rewrite <- R2.
-     apply* H2.
+      destruct* (unify_complete_step S R1 R2 Hsz).
+      intro; elim n. inversions* H.
+     destruct* (unify_complete_step S R1 R2 Hsz).
+      intro; discriminate.
+     rewrite* H.
     assert (In (t,t0) ((t,t0)::pairs)) by simpl*.
-    use (H2 _ _ H4); clear H4.
-    rewrite R1 in H5; rewrite R2 in H5.
+    use (Heq _ _ H); clear H.
+    rewrite R1 in H0; rewrite R2 in H0.
     discriminate.
-   case_eq (S.mem v (typ_fv (typ_arrow t1 t2))); intros.
-     use (S.mem_2 H4).
-     assert (In (t,t0) ((t,t0)::pairs)) by simpl*.
-     use (H2 _ _ H6); clear H6.
-     rewrite R1 in H7; rewrite R2 in H7.
-     clear -H1 H5 H7. elimtype False.
-     assert (1 < typ_size (typ_arrow t1 t2)).
-       destruct t1; simpl; omega.
-       use (typ_subst_no_cycle S _ H5 H).
-       rewrite H7 in H0.
-       omega.
-   rewrite <- R1 in H4.
-   rewrite size_pairs_comm in H3.
-   use (size_pairs_decr' _ _ _ H0 H4 H3 R2).
-   rewrite R1 in H5; simpl in H5.
-   assert (h < Datatypes.S h) by omega.
-   use (typ_subst_res_fresh _ H0 R2).
-   destruct* (H _ H6 pairs (add_binding v (typ_arrow t1 t2) S0) S); clear H.
-     apply* add_binding_is_subst.
-     use (typ_subst_disjoint t H0).
-     rewrite R1 in H; simpl in *.
-     assert (disjoint {{v}} (typ_fv t1 \u typ_fv t2)).
-       intro x; destruct (x == v); subst; auto.
-       right; intro.
-       rewrite R1 in H4; simpl in H4.
-       rewrite (S.mem_1 H8) in H4.
-       discriminate.
-     disjoint_solve.
-   clear H4 H5 H6.
-   intros.
-   apply* typ_subst_eq_add.
-   rewrite <- R1. rewrite <- R2.
-   symmetry.
-   apply* H2.
-  assert (h < Datatypes.S h) by omega.
-  destruct* (H _ H4 ((t1,t3)::(t2,t4)::pairs) S0 S); clear H.
-    clear H4; intros.
+   rewrite size_pairs_comm in Hsz.
+   destruct* (unify_complete_step S R2 R1 Hsz).
+     simpl; intros. destruct H; subst.
+       inversions H; symmetry; apply* Heq.
+     apply* Heq.
+    intro; discriminate.
+   rewrite* H.
+  destruct* (IHh ((t1,t3)::(t2,t4)::pairs) S0 S); clear IHh.
+    clear Hsz; intros.
     assert (In (t,t0) ((t,t0)::pairs)) by simpl*.
-    use (H2 _ _ H4); clear H4.
-  rewrite <- (typ_subst_idem t H0) in H5.
-  rewrite <- (typ_subst_idem t0 H0) in H5.
-  rewrite R1 in H5; rewrite R2 in H5.
-  simpl in H5; inversions H5; clear H5.
-  simpl in H; destruct* H.
-    inversions* H.
-  simpl in H; destruct H.
-    inversions* H.
-  apply* H2.
+    use (Heq _ _ H0).
+    rewrite <- (typ_subst_idem t HS0) in H1.
+    rewrite <- (typ_subst_idem t0 HS0) in H1.
+    rewrite R1 in H1; rewrite R2 in H1.
+    simpl in H1; inversions H1; clear H1.
+    simpl in H; destruct H.
+      inversions* H.
+    simpl in H; destruct H.
+      inversions* H.
+    apply* Heq.
   assert (size_pairs S0 ((t1, t3) :: (t2, t4) :: pairs) <
           size_pairs S0 ((t, t0) :: pairs)).
     unfold size_pairs, all_size, all_fv.
     simpl.
-    rewrite <- (typ_subst_idem t H0).
-    rewrite <- (typ_subst_idem t0 H0).
+    rewrite <- (typ_subst_idem t HS0).
+    rewrite <- (typ_subst_idem t0 HS0).
     rewrite R1; rewrite R2; simpl.
     apply pow2exp_lt_le.
       omega.
@@ -1344,13 +1420,15 @@ Qed.
 
 Theorem unify_complete : forall T1 T2 S,
   typ_subst S T1 = typ_subst S T2 ->
-  is_subst S ->
   exists S',
-    unify ((T1,T2)::nil) id (size_pairs id ((T1,T2)::nil)) = Some S' /\
-    typ_subst S' T1 = typ_subst S' T2 /\
-    forall x y, typ_subst S' (typ_fvar x) = typ_subst S' (typ_fvar y) ->
-      typ_subst S (typ_fvar x) = typ_subst S (typ_fvar y).
-
-
+    unify ((T1,T2)::nil) id (1 + size_pairs id ((T1,T2)::nil)) = Some S'.
+Proof.
+  intros.
+  apply* unify_complete0.
+    apply is_subst_id.
+  intros. rewrite (typ_subst_id T0). rewrite (typ_subst_id T3).
+  simpl in H0; destruct* H0.
+  inversions* H0.
+Qed.
 
 End MkInfer.
