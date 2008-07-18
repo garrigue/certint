@@ -49,15 +49,40 @@ Module Cstr.
   Hint Resolve entails_refl.
 End Cstr.
 
+Section NoDup.
+  Fixpoint nodup (l:list var) :=
+    match l with
+    | nil => nil
+    | v :: l' =>
+      if In_dec eq_var_dec v l' then nodup l' else v :: nodup l'
+    end.
+  Lemma nodup_elts : forall a l, In a l <-> In a (nodup l).
+  Proof.
+    induction l; split*; simpl; intro; destruct IHl.
+      destruct H. subst.
+        destruct* (In_dec eq_var_dec a l).
+      destruct* (In_dec eq_var_dec a0 l).
+    destruct* (In_dec eq_var_dec a0 l).
+    simpl in H; destruct* H.
+  Qed.
+  Lemma NoDup_nodup : forall l, NoDup (nodup l).
+  Proof.
+    induction l; simpl. constructor.
+    destruct* (In_dec eq_var_dec a l).
+    constructor; auto.
+    intro Ha. elim n. apply (proj2 (nodup_elts _ _) Ha).
+  Qed.
+End NoDup.
+
 Module Const.
   Inductive ops : Set :=
     | tag     : var -> ops
-    | matches : list var -> ops.
+    | matches : forall (l:list var), NoDup l -> ops.
   Definition const := ops.
   Definition arity op :=
     match op with
     | tag _     => 1
-    | matches l => length l
+    | matches l _ => length l
     end.
 End Const.
 
@@ -87,30 +112,59 @@ Qed.
 
 Module Delta.
   Definition matches_arg n := typ_arrow (typ_bvar n) (typ_bvar 1).
-  Definition type op :=
+  Lemma valid_tag : forall t, Cstr.valid (Cstr.C {{t}} None).
+    intros. compute. auto.
+  Qed.
+  Lemma coherent_tag : forall t,
+    coherent (Cstr.C {{t}} None) ((t, typ_bvar 0) :: nil).
+  Proof.
+    intros t x; intros.
+    destruct H0; destruct H1; try contradiction.
+    inversions H0. inversions* H1.
+  Qed.
+  Lemma valid_matches : forall l, Cstr.valid (Cstr.C {} (Some (mkset l))).
+  Proof.
+    intros; unfold Cstr.valid; simpl.
+    intros x Hx; elim (in_empty Hx).
+  Qed.
+  Lemma coherent_matches : forall l,
+    NoDup l ->
+    coherent (Cstr.C {} (Some (mkset l)))
+      (combine l (map typ_bvar (seq 2 (length l)))).
+  Proof.
+    intros; intro; intros.
+    clear H0; revert H1 H2; generalize 2.
+    induction H; simpl; intros. elim H1.
+    destruct H1. inversions H1.
+      destruct H2. inversions* H2.
+      elim (H (in_combine_l _ _ _ _ H2)).
+    destruct H2. inversions H2.
+      elim (H (in_combine_l _ _ _ _ H1)).
+    apply* (IHNoDup (S n)).
+  Qed.
+  Definition type (op:Const.const) :=
     match op with
     | Const.tag t =>
-        Sch (typ_arrow (typ_bvar 0) (typ_bvar 1))
-            (None ::
-             Some (Kind (Cstr.C {{t}} None) ((t,typ_bvar 0)::nil)) :: nil)
-    | Const.matches l =>
-        Sch (fold_right typ_arrow (typ_arrow (typ_bvar 0) (typ_bvar 1))
-                 (map matches_arg (seq 2 (length l))))
-            (Some (Kind (Cstr.C {} (Some (mkset l)))
-                   (combine l (map typ_bvar (seq 2 (length l))))) ::
-             map (fun _ => None) (seq 0 (S (length l))))
+      Sch (typ_arrow (typ_bvar 0) (typ_bvar 1))
+        (None :: Some (Kind (valid_tag t) (@coherent_tag t)) :: nil)
+    | Const.matches l ND =>
+      Sch (fold_right typ_arrow (typ_arrow (typ_bvar 0) (typ_bvar 1))
+             (map matches_arg (seq 2 (length l))))
+        (Some (Kind (valid_matches l) (coherent_matches ND)) ::
+         map (fun _ => None) (seq 0 (S (length l))))
     end.
-  Definition matches_lhs l k :=
+  Print type.
+  Definition matches_lhs l (ND:NoDup l) k :=
     trm_app
-      (const_app (Const.matches l) (map trm_bvar (seq 1 (length l))))
+      (const_app (Const.matches ND) (map trm_bvar (seq 1 (length l))))
       (trm_app (trm_cst (Const.tag (nth k l var_default)))
         (trm_bvar 0)).
   Definition matches_rhs k :=
     trm_app (trm_bvar (S k)) (trm_bvar 0).
   Definition rule n t1 t2 :=
-    exists l, exists k,
+    exists l, exists ND:NoDup l, exists k,
       n = S (length l) /\ k < length l /\
-      t1 = matches_lhs l k /\ t2 = matches_rhs k.
+      t1 = matches_lhs ND k /\ t2 = matches_rhs k.
 
   Hint Constructors closed_n.
   Lemma closed_n_fold_app : forall n m k t,
@@ -129,7 +183,7 @@ Module Delta.
     term (trm_inst t1 tl) /\ term (trm_inst t2 tl).
   Proof.
     intros.
-    destruct H as [l [k [N [K [T1 T2]]]]].
+    destruct H as [l [ND [k [N [K [T1 T2]]]]]].
     subst.
     destruct H0.
     split; apply* term_trm_inst_closed.
@@ -148,13 +202,13 @@ Module Delta.
     intros.
     induction c; unfold sch_fv; simpl. unfold kind_fv; simpl.
       repeat rewrite union_empty_l. auto.
-    assert (exists x, x=1). exists 1. auto.
-    destruct H. pattern 1 at -1. rewrite <- H.
-    generalize x.
-    induction l; simpl; unfold kind_fv in *; simpl in *; intros;
+    pose (x := 1). assert (x = 1) by auto.
+    unfold kind_fv_list, kind_fv; simpl. pattern 1 at -1. rewrite <- H.
+    generalize x; clear.
+    induction l; simpl in *; intros;
       repeat rewrite union_empty_l.
       auto.
-    use (IHl (S x0)); clear IHl. rewrite union_empty_l in H0. auto.
+    use (IHl (S x)); clear IHl. rewrite union_empty_l in H. auto.
   Qed.
 End Delta.
 
@@ -260,9 +314,9 @@ Module SndHyp.
 
   Hint Rewrite combine_length combine_nth : list.
 
-  Lemma get_kind_for_matches : forall k l t K E Us,
+  Lemma get_kind_for_matches : forall k l (ND:NoDup l) t K E Us,
     k < length l ->
-    proper_instance K (Delta.type (Const.matches l)) Us ->
+    proper_instance K (Delta.type (Const.matches ND)) Us ->
     K; E |(false,GcLet)|= trm_app (trm_cst (Const.tag (nth k l var_default)))
                     t ~: nth 0 Us typ_def ->
     K; E |(false,GcLet)|= t ~: nth (S (S k)) Us typ_def.
@@ -277,10 +331,10 @@ Module SndHyp.
     destruct WK as [WK _].
     inversions WK. clear WK.
     destruct H2 as [_ HE]. simpl in *.
-    inversions Typ. clear Typ.
-    inversions H4. clear H4 H8.
+    inversions Typ; try discriminate. clear Typ.
+    inversions H4; try discriminate. clear H4 H8.
     destruct H9 as [_ [_ WK']].
-    destruct* Us0. simpl in H2. discriminate.
+    destruct* Us0. discriminate.
     simpl in WK'. destruct WK' as [_ WK].
     destruct* Us0.
     destruct* Us0.
@@ -288,10 +342,9 @@ Module SndHyp.
     inversions WK. clear WK; simpl in *.
     inversions H2; clear H2.
     use (binds_func H0 H1). inversion H; clear H H1; subst k'0.
-    simpl in H4; destruct H4.
-    use (proj2 H7 x (Some k') H0). simpl in H2.
-    rewrite (proj2 (proj2 H2) (nth k l var_default) t0 (nth k Us typ_def))
-      in H6; clear H2; auto.
+    destruct H4; simpl in *.
+    destruct k' as [kc kv kr kh]; simpl in *.
+    rewrite (kh (nth k l var_default) t0 (nth k Us typ_def)) in H6; auto.
       unfold Cstr.unique.
       destruct H as [Hlow _]. simpl in Hlow.
       apply* Hlow.
@@ -310,8 +363,6 @@ Module SndHyp.
         rewrite* seq_nth.
       rewrite* seq_length.
     rewrite* min_l.
-    discriminate.
-    discriminate.
   Qed.
 
   Lemma delta_typed : forall n t1 t2 tl K E T,
@@ -323,14 +374,14 @@ Module SndHyp.
     intros.
     apply (@typing_gc_any (false,GcLet)).
     clear H0.
-    destruct H as [l [k [HN [HK [T1 T2]]]]].
+    destruct H as [l [ND [k [HN [HK [T1 T2]]]]]].
     subst.
-    inversions H1; clear H1.
+    inversions H1; try discriminate; clear H1.
     rewrite trm_inst_app in H4.
     unfold const_app in H4.
     destruct (fold_app_inv _ _ H4) as [TL [Typ0 TypA]]; clear H4.
     unfold trm_inst; simpl.
-    inversions Typ0. clear Typ0 H1 H4.
+    inversions Typ0; try discriminate. clear Typ0 H1 H4.
     unfold sch_open in H0. simpl in H0.
     destruct (fold_arrow_eq _ _ _ _ _ H0); clear H0.
       generalize (For_all2_length _ _ _ TypA).
@@ -352,8 +403,6 @@ Module SndHyp.
       rewrite* seq_length.
      rewrite* seq_length.
     autorewrite with list; auto.
-    discriminate.
-    discriminate.
   Qed.
 
   Lemma cons_append : forall (A:Set) (a:A) l, a :: l = (a :: nil) ++ l.
@@ -506,7 +555,7 @@ Module SndHyp.
     K; empty |(false,GcLet)|= const_app (Const.tag l) tl ~: typ_fvar x ->
     exists t, exists T, exists k,
       tl = t :: nil /\  K; empty |(false,GcLet)|= t ~: T /\ binds x (Some k) K
-      /\ entails k (Kind (Cstr.C {{l}} None) ((l, T) :: nil)).
+      /\ exists M, entails k (@Kind _ (Delta.valid_tag l) ((l, T) :: nil) M).
   Proof.
     introv Typv.
     unfold const_app in Typv.
@@ -520,7 +569,7 @@ Module SndHyp.
     simpl in H0; inversions H0; clear H0.
     simpl in WK.
     destruct* Us. destruct* Us. destruct* Us.
-    destruct WK as [_ [WK _]]. simpl in WK.
+    destruct WK as [_ [WK _]].
     inversions WK; clear WK.
     exists k'.
     destruct TL; try discriminate.
@@ -529,14 +578,21 @@ Module SndHyp.
     destruct Typa.
     destruct tl; try elim H1.
     intuition.
+    unfold ckind_map in H3.
+    destruct (ckind_map_spec
+               (fun T : typ => typ_open T (t0 :: typ_fvar x :: nil))
+               (Kind (Delta.valid_tag l) (Delta.coherent_tag (t:=l)))).
+    destruct x0 as [kc kv kr kh]; simpl in *.
+    destruct a; subst.
+    exists* kh.
   Qed.
 
   Lemma const_arity_ok0 : forall c vl K T,
     S(Const.arity c) = length vl ->
     K ; empty |(false,GcLet)|= const_app c vl ~: T ->
-    exists l, exists Us, exists v, exists vl',
-      vl = rev (v :: vl') /\ c = Const.matches l /\ length l = length vl' /\
-      proper_instance K (Delta.type (Const.matches l)) Us /\
+    exists l, exists ND : NoDup l, exists Us, exists v, exists vl',
+      vl = rev (v :: vl') /\ c = Const.matches ND /\ length l = length vl' /\
+      proper_instance K (Delta.type (Const.matches ND)) Us /\
       K; empty |(false,GcLet)|= v ~: nth 0 Us typ_def.
   Proof.
     intros.
@@ -545,7 +601,7 @@ Module SndHyp.
     clear H0; destruct H1 as [TL [TypC TypA]].
     destruct c.
       elim (tag_is_const _ _ _ H TypC TypA).
-    exists l.
+    exists l. exists n.
     inversions TypC; try discriminate. clear TypC H5.
     exists Us.
     simpl in H.
@@ -581,7 +637,7 @@ Module SndHyp.
   Proof.
     intros.
     destruct (const_arity_ok0 _ _ (proj1 H) H0) as
-      [l [Us [v [vl' [Evl [Ec [Hvl' [PI Typv]]]]]]]]; clear H0.
+      [l [ND [Us [v [vl' [Evl [Ec [Hvl' [PI Typv]]]]]]]]]; clear H0.
     subst.
     exists (S (length l)).
     destruct PI as [_ [_ WK]].
@@ -602,28 +658,25 @@ Module SndHyp.
       [t [T' [k [EQ [Typa [Bk Ek]]]]]]; clear Typv.
     use (binds_func H1 Bk). inversion H; subst; clear H H1.
     destruct H4 as [[_ High] _].
-    destruct Ek as [[Low _] _].
-    destruct k as [[kl kh] kr]; simpl in *.
+    destruct Ek as [M [[Low _] _]].
+    destruct k as [[kl kh] kv kr kch]; simpl in *.
     destruct* kh as [kh|].
-    use (proj2 (proj41 (typing_regular Typa)) _ _ Bk).
-    simpl in H. destruct H.
-    unfold Cstr.valid in H0. simpl in H0.
-    use (subset_trans Low (subset_trans (proj1 H0) High) (in_same l')).
-    clear H High Low kl kh kr Bk H0 x Us.
-    use (mkset_in _ H1); clear H1.
-    destruct (exists_nth var_default _ _ H) as [n [Hlen EQ]].
-    clear H; subst l'.
-    exists (Delta.matches_lhs l n).
+    unfold Cstr.valid in kv. simpl in kv.
+    use (subset_trans Low (subset_trans kv High) (in_same l')).
+    clear High Low kl kh kv kr kch Bk x Us.
+    use (mkset_in _ H); clear H.
+    destruct (exists_nth var_default _ _ H0) as [n [Hlen EQ]].
+    clear H0; subst l'.
+    exists (Delta.matches_lhs ND n).
     exists (Delta.matches_rhs n).
     exists (t :: rev vl').
     split3.
-      unfold Delta.rule. exists l; exists n. auto.
+      unfold Delta.rule. exists l; exists ND; exists n. auto.
       split*. simpl. rewrite rev_length. rewrite* Hvl'.
       constructor; auto.
       apply* list_forall_rev.
       apply (list_forall_imp _ value_regular H2).
     unfold Delta.matches_lhs.
-    simpl.
     unfold trm_inst.
     simpl; rewrite trm_inst_app.
     unfold const_app.
@@ -640,9 +693,9 @@ Module SndHyp.
     exists c, exists pl, t1 = const_app c pl /\ length pl = S(Const.arity c).
   Proof.
     intros.
-    destruct H as [tl [k [L1 [L2 [LHS RHS]]]]].
+    destruct H as [tl [ND [k [L1 [L2 [LHS RHS]]]]]].
     unfold Delta.matches_lhs in LHS.
-    exists (Const.matches tl).
+    exists (Const.matches ND).
     exists (map trm_bvar (seq 1 (length tl)) ++
             trm_app (trm_cst (Const.tag (nth k tl var_default))) (trm_bvar 0)
             :: nil).

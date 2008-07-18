@@ -7,6 +7,7 @@
 
 Set Implicit Arguments.
 Require Import List Metatheory ML_SP_Definitions.
+Require Import ProofIrrelevance.
 
 (* ====================================================================== *)
 (** * The infrastructure needs to be parameterized over definitions *)
@@ -419,15 +420,34 @@ Proof.
   apply IHT2. disjoint_solve.
 Qed.
 
-Lemma kind_map_fresh : forall S k,
+Lemma ckind_pi : forall k k',
+  kind_cstr k = kind_cstr k' ->
+  kind_rel k = kind_rel k' ->
+  k = k'.
+Proof.
+  intros [kc kv kr kh] [kc' kv' kr' kh']; simpl; intros.
+  subst.
+  rewrite (proof_irrelevance _ kv kv').
+  rewrite (proof_irrelevance _ kh kh').
+  auto.
+Qed.
+
+Lemma kind_pi : forall k k',
+  kind_cstr k = kind_cstr k' ->
+  kind_rel k = kind_rel k' ->
+  Some k = Some k'.
+Proof.
+  intros. rewrite* (ckind_pi k k').
+Qed.
+
+Lemma kind_subst_fresh : forall S k,
   disjoint (dom S) (kind_fv k) ->
   kind_subst S k = k.
 Proof.
-  unfold kind_subst, kind_fv.
-  intros; destruct* k as [[kc kr]|].
-  simpl.
-  apply (f_equal (fun kr => Some(Kind kc kr))).
-  induction* kr.
+  unfold kind_subst, kind_fv, kind_types.
+  intros; destruct k as [[kc kv kr kh]|]; simpl*.
+  apply* kind_pi; simpl in *.
+  clear -H; induction* kr; intros.
   destruct a; simpl.
   rewrite* IHkr.
     rewrite* typ_subst_fresh. simpl in H. disjoint_solve.
@@ -491,10 +511,10 @@ Lemma kind_subst_open_vars : forall S k Xs,
   kind_open (kind_subst S k) (typ_fvars Xs).
 Proof.
   intros.
-  destruct* k as [[kc kr]|].
+  destruct* k as [[kc kv kr kh]|].
   simpl.
-  apply (f_equal (fun kr => Some (Kind kc kr))).
-  induction* kr.
+  apply* kind_pi; simpl.
+  clear kh; induction* kr.
   simpl. fold (typ_open_vars (snd a) Xs).
   rewrite* <- typ_subst_open_vars.
   rewrite* IHkr.
@@ -645,23 +665,6 @@ Qed.
 
 (** Substitution for a fresh name is identity. *)
 
-Lemma kind_subst_fresh : forall S K,
-  disjoint (dom S) (typ_fv_list (kind_types K)) ->
-  kind_subst S K = K.
-Proof.
-  intros.
-  destruct* K as [[C R]|].
-  unfold kind_map; simpl.
-  apply (f_equal (fun R => Some (Kind C R))).
-  unfold kind_types in H. simpl in H.
-  induction* R.
-  destruct a; simpl in H.
-  simpl; rewrite* IHR.
-    rewrite* typ_subst_fresh.
-    disjoint_solve.
-  disjoint_solve.
-Qed.
-
 Lemma sch_subst_fresh : forall S M, 
   disjoint (dom S) (sch_fv M) -> 
   sch_subst S M = M.
@@ -673,7 +676,6 @@ Proof.
     induction* K.
       simpl in *; rewrite* IHK.
       rewrite* kind_subst_fresh.
-      unfold kind_fv in H.
       disjoint_solve.
     disjoint_solve.
   simpl; disjoint_solve.
@@ -718,10 +720,9 @@ Lemma kind_subst_open : forall S k Us,
   kind_open (kind_subst S k) (List.map (typ_subst S) Us).
 Proof.
   intros.
-  destruct* k as [[kc kr]|].
-  simpl; unfold ckind_map; simpl.
-  apply (f_equal (fun kr => Some (Kind kc kr))).
-  induction* kr.
+  destruct* k as [[kc kv kr kh]|]; simpl.
+  apply* kind_pi; simpl.
+  clear kh; induction* kr.
   simpl. rewrite <- IHkr.
   rewrite* typ_subst_open.
 Qed.
@@ -876,9 +877,9 @@ Proof.
   intros. unfold All_kind_types in *.
   unfold kind_types in *.
   simpl.
-  destruct* k as [[kc kr]|].
+  destruct* k as [[kc kv kr kh]|].
   simpl in *.
-  induction* kr.
+  clear -H H0; induction* kr.
   destruct a. simpl in *. 
   destruct H0; split; auto.
 Qed.
@@ -1157,44 +1158,21 @@ Proof.
   apply* (in_map (fun XT : var * typ => (fst XT, typ_subst S (snd XT)))).
 Qed.
 
-Lemma map_coherent : forall f k,
-  coherent k -> coherent (ckind_map f k).
-Proof.
-  intros. intro; intros.
-  destruct k as [kc kr].
-  use (H x); simpl in *.
-  destruct (proj1 (in_map_iff _ _ _) H1) as [[x' T'] [Heq Hin]].
-  simpl in Heq; inversions Heq.
-  destruct (proj1 (in_map_iff _ _ _) H2) as [[x' U'] [Heq' Hin']].
-  simpl in Heq'; inversions Heq'.
-  rewrite* (H3 T' U').
-Qed.
-
-Hint Resolve map_coherent.
-
 (** Schemes are stable by type substitution. *)
 
 Lemma sch_subst_type : forall S M,
   env_prop type S -> scheme M -> scheme (sch_subst S M).
 Proof.
-  unfold scheme. intros S [T Ks] TU [[L K] TK].
-  simpls. split.
-    exists (L \u dom S).
-    unfold sch_arity in *; simpl; rewrite map_length; introv Fr.
-      simpls; destruct* (K Xs); clear K. destruct* (fresh_union_r _ _ _ _ Fr).
-    split.
-      rewrite* typ_subst_open_vars.
-    apply* list_forall_map.
-    clear H0; intros.
-    unfold kind_subst; apply* All_kind_types_map.
-    intros; rewrite* typ_subst_open_vars.
-  simpl sch_kinds in *.
+  unfold scheme. intros S [T Ks] TU [L K].
+  simpls.
+  exists (L \u dom S).
+  unfold sch_arity in *; simpl; rewrite map_length; introv Fr.
+  simpls; destruct* (K Xs); clear K. destruct* (fresh_union_r _ _ _ _ Fr).
+  split. rewrite* typ_subst_open_vars.
   apply* list_forall_map.
-  intros.
-  destruct x; simpl; auto.
-  unfold kind_ok in H0.
-  destruct c as [kc kr].
-  auto*.
+  clear H0; intros.
+  unfold kind_subst; apply* All_kind_types_map.
+  intros; rewrite* typ_subst_open_vars.
 Qed.
 
 Hint Resolve sch_subst_type.

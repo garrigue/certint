@@ -46,15 +46,16 @@ Definition typ_def := typ_bvar 0.
 
 (** Constraint domain *)
 
+Definition coherent kc (kr:list(var*typ)) := forall x T U,
+  Cstr.unique kc x -> In (x,T) kr -> In (x,U) kr -> T = U.
+
 Record ckind : Set := Kind {
   kind_cstr : Cstr.cstr;
-  kind_rel  : list (var*typ) }.
+  kind_valid : Cstr.valid kind_cstr;
+  kind_rel  : list (var*typ);
+  kind_coherent : coherent kind_cstr kind_rel }.
 
 Definition kind := option ckind.
-
-Definition coherent k := forall x T U,
-  Cstr.unique (kind_cstr k) x ->
-  In (x,T) (kind_rel k) -> In (x,U) (kind_rel k) -> T = U.
 
 Definition entails K K' :=
   Cstr.entails (kind_cstr K) (kind_cstr K') /\
@@ -132,10 +133,30 @@ Fixpoint For_all(A:Set)(P:A->Prop)(l:list A) {struct l} : Prop :=
 Definition All_kind_types (P:typ->Prop) K :=
   For_all P (kind_types K).
 
-Definition ckind_map f k :=
-  match k with Kind kc kr =>
-    Kind kc (List.map (fun XT:var*typ => (fst XT, f (snd XT))) kr)
-  end.
+Lemma map_coherent : forall f kc kr,
+  coherent kc kr ->
+  coherent kc (List.map (fun XT:var*typ => (fst XT, f (snd XT))) kr).
+Proof.
+  intros. intro; intros.
+  use (H x); simpl in *.
+  destruct (proj1 (in_map_iff _ _ _) H1) as [[x' T'] [Heq Hin]].
+  simpl in Heq; inversions Heq.
+  destruct (proj1 (in_map_iff _ _ _) H2) as [[x' U'] [Heq' Hin']].
+  simpl in Heq'; inversions Heq'.
+  rewrite* (H3 T' U').
+Qed.
+
+Definition ckind_map_spec (f:typ->typ) (k:ckind):
+  {k' |  kind_cstr k = kind_cstr k' /\ 
+  kind_rel k' = List.map (fun XT:var*typ => (fst XT, f (snd XT))) (kind_rel k)}.
+Proof.
+  intros.
+  destruct k as [kc kv kr kh].
+  exists (Kind kv (map_coherent f kh)).
+  simpl. auto.
+Defined.
+
+Definition ckind_map f k := proj1_sig (ckind_map_spec f k).
 
 Definition kind_map f (K:kind) : kind :=
   match K with
@@ -144,12 +165,6 @@ Definition kind_map f (K:kind) : kind :=
   end.
 
 Definition kind_open K Vs := kind_map (fun T => typ_open T Vs) K.
-
-Definition kind_ok o :=
-  match o with
-  | None => True
-  | Some k => Cstr.valid (kind_cstr k) /\ coherent k
-  end.
 
 (** Body of a scheme *)
 
@@ -162,7 +177,7 @@ Definition typ_body T Ks :=
 (** Definition of a well-formed scheme *)
 
 Definition scheme M :=
-   typ_body (sch_type M) (sch_kinds M) /\ list_forall kind_ok (sch_kinds M).
+   typ_body (sch_type M) (sch_kinds M).
 
 (* ********************************************************************** *)
 (** ** Description of terms *)
@@ -243,7 +258,7 @@ Definition trm_inst t tl := trm_inst_rec 0 tl t.
 Definition kenv := env kind.
 
 Definition kenv_ok K :=
-  ok K /\ env_prop (fun o => All_kind_types type o /\ kind_ok o) K.
+  ok K /\ env_prop (fun o => All_kind_types type o) K.
 
 (** Proper instanciation *)
 
