@@ -1136,104 +1136,6 @@ Proof.
   auto.
 Qed.
 
-Parameter entails_unique : forall c1 c2 v,
-  Cstr.entails c1 c2 -> Cstr.unique c2 v -> Cstr.unique c1 v.
-
-Parameter entails_valid : forall c1 c2,
-  Cstr.entails c1 c2 -> Cstr.valid c1 -> Cstr.valid c2.
-
-Lemma entails_unique' : forall c1 c2,
-  Cstr.entails c1 c2 -> incl (unique c2) (unique c1).
-Proof.
-  intros. intros x Hx. refine (proj2 (unique_ok _ _) _).
-  refine (entails_unique H _).
-  apply (proj1 (unique_ok _ _) Hx).
-Qed.
-
-Lemma in_app_mid : forall (A:Set) (x a:A) l1 l2,
-  In x (l1 ++ a :: l2) -> a = x \/ In x (l1 ++ l2).
-Proof.
-  intros.
-  destruct (in_app_or _ _ _ H). right; apply* in_or_app.
-  simpl in H0; destruct* H0. right; apply* in_or_app.
-Qed.
-
-Lemma well_subst_unify_kinds_rev : forall k k0 k' S,
-  kind_entails k' (kind_subst S k) ->
-  kind_entails k' (kind_subst S k0) ->
-  exists k1, exists l,
-    unify_kinds k k0 = Some (k1, l) /\
-    (forall T1 T2, In (T1, T2) l -> typ_subst S T1 = typ_subst S T2) /\
-    kind_entails k' (kind_subst S k1).
-Proof.
-  unfold unify_kinds.
-  intros.
-  destruct k as [[kc kv kr kh]|]; destruct k0 as [[kc0 kv0 kr0 kh0]|];
-    simpl in *.
-     destruct k' as [[kc' kv' kr' kh']|]; try contradiction.
-     destruct H. destruct H0.
-     simpl in H, H0.
-     destruct (cstr_lub_ok kc kc0 kc').
-     use (H3 (conj H H0)).
-     use (entails_valid H5 kv').
-     destruct* (cstr_valid (cstr_lub kc kc0)).
-     esplit. esplit. split. reflexivity.
-     use (entails_unique' H5).
-     clear H H0 H3 H4 H6.
-     simpl in H1, H2. clear kv kv0 kh kh0.
-     set (pairs := nil(A:=typ*typ)).
-     set (krs := nil(A:=var*typ)).
-     assert (forall T,
-       In T (List.map (fun XT : var * typ => (fst XT, typ_subst S (snd XT)))
-             ((kr ++ kr0) ++ krs)) ->
-       In T kr').
-       intros.
-       repeat rewrite map_app in H.
-       destruct (in_app_or _ _ _ H).
-         destruct* (in_app_or _ _ _ H0).
-       elim H0.
-     clear H1 H2.
-     assert (forall T1 T2,
-       In (T1, T2) pairs -> typ_subst S T1 = typ_subst S T2).
-       intros. elim H0.
-     unfold kind_entails, entails; simpl.
-     intros; gen pairs krs; induction (kr++kr0); simpl; intros. auto.
-     destruct a.
-     destruct (In_dec eq_var_dec v0 (unique (cstr_lub kc kc0))).
-       use (H7 _ i).
-       case_eq (get v0 krs); [intros t0 R1|intros R1].
-         assert (forall T1 T2,
-           In (T1, T2) ((t,t0)::pairs) -> typ_subst S T1 = typ_subst S T2).
-           simpl; intros.
-           destruct* H2.
-           inversions H2; clear H2.
-           apply (kh' v0). apply (proj1 (unique_ok _ _) H1).
-             apply* H.
-           apply H.
-           right.
-           rewrite map_app.
-           apply in_or_app; right.
-           apply (in_map (fun XT => (fst XT, typ_subst S (snd XT)))
-                    _ _ (get_in R1)).
-         intuition.
-           refine (proj1 (IHl _ _ _ _) _ _ H3); auto.
-         refine (proj2 (proj2 (IHl _ _ _ _)) _ H3); auto.
-       intuition;
-         [ refine (proj1 (IHl _ _ _ _) _ _ H2)
-         | refine (proj2 (proj2 (IHl _ _ _ _)) _ H2)];
-         auto; simpl; intros;
-         repeat rewrite map_app in *; apply H; apply* in_app_mid.
-     intuition;
-       [ refine (proj1 (IHl _ _ _ _) _ _ H1)
-       | refine (proj2 (proj2 (IHl _ _ _ _)) _ H1)];
-       auto; simpl; intros;
-       repeat rewrite map_app in *; apply H; apply* in_app_mid.
-    destruct k' as [[kc' kv' kr' kh']|]; try contradiction.
-    esplit. esplit. split*. intuition. elim H1.
-   esplit. esplit. split*. intuition. elim H1.
-  esplit. esplit. split*. intuition. elim H1.
-Qed.
-
 Lemma all_fv_app : forall S l1 l2,
   all_fv S (l1 ++ l2) = all_fv S l1 \u all_fv S l2.
 Proof.
@@ -1814,6 +1716,104 @@ Proof.
   rewrite* typ_subst_compose.
 Qed.
 
+Parameter entails_unique : forall c1 c2 v,
+  Cstr.entails c1 c2 -> Cstr.unique c2 v -> Cstr.unique c1 v.
+
+Parameter entails_valid : forall c1 c2,
+  Cstr.entails c1 c2 -> Cstr.valid c1 -> Cstr.valid c2.
+
+Lemma entails_unique' : forall c1 c2,
+  Cstr.entails c1 c2 -> incl (unique c2) (unique c1).
+Proof.
+  intros. intros x Hx. refine (proj2 (unique_ok _ _) _).
+  refine (entails_unique H _).
+  apply (proj1 (unique_ok _ _) Hx).
+Qed.
+
+Lemma in_app_mid : forall (A:Set) (x a:A) l1 l2,
+  In x (l1 ++ a :: l2) -> a = x \/ In x (l1 ++ l2).
+Proof.
+  intros.
+  destruct (in_app_or _ _ _ H). right; apply* in_or_app.
+  simpl in H0; destruct* H0. right; apply* in_or_app.
+Qed.
+
+Lemma unify_kinds_complete : forall k k0 k' S,
+  kind_entails k' (kind_subst S k) ->
+  kind_entails k' (kind_subst S k0) ->
+  exists k1, exists l,
+    unify_kinds k k0 = Some (k1, l) /\
+    (forall T1 T2, In (T1, T2) l -> typ_subst S T1 = typ_subst S T2) /\
+    kind_entails k' (kind_subst S k1).
+Proof.
+  unfold unify_kinds.
+  intros.
+  destruct k as [[kc kv kr kh]|]; destruct k0 as [[kc0 kv0 kr0 kh0]|];
+    simpl in *.
+     destruct k' as [[kc' kv' kr' kh']|]; try contradiction.
+     destruct H. destruct H0.
+     simpl in H, H0.
+     destruct (cstr_lub_ok kc kc0 kc').
+     use (H3 (conj H H0)).
+     use (entails_valid H5 kv').
+     destruct* (cstr_valid (cstr_lub kc kc0)).
+     esplit. esplit. split. reflexivity.
+     use (entails_unique' H5).
+     clear H H0 H3 H4 H6.
+     simpl in H1, H2. clear kv kv0 kh kh0.
+     set (pairs := nil(A:=typ*typ)).
+     set (krs := nil(A:=var*typ)).
+     assert (forall T,
+       In T (List.map (fun XT : var * typ => (fst XT, typ_subst S (snd XT)))
+             ((kr ++ kr0) ++ krs)) ->
+       In T kr').
+       intros.
+       repeat rewrite map_app in H.
+       destruct (in_app_or _ _ _ H).
+         destruct* (in_app_or _ _ _ H0).
+       elim H0.
+     clear H1 H2.
+     assert (forall T1 T2,
+       In (T1, T2) pairs -> typ_subst S T1 = typ_subst S T2).
+       intros. elim H0.
+     unfold kind_entails, entails; simpl.
+     intros; gen pairs krs; induction (kr++kr0); simpl; intros. auto.
+     destruct a.
+     destruct (In_dec eq_var_dec v0 (unique (cstr_lub kc kc0))).
+       use (H7 _ i).
+       case_eq (get v0 krs); [intros t0 R1|intros R1].
+         assert (forall T1 T2,
+           In (T1, T2) ((t,t0)::pairs) -> typ_subst S T1 = typ_subst S T2).
+           simpl; intros.
+           destruct* H2.
+           inversions H2; clear H2.
+           apply (kh' v0). apply (proj1 (unique_ok _ _) H1).
+             apply* H.
+           apply H.
+           right.
+           rewrite map_app.
+           apply in_or_app; right.
+           apply (in_map (fun XT => (fst XT, typ_subst S (snd XT)))
+                    _ _ (get_in R1)).
+         intuition.
+           refine (proj1 (IHl _ _ _ _) _ _ H3); auto.
+         refine (proj2 (proj2 (IHl _ _ _ _)) _ H3); auto.
+       intuition;
+         [ refine (proj1 (IHl _ _ _ _) _ _ H2)
+         | refine (proj2 (proj2 (IHl _ _ _ _)) _ H2)];
+         auto; simpl; intros;
+         repeat rewrite map_app in *; apply H; apply* in_app_mid.
+     intuition;
+       [ refine (proj1 (IHl _ _ _ _) _ _ H1)
+       | refine (proj2 (proj2 (IHl _ _ _ _)) _ H1)];
+       auto; simpl; intros;
+       repeat rewrite map_app in *; apply H; apply* in_app_mid.
+    destruct k' as [[kc' kv' kr' kh']|]; try contradiction.
+    esplit. esplit. split*. intuition. elim H1.
+   esplit. esplit. split*. intuition. elim H1.
+  esplit. esplit. split*. intuition. elim H1.
+Qed.
+
 Lemma unify_mgu_vars : forall K0 S0 pairs K S K' S' h t t0 v v0 K0' l0,
   typ_subst S0 t = typ_fvar v ->
   typ_subst S0 t0 = typ_fvar v0 ->
@@ -1862,9 +1862,29 @@ Proof.
         rewrite R2 in H1.
         simpl in H1; disjoint_solve.
       intros.
-      destruct (in_app_or _ _ _ H).
-
-
+      destruct (in_app_or _ _ _ H); clear H.
+      unfold well_subst in WS.
+      use (WS _ _ (binds_get_kind R4)).
+      use (WS _ _ (binds_get_kind R5)).
+      clear WS.
+      destruct k0 as [[kc0 kv0 kr0 kh0]|].
+        simpl kind_subst in H2; inversions H2.
+        assert (kind_entails (Some k') (kind_subst S' (Some(Kind kv0 kh0))))
+          by simpl*.
+        assert (kind_entails (Some k') (kind_subst S' k)).
+          destruct k as [[kc kv kr kh]|].
+          rewrite <- Sv in H.
+          simpl typ_subst in H. destruct* (v == v).
+          simpl kind_subst in H; inversions H.
+          rewrite <- H4 in H5; inversions H5.
+          use (binds_func H9 H6).
+          inversions H3.
+          apply H10.
+          simpl*.
+        destruct (unify_kinds_complete _ _ _ _ H3 H0)
+          as [k3 [l3 [HU1 [HU2 HU3]]]].
+        rewrite HU1 in R6.
+        inversions R6.
       repeat rewrite* typ_subst_compose.
       assert (In (T1, T2) ((t,t0)::pairs)) by simpl*.
       use (Heq _ _ H0); clear H0.
