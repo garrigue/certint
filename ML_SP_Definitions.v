@@ -2,7 +2,7 @@
 * Preservation and Progress for mini-ML (CBV) - Definitions                *
 * Arthur Chargueraud, March 2007, Coq v8.1                                 *
 * Extension to structural polymorphism                                     *
-* Jacques Garrigue, October 2007                                           *
+* Jacques Garrigue, October 2007 - May 2008                                *
 ***************************************************************************)
 
 Set Implicit Arguments.
@@ -46,15 +46,16 @@ Definition typ_def := typ_bvar 0.
 
 (** Constraint domain *)
 
+Definition coherent kc (kr:list(var*typ)) := forall x T U,
+  Cstr.unique kc x -> In (x,T) kr -> In (x,U) kr -> T = U.
+
 Record ckind : Set := Kind {
   kind_cstr : Cstr.cstr;
-  kind_rel  : list (var*typ) }.
+  kind_valid : Cstr.valid kind_cstr;
+  kind_rel  : list (var*typ);
+  kind_coherent : coherent kind_cstr kind_rel }.
 
 Definition kind := option ckind.
-
-Definition coherent k := forall x T U,
-  Cstr.unique (kind_cstr k) x ->
-  In (x,T) (kind_rel k) -> In (x,U) (kind_rel k) -> T = U.
 
 Definition entails K K' :=
   Cstr.entails (kind_cstr K) (kind_cstr K') /\
@@ -132,12 +133,32 @@ Fixpoint For_all(A:Set)(P:A->Prop)(l:list A) {struct l} : Prop :=
 Definition All_kind_types (P:typ->Prop) K :=
   For_all P (kind_types K).
 
-Definition ckind_map f k :=
-  match k with Kind kc kr =>
-    Kind kc (List.map (fun XT:var*typ => (fst XT, f (snd XT))) kr)
-  end.
+Lemma map_coherent : forall f kc kr,
+  coherent kc kr ->
+  coherent kc (List.map (fun XT:var*typ => (fst XT, f (snd XT))) kr).
+Proof.
+  intros. intro; intros.
+  use (H x); simpl in *.
+  destruct (proj1 (in_map_iff _ _ _) H1) as [[x' T'] [Heq Hin]].
+  simpl in Heq; inversions Heq.
+  destruct (proj1 (in_map_iff _ _ _) H2) as [[x' U'] [Heq' Hin']].
+  simpl in Heq'; inversions Heq'.
+  rewrite* (H3 T' U').
+Qed.
 
-Definition kind_map f K :=
+Definition ckind_map_spec (f:typ->typ) (k:ckind):
+  {k' |  kind_cstr k = kind_cstr k' /\ 
+  kind_rel k' = List.map (fun XT:var*typ => (fst XT, f (snd XT))) (kind_rel k)}.
+Proof.
+  intros.
+  destruct k as [kc kv kr kh].
+  exists (Kind kv (map_coherent f kh)).
+  simpl. auto.
+Defined.
+
+Definition ckind_map f k := proj1_sig (ckind_map_spec f k).
+
+Definition kind_map f (K:kind) : kind :=
   match K with
   | None => None
   | Some k => Some (ckind_map f k)
@@ -237,9 +258,7 @@ Definition trm_inst t tl := trm_inst_rec 0 tl t.
 Definition kenv := env kind.
 
 Definition kenv_ok K :=
-  ok K /\
-  env_prop (fun o => match o with None => True
-           | Some k => Cstr.valid (kind_cstr k) /\ coherent k end) K.
+  ok K /\ env_prop (fun o => All_kind_types type o) K.
 
 (** Proper instanciation *)
 
@@ -274,10 +293,43 @@ Definition kinds_open_vars Ks Xs :=
 
 Definition env := env sch.
 
+(** Computing free variables of a type. *)
+
+Fixpoint typ_fv (T : typ) {struct T} : vars :=
+  match T with
+  | typ_bvar i      => {}
+  | typ_fvar x      => {{x}}
+  | typ_arrow T1 T2 => (typ_fv T1) \u (typ_fv T2)
+  end.
+
+(** Computing free variables of a list of terms. *)
+
+Definition typ_fv_list :=
+  List.fold_right (fun t acc => typ_fv t \u acc) {}.
+
+(** Computing free variables of a kind. *)
+
+Definition kind_fv k :=
+  typ_fv_list (kind_types k).
+
+Definition kind_fv_list :=
+  List.fold_right (fun t acc => kind_fv t \u acc) {}.
+
+(** Computing free variables of a type scheme. *)
+
+Definition sch_fv M := 
+  typ_fv (sch_type M) \u kind_fv_list (sch_kinds M).
+
+(** Computing free type variables of the values of an environment. *)
+
+Definition env_fv := 
+  fv_in sch_fv.
+
 (** Another functor for delta-rules *)
 
 Module Type DeltaIntf.
   Parameter type : Const.const -> sch.
+  Parameter closed : forall c, sch_fv (type c) = {}.
   Parameter rule : nat -> trm -> trm -> Prop.
   Parameter term : forall n t1 t2 tl,
     rule n t1 t2 ->
@@ -289,36 +341,57 @@ Module MkJudge(Delta:DeltaIntf).
 
 (** The typing judgment *)
 
-Reserved Notation "K ; E |= t ~: T" (at level 69).
+Reserved Notation "K ; E | gc |= t ~: T" (at level 69).
 
-Inductive typing : kenv -> env -> trm -> typ -> Prop :=
+Inductive gc_kind : Set := GcAny | GcLet.
+Definition gc_info : Set := (bool * gc_kind)%type.
+Fixpoint gc_ok (gc:gc_info) := fst gc = true. 
+Fixpoint gc_raise (gc:gc_info) : gc_info :=
+  match snd gc with
+  | GcLet => (true, GcLet)
+  | _ => gc
+  end.
+Fixpoint gc_lower (gc:gc_info) : gc_info :=
+  match snd gc with
+  | GcLet => (false, GcLet)
+  | _ => gc
+  end.
+
+Inductive typing(gc:gc_info) : kenv -> env -> trm -> typ -> Prop :=
   | typing_var : forall K E x M Us,
       kenv_ok K ->
       ok E -> 
       binds x M E -> 
       proper_instance K M Us ->
-      K ; E |= (trm_fvar x) ~: (M ^^ Us)
+      K ; E | gc |= (trm_fvar x) ~: (M ^^ Us)
   | typing_abs : forall L K E U T t1, 
       type U ->
       (forall x, x \notin L -> 
-        K ; (E & x ~ Sch U nil) |= (t1 ^ x) ~: T) -> 
-      K ; E |= (trm_abs t1) ~: (typ_arrow U T)
+        K ; (E & x ~ Sch U nil) | gc_raise gc |= (t1 ^ x) ~: T) -> 
+      K ; E | gc |= (trm_abs t1) ~: (typ_arrow U T)
   | typing_let : forall M L1 L2 K E T2 t1 t2,
       (forall Xs, fresh L1 (sch_arity M) Xs ->
-         (K & kinds_open_vars (sch_kinds M) Xs); E |= t1 ~: (M ^ Xs)) ->
-      (forall x, x \notin L2 -> K ; (E & x ~ M) |= (t2 ^ x) ~: T2) -> 
-      K ; E |= (trm_let t1 t2) ~: T2
+         (K & kinds_open_vars (sch_kinds M) Xs); E | gc_raise gc |=
+           t1 ~: (M ^ Xs)) ->
+      (forall x, x \notin L2 ->
+         K ; (E & x ~ M) | gc_raise gc |= (t2 ^ x) ~: T2) -> 
+      K ; E | gc |= (trm_let t1 t2) ~: T2
   | typing_app : forall K E S T t1 t2, 
-      K ; E |= t1 ~: (typ_arrow S T) ->
-      K ; E |= t2 ~: S ->   
-      K ; E |= (trm_app t1 t2) ~: T
+      K ; E | gc_lower gc |= t1 ~: (typ_arrow S T) ->
+      K ; E | gc_lower gc |= t2 ~: S ->   
+      K ; E | gc |= (trm_app t1 t2) ~: T
   | typing_cst : forall K E Us c,
       kenv_ok K ->
       ok E ->
       proper_instance K (Delta.type c) Us ->
-      K ; E |= (trm_cst c) ~: (Delta.type c ^^ Us)
+      K ; E | gc |= (trm_cst c) ~: (Delta.type c ^^ Us)
+  | typing_gc : forall Ks L K E t T,
+      gc_ok gc ->
+      (forall Xs, fresh L (length Ks) Xs ->
+        K & kinds_open_vars Ks Xs; E | gc |= t ~: T) ->
+      K ; E | gc |= t ~: T
 
-where "K ; E |= t ~: T" := (typing K E t T).
+where "K ; E | gc |= t ~: T" := (typing gc K E t T).
 
 
 (* ********************************************************************** *)
@@ -373,12 +446,12 @@ Notation "t --> t'" := (red t t') (at level 68).
 (** Goal is to prove preservation and progress *)
 
 Definition preservation := forall K E t t' T,
-  K ; E |= t ~: T ->
+  K ; E | (true,GcAny) |= t ~: T ->
   t --> t' ->
-  K ; E |= t' ~: T.
+  K ; E | (true,GcAny) |= t' ~: T.
 
 Definition progress := forall K t T, 
-  K ; empty |= t ~: T ->
+  K ; empty | (true,GcAny) |= t ~: T ->
      value t
   \/ exists t', t --> t'.
 
