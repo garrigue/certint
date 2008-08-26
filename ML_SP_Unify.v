@@ -7,6 +7,8 @@ Require Import List Metatheory.
 Require Import ML_SP_Definitions ML_SP_Infrastructure Cardinal.
 (* Require Import ML_SP_Soundness. *)
 
+Hint Resolve in_or_app.
+
 Set Implicit Arguments.
 
 Module MkInfer(Cstr:CstrIntf)(Const:CstIntf).
@@ -363,7 +365,6 @@ Qed.
 Hint Resolve ok_map0.
 
 Hint Unfold extends.
-Hint Resolve in_or_app.
 
 Lemma notin_remove_self : forall v L, v \notin S.remove v L.
 Proof.
@@ -1207,7 +1208,7 @@ Lemma in_app_mid : forall (A:Set) (x a:A) l1 l2,
   In x (l1 ++ a :: l2) -> a = x \/ In x (l1 ++ l2).
 Proof.
   intros.
-  destruct (in_app_or _ _ _ H). right; apply* in_or_app.
+  destruct* (in_app_or _ _ _ H).
   simpl in H0; destruct* H0.
 Qed.
 
@@ -1221,69 +1222,62 @@ Proof.
   unfold unify_kinds, unifies.
   intros.
   destruct k as [[kc kv kr kh]|]; destruct k0 as [[kc0 kv0 kr0 kh0]|];
-    simpl in *.
-     destruct k' as [[kc' kv' kr' kh']|]; try contradiction.
-     destruct H. destruct H0.
-     simpl in H, H0.
-     destruct (Cstr2.lub_ok kc kc0 kc').
-     use (H3 (conj H H0)).
-     use (Cstr2.entails_valid H5 kv').
-     destruct* (Cstr2.valid (Cstr2.lub kc kc0)).
-     esplit. esplit. split. reflexivity.
-     use (entails_unique' H5).
-     clear H H0 H3 H4 H6.
-     simpl in H1, H2. clear kv kv0 kh kh0.
-     set (pairs := nil(A:=typ*typ)).
-     set (krs := nil(A:=var*typ)).
-     assert (forall T,
-       In T (List.map (fun XT : var * typ => (fst XT, typ_subst S (snd XT)))
-             ((kr ++ kr0) ++ krs)) ->
-       In T kr').
-       intros.
-       repeat rewrite map_app in H.
-       destruct (in_app_or _ _ _ H).
-         destruct* (in_app_or _ _ _ H0).
-       elim H0.
-     clear H1 H2.
-     assert (forall T1 T2,
-       In (T1, T2) pairs -> typ_subst S T1 = typ_subst S T2).
-       intros. elim H0.
-     unfold kind_entails, entails; simpl.
-     intros; gen pairs krs; induction (kr++kr0); simpl; intros. auto.
-     destruct a.
-     destruct (In_dec eq_var_dec v0 (Cstr2.unique (Cstr2.lub kc kc0))).
-       use (H7 _ i).
-       case_eq (get v0 krs); [intros t0 R1|intros R1].
-         assert (forall T1 T2,
-           In (T1, T2) ((t,t0)::pairs) -> typ_subst S T1 = typ_subst S T2).
-           simpl; intros.
-           destruct* H2.
-           inversions H2; clear H2.
-           apply (kh' v0). apply (proj1 (Cstr2.unique_ok _ _) H1).
-             apply* H.
-           apply H.
-           right.
-           rewrite map_app.
-           apply in_or_app; right.
-           apply (in_map (fun XT => (fst XT, typ_subst S (snd XT)))
+    simpl in *;
+    try solve [esplit; esplit; intuition; elim H1].
+  destruct k' as [[kc' kv' kr' kh']|]; try contradiction.
+  destruct H. destruct H0.
+  simpl in H, H0.
+  destruct (Cstr2.lub_ok kc kc0 kc').
+  use (H3 (conj H H0)).
+  use (Cstr2.entails_valid H5 kv').
+  destruct* (Cstr2.valid (Cstr2.lub kc kc0)).
+  esplit. esplit. split. reflexivity.
+  poses Huniq (entails_unique' H5).
+  clear H H0 H3 H4 H6.
+  simpl in H1, H2. clear kv kv0 kh kh0.
+  set (pairs := nil(A:=typ*typ)).
+  set (krs := nil(A:=var*typ)).
+  assert (forall T,
+    In T (List.map (fun XT : var * typ => (fst XT, typ_subst S (snd XT)))
+      ((kr ++ kr0) ++ krs)) ->
+    In T kr').
+    intros.
+    repeat rewrite map_app in H.
+    destruct (in_app_or _ _ _ H).
+      destruct* (in_app_or _ _ _ H0).
+    elim H0.
+  clear H1 H2.
+  assert (Hunif: unifies S pairs).
+    intro; intros. elim H0.
+    unfold kind_entails, entails; simpl.
+    intros; gen pairs krs; induction (kr++kr0); simpl; intros. auto.
+  destruct a.
+  destruct (In_dec eq_var_dec v0 (Cstr2.unique (Cstr2.lub kc kc0))).
+    use (Huniq _ i).
+    case_eq (get v0 krs); [intros t0 R1|intros R1].
+      assert (unifies S ((t,t0)::pairs)).
+        intro; simpl; intros.
+        destruct* H1.
+        inversions H1; clear H1.
+        apply* (kh' v0). apply* (proj1 (Cstr2.unique_ok _ _) H0).
+        apply H.
+        right.
+        rewrite map_app.
+        use (in_map (fun XT => (fst XT, typ_subst S (snd XT)))
                     _ _ (get_in R1)).
-         intuition.
-           refine (proj1 (IHl _ _ _ _) _ _ H3); auto.
-         refine (proj2 (proj2 (IHl _ _ _ _)) _ H3); auto.
-       intuition;
-         [ refine (proj1 (IHl _ _ _ _) _ _ H2)
-         | refine (proj2 (proj2 (IHl _ _ _ _)) _ H2)];
-         auto; simpl; intros;
-         repeat rewrite map_app in *; apply H; apply* in_app_mid.
-     intuition;
-       [ refine (proj1 (IHl _ _ _ _) _ _ H1)
-       | refine (proj2 (proj2 (IHl _ _ _ _)) _ H1)];
-       auto; simpl; intros;
-       repeat rewrite map_app in *; apply H; apply* in_app_mid.
-    destruct k' as [[kc' kv' kr' kh']|]; try contradiction.
-    esplit. esplit. split*. intuition. elim H1.
-   esplit. esplit. split*. intuition. elim H1.
-  esplit. esplit. split*. intuition. elim H1.
+      intuition.
+        refine (proj1 (IHl _ _ _ _) _ _ H2); auto.
+      refine (proj2 (proj2 (IHl _ _ _ _)) _ H2); auto.
+    intuition;
+      [ refine (proj1 (IHl _ _ _ _) _ _ H1)
+      | refine (proj2 (proj2 (IHl _ _ _ _)) _ H1)];
+      auto; simpl; intros;
+      repeat rewrite map_app in *; apply H; apply* in_app_mid.
+  intuition;
+  [ refine (proj1 (IHl _ _ _ _) _ _ H0)
+  | refine (proj2 (proj2 (IHl _ _ _ _)) _ H0)];
+  auto; simpl; intros;
+  repeat rewrite map_app in *; apply H; apply* in_app_mid.
 Qed.
 
 Lemma well_kinded_get_kind : forall K x,
