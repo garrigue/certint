@@ -1,20 +1,20 @@
 (***************************************************************************
-* Principality of type inference for mini-ML with structural polymorphism  *
+* Principality of unification for mini-ML with structural polymorphism     *
 * Jacques Garrigue, July 2008                                              *
 ***************************************************************************)
 
 Require Import List Metatheory.
 Require Import ML_SP_Definitions ML_SP_Infrastructure Cardinal.
-(* Require Import ML_SP_Soundness. *)
+Require Import ML_SP_Soundness.
 
 Hint Resolve in_or_app.
 
 Set Implicit Arguments.
 
-Module MkInfer(Cstr:CstrIntf)(Const:CstIntf).
+Module MkUnify(Cstr:CstrIntf)(Const:CstIntf).
 
-Module Infra := MkInfra(Cstr)(Const).
-Import Infra.
+Module Sound0 := MkSound(Cstr)(Const).
+Import Sound0.Infra.
 Import Defs.
 
 Module Type Cstr2I.
@@ -117,7 +117,6 @@ Definition unify_kinds (k1 k2:kind) : option (kind * list (typ*typ)).
     auto.
   unfold krp; apply unify_coherent.
 Defined.
-Print unify_kinds.
 
 Definition get_kind x E : kind :=
   match get x E with
@@ -2535,4 +2534,4 @@ End Completeness.
 
 End Mk2.
 
-End MkInfer.
+End MkUnify.

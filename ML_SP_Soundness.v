@@ -193,7 +193,8 @@ Proof.
     clear B0 a.
     use (H1 _ _ (binds_prepend (K & K') H0)); clear H1 H0.
     simpl in *.
-    unfold kind_subst; apply* (All_kind_types_map (typ_subst S)).
+    unfold kind_subst; apply All_kind_types_map.
+    apply* All_kind_types_imp.
   elim (binds_fresh B0). apply get_none_notin. apply* map_get_none.
 Qed.
 
@@ -1007,20 +1008,6 @@ Proof.
   inversion* H.
 Qed.
 
-Lemma typ_open_other_type : forall Us Vs T,
-  type (typ_open T Us) ->
-  types (length Us) Vs ->
-  type (typ_open T Vs).
-Proof.
-  induction T; simpl; intros.
-      destruct H0.
-      gen Us Vs; induction n; destruct Us; destruct Vs;
-        simpl in *; intros; try discriminate;
-        inversion* H1.
-    simpl*.
-  inversion* H.
-Qed.
-
 Lemma typ_open_extra : forall Us Vs T,
   type (typ_open T Us) ->
   typ_open T Us = typ_open T (Us ++ Vs).
@@ -1044,37 +1031,37 @@ Proof.
   rewrite* IHkr.
 Qed.
 
-Lemma env_weaker_ok : forall Us U Ks Ks' k Xs,
+Lemma env_weaker_ok : forall Us U Ks Ks' k Xs',
   types (length Ks) Us ->
-  length Ks' = length Xs ->
+  length Ks' = length Xs' ->
   scheme (Sch U (Ks ++ Ks')) ->
-  In k (kinds_open Ks' (Us ++ typ_fvars Xs)) ->
+  In k (kinds_open Ks' (Us ++ typ_fvars Xs')) ->
   All_kind_types type k.
 Proof.
   intros.
   destruct H.
-  destruct H1 as [L Hs]. simpl in *.
-  destruct (var_freshes L (length (Ks ++ Ks'))) as [Xs' Fr].
-  destruct (Hs Xs' Fr) as [_ HA]; clear Hs.
-  rewrite app_length in Fr. rewrite H0 in Fr; clear H0. rewrite H in Fr.
+  destruct (var_freshes {} (length Ks)) as [Xs Fr].
+  destruct (H1 (Xs ++ Xs')) as [_ HA]; clear H1.
+    simpl. repeat rewrite app_length.
+    rewrite H0. rewrite* (fresh_length _ _ _ Fr).
+  clear H0.
   use (list_forall_app_inv _ _ HA); clear HA.
   induction Ks'; simpl in *. elim H2.
   inversions H0; clear H0.
   destruct H2; subst.
     unfold kind_open.
     clear H5 IHKs'.
-    unfold All_kind_types in *.
-    destruct a as [[kc kv kr kh]|]; simpl in *; auto.
-    clear kv kh; induction kr; simpl in *; split*.
-    destruct H6.
+    apply All_kind_types_map.
+    apply* All_kind_types_imp.
+    simpl; intros.
     unfold typ_open_vars in H0.
     eapply typ_open_other_type. apply H0.
-    unfold typ_fvars.
+    unfold typ_fvars. rewrite map_length.
     split.
-      rewrite app_length. repeat rewrite map_length.
+      repeat rewrite app_length; rewrite map_length.
       rewrite* <- (fresh_length _ _ _ Fr).
     clear -H3. induction H3; simpl*.
-    induction Xs; simpl*.
+    induction Xs'; simpl*.
   apply* IHKs'.
 Qed.
 
@@ -1154,9 +1141,9 @@ Proof.
   unfold kinds_open. rewrite map_app.
   apply For_all2_app.
     unfold kinds_open in HW.
-    destruct HS0 as [L' HF].
-    destruct (var_freshes L' (length Ks)) as [Xs' Fr'].
-    use (proj2 (HF Xs' Fr')).
+    (* destruct HS0 as [L' HF]. *)
+    destruct (var_freshes {} (length Ks)) as [Xs' Fr'].
+    use (proj2 (HS0 Xs' (fresh_length _ _ _ Fr'))).
     unfold sch_arity in HT.
     simpl in *.
     clear -HT Fr Fr' HW H.
@@ -1431,15 +1418,15 @@ Proof.
   poses HR (kinds_reopen_weaker _ _ _ (fresh_length _ _ _ H) H0).
   fold S in HR. fold Ks' in HR.
   cut (typ_body U (Ks ++ Ks')); auto.
-  destruct H1 as [LS HS].
-  exists LS; intros. simpl in *.
+  rename H1 into HS.
+  intros Xs0 H1. simpl in *.
   rewrite app_length in H1.
   destruct (app_length_inv (n:=length Ks) Xs0) as [Ys [Ys' [HYs Heq]]].
-    rewrite <- (fresh_length _ _ _ H1). omega.
+    omega.
   subst.
   unfold typ_open_vars, typ_fvars. rewrite map_app.
   unfold typ_open_vars, typ_fvars in HS.
-  destruct (HS Ys); clear HS. apply* fresh_app_firsts.
+  destruct (HS Ys); clear HS. simpl*.
   split. rewrite* <- typ_open_extra.
   rewrite <- HR in H0.
   clear H2 H3 HR.
@@ -1465,8 +1452,7 @@ Proof.
         split.
           unfold typ_fvars, list_fst; repeat rewrite map_length.
           rewrite app_length; rewrite map_length.
-          rewrite <- (fresh_length _ _ _ H).
-          apply (fresh_length _ _ _ H1).
+          rewrite* <- (fresh_length _ _ _ H).
         clear; induction (Ys++Ys'); simpl; auto.
       simpl; auto.
     destruct H0.

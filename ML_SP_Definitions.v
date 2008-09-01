@@ -169,10 +169,9 @@ Definition kind_open K Vs := kind_map (fun T => typ_open T Vs) K.
 (** Body of a scheme *)
 
 Definition typ_body T Ks :=
-  exists L, forall Xs, 
-  fresh L (length Ks) Xs ->
-  type (typ_open_vars T Xs) /\
-  list_forall (All_kind_types (fun T' => type (typ_open_vars T' Xs))) Ks.
+  forall Xs, length Ks = length Xs ->
+    type (typ_open_vars T Xs) /\
+    list_forall (All_kind_types (fun T' => type (typ_open_vars T' Xs))) Ks.
 
 (** Definition of a well-formed scheme *)
 

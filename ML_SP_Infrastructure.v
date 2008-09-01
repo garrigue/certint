@@ -652,9 +652,10 @@ Lemma typ_open_types : forall T Us Ks,
   types (length Ks) Us -> 
   type (typ_open T Us).
 Proof. 
-  introv [L K] WT. pick_freshes (length Ks) Xs.
-  rewrite* (@typ_subst_intro Xs). apply* typ_subst_type.
-    apply list_forall_env_prop. destruct* WT.
+  introv K WT. pick_freshes (length Ks) Xs.
+  rewrite* (@typ_subst_intro Xs).
+    apply* typ_subst_type.
+      apply list_forall_env_prop. destruct* WT.
     destruct* (K Xs).
   rewrite* <- (fresh_length _ _ _ Fr).
 Qed.
@@ -870,9 +871,9 @@ Proof.
   apply* list_forall_map.
 Qed.
 
-Lemma All_kind_types_map (f:typ->typ) (P : typ -> Prop) k:
-  (forall x, P x -> P (f x)) ->
-  All_kind_types P k -> All_kind_types P (kind_map f k).
+Lemma All_kind_types_imp (P P' : typ -> Prop) k:
+  (forall x, P x -> P' x) ->
+  All_kind_types P k -> All_kind_types P' k.
 Proof.
   intros. unfold All_kind_types in *.
   unfold kind_types in *.
@@ -882,6 +883,17 @@ Proof.
   clear -H H0; induction* kr.
   destruct a. simpl in *. 
   destruct H0; split; auto.
+Qed.
+
+Lemma All_kind_types_map : forall P f a,
+  All_kind_types (fun x => P (f x)) a ->
+  All_kind_types P (kind_map f a).
+Proof.
+  intros.
+  destruct a as [[kc kv kr kh]|]; simpl*.
+  unfold All_kind_types in *; simpl in *.
+  clear kv kh; induction kr. simpl*.
+  simpl in *. split*.
 Qed.
 
 Lemma For_all2_map: forall (A B:Set)(P P':A->B->Prop) f g l1 l2,
@@ -1160,19 +1172,62 @@ Qed.
 
 (** Schemes are stable by type substitution. *)
 
+Lemma typ_open_other_type : forall Us Vs T,
+  type (typ_open T Us) ->
+  types (length Us) Vs ->
+  type (typ_open T Vs).
+Proof.
+  induction T; simpl; intros.
+      destruct H0.
+      gen Us Vs; induction n; destruct Us; destruct Vs;
+        simpl in *; intros; try discriminate;
+        inversion* H1.
+    simpl*.
+  inversion* H.
+Qed.
+
+Lemma types_typ_fvars : forall Xs,
+  types (length Xs) (typ_fvars Xs).
+Proof.
+  unfold typ_fvars; intro; split.
+    rewrite* map_length.
+  induction Xs; simpl*.
+Qed.
+
+Lemma typ_open_vars_type : forall Xs Ys T,
+  type (typ_open_vars T Xs) ->
+  length Ys = length Xs ->
+  type (typ_open_vars T Ys).
+Proof.
+  intros.
+  unfold typ_open_vars.
+  apply (typ_open_other_type (typ_fvars Xs)). apply H.
+  replace (length (typ_fvars Xs)) with (length Ys).
+    apply types_typ_fvars.
+  unfold typ_fvars. rewrite* map_length.
+Qed.
+
 Lemma sch_subst_type : forall S M,
   env_prop type S -> scheme M -> scheme (sch_subst S M).
 Proof.
-  unfold scheme. intros S [T Ks] TU [L K].
+  unfold scheme. intros S [T Ks] TU K.
   simpls.
-  exists (L \u dom S).
-  unfold sch_arity in *; simpl; rewrite map_length; introv Fr.
-  simpls; destruct* (K Xs); clear K. destruct* (fresh_union_r _ _ _ _ Fr).
-  split. rewrite* typ_subst_open_vars.
+  introv Len.
+  rewrite map_length in Len.
+  destruct (var_freshes (dom S) (length Ks)) as [Ys Fr].
+  destruct* (K Ys); clear K.
+  assert (LenYs: length Xs = length Ys) by rewrite* <- Len.
+  split.
+    apply* (typ_open_vars_type Ys).
+    rewrite* typ_subst_open_vars.
   apply* list_forall_map.
   clear H0; intros.
-  unfold kind_subst; apply* All_kind_types_map.
-  intros; rewrite* typ_subst_open_vars.
+  unfold kind_subst.
+  apply All_kind_types_map.
+  apply* All_kind_types_imp.
+  simpl; intros.
+  apply* (typ_open_vars_type Ys).
+  rewrite* typ_subst_open_vars.
 Qed.
 
 Hint Resolve sch_subst_type.
