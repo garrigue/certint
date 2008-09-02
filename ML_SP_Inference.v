@@ -528,69 +528,232 @@ Proof.
   apply* (@kenv_ok_subst K' K).
 Qed.
 
-Theorem soundness : forall t h K0 E T S0 K S gc,
+Lemma map_compose : forall (A:Set) (f f1 f2:A->A) E,
+  (forall a, f1 (f2 a) = f a) ->
+  map f1 (map f2 E) = map f E.
+Proof.
+  intros.
+  induction* E.
+  simpl. destruct a. simpl. rewrite H. rewrite* IHE.
+Qed.
+
+Lemma map_sch_subst_extend : forall S S0 E,
+  extends S S0 ->
+  map (sch_subst S) (map (sch_subst S0) E) = map (sch_subst S) E.
+Proof.
+  intros.
+  apply map_compose.
+  intros.
+  destruct a as [T Ks]; unfold sch_subst; simpl.
+  rewrite* (H T).
+  apply (f_equal (Sch (typ_subst S T))).
+  induction Ks; simpl*.
+  rewrite IHKs.
+  rewrite* (@kind_subst_combine S).
+Qed.
+
+Lemma kenv_ok_sch_kinds : forall K M Xs,
+  kenv_ok K ->
+  scheme M ->
+  fresh (dom K) (sch_arity M) Xs ->
+  kenv_ok (K & kinds_open_vars (sch_kinds M) Xs).
+Proof.
+  split.
+    apply* disjoint_ok.
+      unfold kinds_open_vars, kinds_open. apply* ok_combine_fresh.
+    rewrite* dom_kinds_open_vars.
+    disjoint_solve.
+  apply env_prop_concat. apply (proj2 H).
+  unfold kinds_open_vars, kinds_open.
+  apply list_forall_env_prop.
+  destruct* (H0 Xs).
+  clear -H3; induction H3. simpl*.
+  simpl; constructor; auto.
+  unfold kind_open. unfold typ_open_vars in H3.
+  apply* All_kind_types_map.
+Qed.
+
+Lemma math_ind : forall Q : nat -> Prop,
+  (forall n, (forall m, m < n -> Q m) -> Q n) ->
+  forall m, Q m.
+Proof.
+  intros.
+  pose (n:= S m).
+  assert (m < n). unfold n; omega.
+  clearbody n.
+  generalize dependent m.
+  induction n; intros.
+    elimtype False; omega.
+  apply H.
+  intros; apply IHn.
+  omega.
+Qed.
+
+Lemma kind_subst_extend : forall S' S k,
+  extends S' S -> kind_subst S' (kind_subst S k) = kind_subst S' k.
+Proof.
+  intros. apply* kind_subst_combine. 
+Qed.
+
+Lemma well_subst_compose : forall S S' K1 K2 K3,
+  extends S' S ->
+  well_subst K1 K2 S -> well_subst K2 K3 S' -> well_subst K1 K3 S'.
+Proof.
+  intros.
+  intro; intros.
+  use (H0 _ _ H2).
+  inversions H3; clear H3.
+    destruct k; try discriminate. simpl; apply wk_any.
+  use (H1 _ _ H7).
+  inversions* H3.
+    destruct k0; try discriminate.
+  fold (typ_subst S' (typ_fvar x)) in H9.
+  rewrite H5 in H9.
+  fold (typ_subst S (typ_fvar Z)) in H9.
+  rewrite H in H9.
+  rewrite <- H9.
+  rewrite* <- (@kind_subst_extend S' S).
+  rewrite <- H4.
+  simpl. eapply wk_kind. apply H11.
+  eapply entails_trans. apply H12.
+  apply* kind_subst_entails.
+Qed.
+
+Lemma soundness_var : forall S0 K0 E T v s x S K gc,
+  is_subst S0 -> env_prop type S0 -> kenv_ok K0 ->
+  disjoint (dom S0) (dom K0) -> ok E -> env_prop scheme E -> type T ->
+  get v E = Some s ->
+  fresh (fvs S0 K0 E T) (sch_arity s) x ->
+  unify (K0 & kinds_open_vars (sch_kinds s) x) (sch_open_vars s x) T S0 =
+    Some (K, S) ->
+  extends S S0 /\ env_prop type S /\
+  well_subst (map (kind_subst S0) K0) (map (kind_subst S) K) S /\
+  map (kind_subst S) K; map (sch_subst S) E | gc |= trm_fvar v ~: typ_subst S T.
+Proof.
+  intros until gc; intros HS0 HTS0 HK0 Dis HE HSE HT R1 f HI.
+  unfold unify in HI.
+  assert (kenv_ok (K0 & kinds_open_vars (sch_kinds s) x)).
+    apply* kenv_ok_sch_kinds. apply* (HSE v).
+    unfold fvs in f; auto.
+  destruct* (unify_kinds_ok _ _ HI HS0).
+    unfold fvs in f. rewrite dom_concat. rewrite* dom_kinds_open_vars.
+    disjoint_solve.
+  poses Hext (typ_subst_extend _ _ _ HS0 HI).
+  destruct* (unify_type _ _ HI).
+    simpl; intros.
+    destruct* H2.
+    inversions H2; clear H2.
+    split*.
+    unfold sch_open_vars.
+    refine (proj1 (HSE _ _ R1 x _)). auto.
+  intuition.
+    intro; intros.
+    apply H5.
+    rewrite map_concat.
+    apply* binds_concat_ok.
+    rewrite <- map_concat.
+    apply* ok_map0.
+  rewrite <- (map_sch_subst_extend E Hext).
+  use (unify_types _ _ _ HI HS0).
+  rewrite* <- (H1 (sch_open_vars s x) T).
+  rewrite* <- (typ_subst_extend _ _ _ HS0 HI).
+  unfold fvs in f.
+  rewrite* sch_subst_open_vars.
+  apply* typing_typ_well_subst.
+    apply* kenv_ok_map.
+  unfold sch_open_vars, typ_open_vars.
+  fold (sch_open (sch_subst S0 s) (typ_fvars x)).
+  apply* typing_var.
+    apply* kenv_ok_map.
+  split.
+    unfold sch_arity. simpl. rewrite map_length. fold (sch_arity s).
+    rewrite (fresh_length _ _ _ f). apply types_typ_fvars.
+  split. apply* sch_subst_type. apply (HSE _ _ R1).
+  unfold kinds_open_vars, kinds_open.
+  rewrite map_concat.
+  rewrite map_combine.
+  rewrite map_map.
+  rewrite <- (map_ext (fun k => kind_open (kind_subst S0 k) (typ_fvars x))).
+    rewrite <- (map_map (kind_subst S0) (fun k => kind_open k (typ_fvars x))).
+    destruct s as [Ts Ks]; simpl.
+    refine (well_kinded_combine _ _ x nil _).
+    rewrite dom_map. rewrite map_length.
+    unfold sch_arity, fvs in f; simpl in f; auto.
+  intros. rewrite* kind_subst_open_vars.
+Qed.
+
+Theorem soundness : forall h t K0 E T S0 K S gc,
+  typinf K0 E t T S0 h = Some (K, S) ->
   is_subst S0 -> env_prop type S0 -> kenv_ok K0 ->
   disjoint (dom S0) (dom K0) ->
   ok E -> env_prop scheme E -> type T ->
-  typinf K0 E t T S0 h = Some (K, S) ->
+  extends S S0 /\ env_prop type S /\
   well_subst (map (kind_subst S0) K0) (map (kind_subst S) K) S /\
   map (kind_subst S) K; map (sch_subst S) E |gc|= t ~: typ_subst S T.
 Proof.
-  induction t; destruct h; simpl; intros until gc;
-    intros HS0 HTS0 HK0 Dis HE HSE HT HI; try discriminate.
-      case_rewrite (get v E) R1.
-      destruct (var_freshes (fvs S0 K0 E T) (sch_arity s)).
-      simpl proj1_sig in HI.
-      unfold unify in HI.
-      assert (kenv_ok (K0 & kinds_open_vars (sch_kinds s) x)).
-        split.
-          apply* disjoint_ok. unfold kinds_open_vars, kinds_open.
-            apply* ok_combine_fresh.
-          rewrite* dom_kinds_open_vars.
-          unfold fvs in f. disjoint_solve.
-        apply env_prop_concat. apply (proj2 HK0).
-        destruct* (HSE _ _ R1 x).
-        unfold kinds_open_vars, kinds_open.
-        apply list_forall_env_prop.
-        clear -H0; induction (sch_kinds s). simpl*.
-        simpl in *.
-        inversions H0; clear H0.
-        constructor; auto.
-        unfold kind_open. unfold typ_open_vars in H3.
-        apply* All_kind_types_map.
-      destruct* (unify_kinds_ok _ _ HI HS0).
-        unfold fvs in f. rewrite dom_concat. rewrite* dom_kinds_open_vars.
-        disjoint_solve.
-      intuition.
-        intro; intros.
-        apply H3.
-        rewrite map_concat.
-        apply* binds_concat_ok.
-        rewrite <- map_concat.
-        apply* ok_map0.
-      replace (map (sch_subst S) E)
-        with (map (sch_subst S) (map (sch_subst S0) E)).
-      destruct* (unify_type _ _ HI).
-        simpl; intros.
-        destruct* H1.
-        inversions H1; clear H1.
-        split*.
-        unfold sch_open_vars.
-        refine (proj1 (HSE _ _ R1 x _)). auto.
-      use (unify_types _ _ _ HI HS0).
-      rewrite* <- (H5 (sch_open_vars s x) T).
-      rewrite* <- (typ_subst_extend _ _ _ HS0 HI).
-      rewrite* sch_subst_open_vars.
-      apply* typing_typ_well_subst.
-        apply* kenv_ok_map.
-      unfold sch_open_vars, typ_open_vars.
-      fold (sch_open (sch_subst S0 s) (typ_fvars x)).
-      apply* typing_var.
-        apply* kenv_ok_map.
-      split.
-        unfold sch_arity. simpl. rewrite map_length. fold (sch_arity s).
-        rewrite (fresh_length _ _ _ f). apply types_typ_fvars.
-      split. apply* sch_subst_type. apply (HSE _ _ R1).
+  induction h; destruct t; simpl; intros until gc;
+    intros HI HS0 HTS0 HK0 Dis HE HSE HT; try discriminate.
+  (* Var *)
+  clear IHh.
+  case_rewrite (get v E) R1.
+  destruct (var_freshes (fvs S0 K0 E T) (sch_arity s)).
+  simpl proj1_sig in HI.
+  apply* soundness_var.
+  (* Abs *)
+  destruct (var_fresh (fvs S0 K0 E T)); simpl in HI.
+  destruct (var_fresh (fvs S0 K0 E T \u {{x}})); simpl in HI.
+  destruct (var_fresh (dom E \u trm_fv t)); simpl in HI.
+  case_rewrite (unify K0 (typ_arrow (typ_fvar x) (typ_fvar x0)) T S0) R1.
+  destruct p as [K' S'].
+  unfold unify in R1.
+  destruct* (unify_keep _ _ _ R1) as [HS' _].
+  destruct* (unify_type _ _ R1).
+    simpl; intros. destruct* H.
+    inversions* H.
+  destruct* (unify_kinds_ok _ _ R1). clear H1; destruct H2.
+  destruct* (IHh _ _ _ _ _ _ _ gc HI); clear IHh HI.
+      apply* ok_cons.
+    intro; intros.
+    assert (binds x2 a (E & x1 ~ Sch (typ_fvar x) nil)) by apply H3.
+    clear H3; binds_cases H4.
+      apply* (HSE _ _ B).
+    destruct (binds_single_inv B0). subst.
+    intro; intros. unfold typ_open_vars. simpl*.
+  intuition.
+      intro. rewrite <- H3. rewrite <- (H3 T0).
+      rewrite* (typ_subst_extend _ _ _ HS0 R1).
+    apply* well_subst_compose.
+  use (unify_types _ _ _ R1 HS0).
+  rewrite <- (H3 T).
+  rewrite* <- (H6 (typ_arrow (typ_fvar x) (typ_fvar x0)) T).
+  rewrite H3.
+  simpl.
+  simpl map in H7.
+  fold (typ_subst S (typ_fvar x0)).
+  fold (typ_subst S (typ_fvar x)).
+  set (E' := map (sch_subst S) E) in *.
+  apply* (@typing_abs gc (dom E' \u {{x1}} \u trm_fv t)).
+  intros.
+  simpl concat.
+  fold (typ_subst S (typ_fvar x)).
+  apply typing_gc_raise.
+  assert (forall K M T,
+    K; (x1,M)::E' |gc|= t ^ x1 ~: T -> K; (x2,M)::E' |gc|= t ^ x2 ~: T).
+    intros. replace ((x2,M)::E') with (E' & x2 ~ M & empty) by simpl*.
+    replace (t ^ x2) with ([x1~>trm_fvar x2]t^x1).
+      apply typing_rename. simpl*.
+      assert (x2 \notin trm_fv (t ^ x1)).
+        unfold trm_open.
+        use (trm_fv_open (trm_fvar x1) t 0). apply (notin_subset H10).
+        simpl*.
+      simpl*.
+    rewrite* trm_subst_open.
+    rewrite* trm_subst_fresh.
+    simpl. destruct* (x1 == x1).
+  auto.
+  (* Let *)
+
+  
 
 Qed.
          
