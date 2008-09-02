@@ -682,6 +682,24 @@ Proof.
   intros. rewrite* kind_subst_open_vars.
 Qed.
 
+Lemma typing_abs_rename : forall x1 gc K E x2 M t T,
+  x1 \notin trm_fv t ->
+  x2 \notin dom E \u {{x1}} \u trm_fv t ->
+  K; E & x1 ~ M |gc|= t ^ x1 ~: T -> K; E & x2 ~ M |gc|= t ^ x2 ~: T.
+Proof.
+  intros. replace (E & x2 ~ M) with (E & x2 ~ M & empty) by simpl*.
+  replace (t ^ x2) with ([x1~>trm_fvar x2]t^x1).
+  apply typing_rename. simpl*.
+    assert (x2 \notin trm_fv (t ^ x1)).
+      unfold trm_open.
+      use (trm_fv_open (trm_fvar x1) t 0). apply (notin_subset H2).
+      simpl*.
+    simpl*.
+  rewrite* trm_subst_open.
+  rewrite* trm_subst_fresh.
+  simpl. destruct* (x1 == x1).
+Qed.
+
 Theorem soundness : forall h t K0 E T S0 K S gc,
   typinf K0 E t T S0 h = Some (K, S) ->
   is_subst S0 -> env_prop type S0 -> kenv_ok K0 ->
@@ -734,24 +752,21 @@ Proof.
   set (E' := map (sch_subst S) E) in *.
   apply* (@typing_abs gc (dom E' \u {{x1}} \u trm_fv t)).
   intros.
-  simpl concat.
-  fold (typ_subst S (typ_fvar x)).
   apply typing_gc_raise.
-  assert (forall K M T,
-    K; (x1,M)::E' |gc|= t ^ x1 ~: T -> K; (x2,M)::E' |gc|= t ^ x2 ~: T).
-    intros. replace ((x2,M)::E') with (E' & x2 ~ M & empty) by simpl*.
-    replace (t ^ x2) with ([x1~>trm_fvar x2]t^x1).
-      apply typing_rename. simpl*.
-      assert (x2 \notin trm_fv (t ^ x1)).
-        unfold trm_open.
-        use (trm_fv_open (trm_fvar x1) t 0). apply (notin_subset H10).
-        simpl*.
-      simpl*.
-    rewrite* trm_subst_open.
-    rewrite* trm_subst_fresh.
-    simpl. destruct* (x1 == x1).
-  auto.
+  apply* (@typing_abs_rename x1).
   (* Let *)
+  destruct (var_fresh (fvs S0 K0 E T)); simpl in HI.
+  case_rewrite (typinf K0 E t1 (typ_fvar x) S0 h) R1. destruct p.
+  fold (typ_subst s (typ_fvar x)) in HI.
+  case_rewrite (split_env
+              (close_fvk K0
+                 (S.diff (typ_fv (typ_subst s (typ_fvar x)))
+                    (close_fvk K0 (env_fv (map (sch_subst s) E))))) K0) R2.
+  case_rewrite (split e0) R3.
+  destruct (var_fresh (dom E \u trm_fv t1 \u trm_fv t2)); simpl proj1_sig in HI.
+  destruct* (IHh _ _ _ _ _ _ _ gc R1); clear R1.
+  destruct* (IHh _ _ _ _ _ _ _ gc HI); clear IHh HI.
+
 
   
 
