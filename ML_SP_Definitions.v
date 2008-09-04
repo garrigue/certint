@@ -329,6 +329,7 @@ Definition env_fv :=
 Module Type DeltaIntf.
   Parameter type : Const.const -> sch.
   Parameter closed : forall c, sch_fv (type c) = {}.
+  Parameter scheme : forall c, scheme (type c).
   Parameter rule : nat -> trm -> trm -> Prop.
   Parameter term : forall n t1 t2 tl,
     rule n t1 t2 ->

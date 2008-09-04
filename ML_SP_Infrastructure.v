@@ -124,30 +124,6 @@ Hint Extern 1 (length ?Xs = ?n) =>
 (* ********************************************************************** *)
 (** ** Free Variables *)
 
-(** Variants looking up a kinding environment *)
-
-Fixpoint close_fvars (n:nat)(K:kenv)(VK:vars)(Vs:vars) {struct n} : vars :=
-  match n with
-  | 0 => Vs
-  | S n' =>
-    match S.choose (S.inter VK Vs) with
-    | None => Vs
-    | Some x =>
-        let VK' := S.diff VK {{x}} in
-        match get x K with
-        | None => Vs
-        | Some k =>
-          close_fvars n' K VK' (Vs \u kind_fv k)
-        end
-    end
-  end.
-    
-Definition typ_fvk K T :=
-  close_fvars (length K) K (dom K) (typ_fv T).
-
-Definition typ_fvk_list K Ts :=
-  close_fvars (length K) K (dom K) (typ_fv_list Ts).
-
 (** Computing free variables of a term. *)
 
 Fixpoint trm_fv (t : trm) {struct t} : vars :=
