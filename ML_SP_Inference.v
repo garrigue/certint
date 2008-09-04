@@ -672,6 +672,8 @@ Proof.
   apply* kind_subst_entails.
 Qed.
 
+Definition Gc := (false, GcLet).
+
 Definition soundness_spec h t K0 E T S0 K S :=
   typinf K0 E t T S0 h = Some (K, S) ->
   is_subst S0 -> env_prop type S0 ->
@@ -680,7 +682,7 @@ Definition soundness_spec h t K0 E T S0 K S :=
   extends S S0 /\ env_prop type S /\ is_subst S /\
   kenv_ok K /\ disjoint (dom S) (dom K) /\
   well_subst (map (kind_subst S0) K0) (map (kind_subst S) K) S /\
-  map (kind_subst S) K; map (sch_subst S) E |(true,GcAny)|= t ~: typ_subst S T.
+  map (kind_subst S) K; map (sch_subst S) E |Gc|= t ~: typ_subst S T.
           
 Lemma soundness_ind : forall h t K0 E T S0 K S s x,
   scheme s ->
@@ -691,7 +693,7 @@ Lemma soundness_ind : forall h t K0 E T S0 K S s x,
    extends S S0 -> kenv_ok K ->
    unifies S ((sch_open_vars s x, T) :: nil) ->
    map (kind_subst S0) (K0 & kinds_open_vars (sch_kinds s) x);
-   map (sch_subst S0) E |(true, GcAny)|= t ~: sch_subst S0 s ^^ typ_fvars x) ->
+   map (sch_subst S0) E |Gc|= t ~: sch_subst S0 s ^^ typ_fvars x) ->
   soundness_spec h t K0 E T S0 K S.
 Proof.
   intros until x; intros Hs f HI Typ _ HS0 HTS0 HK0 Dis HE HSE HT.
@@ -874,7 +876,7 @@ Proof.
   fold (typ_subst S (typ_fvar x0)).
   fold (typ_subst S (typ_fvar x)).
   set (E' := map (sch_subst S) E) in *.
-  apply* (@typing_abs (true,GcAny) (dom E' \u {{x1}} \u trm_fv t)).
+  apply* (@typing_abs Gc (dom E' \u {{x1}} \u trm_fv t)).
   intros.
   apply typing_gc_raise.
   apply* (@typing_abs_rename x1).
@@ -1384,7 +1386,7 @@ Proof.
   intuition.
       apply* extends_trans.
     apply* well_subst_let_inf.
-  apply* (@typing_let (true,GcAny) (sch_subst S M)
+  apply* (@typing_let Gc (sch_subst S M)
              (dom S \u dom K \u dom e0 \u mkset l)).
     intros.
     unfold M; simpl.
@@ -1421,7 +1423,8 @@ Proof.
     rewrite* kinds_generalize_reopen. rewrite H8. clear H9.
     poses He1 (split_combine e1). case_rewrite (split e1) R5.
     pose (Ks := List.map (kind_map (typ_generalize l1)) l2).
-    apply* (@typing_gc (true,GcAny) Ks). simpl*.
+    apply* (@typing_gc (true,GcLet) Ks). simpl*.
+    poses Typ (typing_gc_raise Typ'). clear Typ'.
     intros.
     pose (M' := Sch T1 Ks).
     rewrite* <- (@sch_open_extra Ks Xs0). fold M'.
@@ -1450,10 +1453,10 @@ Proof.
       apply disjoint_comm.
       eapply disjoint_subset. apply (env_incl_subset_dom Inc4).
       apply disjoint_comm. apply* ok_disjoint.
-    intro; intros. apply* (proj2 (proj1 (typing_regular Typ')) x1).
+    intro; intros. apply* (proj2 (proj1 (typing_regular Typ)) x1).
   intros.
   instantiate (1 := dom E \u trm_fv t2 \u {{x0}}) in H6.
-  simpl gc_raise.
+  apply typing_gc_raise.
   apply* (@typing_abs_rename x0).
   rewrite* dom_map.
 Qed.
