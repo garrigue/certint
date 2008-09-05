@@ -1494,5 +1494,47 @@ Proof.
   apply* (soundness_cst h).
 Qed.
 
+Definition principality S0 K0 S K E t T h S' K' :=
+  is_subst S0 -> kenv_ok K0 ->
+  extends S S0 -> env_prop type S ->
+  well_subst K0 K S ->
+  K; map (sch_subst S) E |(false,GcAny)|= t ~: typ_subst S T ->
+  trm_depth t < h ->
+  typinf K0 E t T S0 h = Some (K', S') /\
+  extends S S' /\ well_subst (map (kind_subst S') K') K S.
+
+Theorem typinf_principal : forall S0 K0 S K E t T h S' K',
+  principality S0 K0 S K E t T h S' K'.
+Proof.
+  intros; intros HS0 HK0 Hext HTS WS Typ Hh.
+  gen_eq (map (sch_subst S) E) as E'.
+  gen_eq (typ_subst S T) as T'.
+  gen_eq (false,GcAny) as gc.
+  gen K0 S0 h.
+  induction Typ; intros; subst;
+    destruct h; try (simpl in Hh; elimtype False; omega).
+  (* Var *)
+  simpl.
+  destruct (binds_map_inv _ _ H1) as [M0 [HM0 B]].
+  rewrite B.
+  destruct (var_freshes (fvs S0 K0 E T) (sch_arity M0)) as [Xs Fr]; simpl.
+  case_eq
+    (unify (K0 & kinds_open_vars (sch_kinds M0) Xs) (sch_open_vars M0 Xs) T S0);
+    intros.
+  destruct p.
+  unfold unify in H3.
+  unfold fvs in Fr.
+  destruct* (unify_mgu0 (K':=K) (S':=S) _ H3).
+        apply* disjoint_ok. unfold kinds_open_vars. apply* ok_combine_fresh.
+        rewrite* dom_kinds_open_vars.
+        apply disjoint_comm.
+        apply* (fresh_disjoint (sch_arity M0)).
+      subst.
+      unfold unifies; simpl; intros.
+      destruct* H5. inversions H5; clear H5.
+      rewrite <- H4.
+      rewrite* sch_subst_open_vars.
+        unfold sch_open_vars, typ_open_vars, sch_open.
+
 End Mk2.
 End MkInfer.

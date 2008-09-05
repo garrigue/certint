@@ -211,6 +211,14 @@ Module Delta.
     use (IHl (S x)); clear IHl. rewrite union_empty_l in H. auto.
   Qed.
 
+  Lemma type_nth_typ_vars : forall n Xs,
+    n < length Xs -> Defs.type (nth n (typ_fvars Xs) typ_def).
+  Proof.
+    induction n; destruct Xs; simpl; intros; try (elimtype False; omega).
+      auto.
+    apply IHn; omega.
+  Qed.
+
   Lemma scheme : forall c, scheme (Delta.type c).
   Proof.
     intros. intro; intros.
@@ -220,16 +228,42 @@ Module Delta.
       split*.
       unfold All_kind_types.
       repeat (constructor; simpl*).
-    do 2 (destruct Xs; try discriminate).
-      unfold typ_open_vars; simpl.
-    simpl in H; inversions H.
-    clear H; rewrite map_length in H1.
-    rewrite seq_length in H1.
+    rewrite map_length in H.
+    rewrite seq_length in H.
     split.
-      gen Xs; induction n; destruct Xs; intros; try discriminate; simpl.
-        auto.
-      simpl.
-    un
+      do 2 (destruct Xs; try discriminate).
+      inversion H; clear H.
+      unfold typ_open_vars.
+      replace Xs with (nil ++ Xs) by simpl*.
+      set (Xs0 := nil(A:=var)).
+      replace 2 with (S (S (length Xs0))) by simpl*.
+      gen Xs; generalize Xs0; induction n; simpl; intros. auto.
+      destruct Xs; try discriminate.
+      constructor.
+        unfold typ_fvars.
+        rewrite map_app.
+        rewrite app_nth2.
+          rewrite map_length.
+          replace (length Xs1 - length Xs1) with 0 by omega.
+          simpl*.
+        rewrite map_length; omega.
+      replace (v1 :: Xs) with ((v1 :: nil) ++ Xs) by simpl*.
+      rewrite <- app_ass.
+      simpl in IHn.
+      replace (S (length Xs1)) with (length (Xs1 ++ v1 :: nil))
+        by (rewrite app_length; simpl; omega).
+      apply* IHn.
+    unfold All_kind_types.
+    repeat (constructor; auto).
+      induction (seq 1 (length l)); simpl; try constructor; simpl*.
+    simpl.
+    assert (length Xs >= 2 + length l) by omega.
+    clear H; revert H0.
+    unfold typ_open_vars.
+    generalize 2; induction n; simpl; intros. auto.
+    split. apply type_nth_typ_vars. omega.
+    apply IHn. omega.
+  Qed.
 End Delta.
 
 Module Sound2 := Mk2(Delta).
