@@ -210,6 +210,26 @@ Module Delta.
       auto.
     use (IHl (S x)); clear IHl. rewrite union_empty_l in H. auto.
   Qed.
+
+  Lemma scheme : forall c, scheme (Delta.type c).
+  Proof.
+    intros. intro; intros.
+    destruct c; simpl in *.
+      do 3 (destruct Xs; try discriminate).
+      unfold typ_open_vars; simpl.
+      split*.
+      unfold All_kind_types.
+      repeat (constructor; simpl*).
+    do 2 (destruct Xs; try discriminate).
+      unfold typ_open_vars; simpl.
+    simpl in H; inversions H.
+    clear H; rewrite map_length in H1.
+    rewrite seq_length in H1.
+    split.
+      gen Xs; induction n; destruct Xs; intros; try discriminate; simpl.
+        auto.
+      simpl.
+    un
 End Delta.
 
 Module Sound2 := Mk2(Delta).
