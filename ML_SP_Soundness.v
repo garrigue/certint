@@ -902,10 +902,7 @@ Proof.
       rewrite* (fresh_subst _ _ _ H2).
     rewrite DS; apply (fresh_disjoint (sch_arity M)).
     unfold sch_fv in H. auto.
-   unfold sch_fv in H.
-   apply* fresh_union_l.
-   rewrite typ_fv_typ_fvars.
-   apply* disjoint_fresh. apply* fresh_resize. disjoint_solve.
+   unfold sch_fv in H. auto*.
   unfold types.
   split. unfold typ_fvars; rewrite map_length; apply* fresh_length.
   clear. induction Ys; simpl; intuition.

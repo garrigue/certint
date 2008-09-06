@@ -529,22 +529,24 @@ Proof.
   rewrite IHT1; rewrite* IHT2.
 Qed.
 
-Lemma typ_subst_nth : forall n S Xs Us,
+Lemma typ_subst_nth : forall S1 n S Xs Us,
   fresh (dom S) (length Xs) Xs ->
   types (length Xs) Us ->
   nth n Us typ_def =
-  typ_subst (combine Xs Us & S) (typ_open_vars (typ_bvar n) Xs).
+  typ_subst (S1 & combine Xs Us & S) (typ_open_vars (typ_bvar n) Xs).
 Proof.
-  induction n; intros;
-    destruct H0; destruct Xs; destruct Us; try discriminate; simpls; auto.
+  induction n; intros; destruct H0; destruct Xs; destruct Us;
+    rewrite concat_assoc; simpls; try discriminate; auto.
     assert (Bv: binds v t ((v, t) :: combine Xs Us)).
       unfold binds; simpl.
       destruct* (eq_var_dec v v).
-    rewrite* (binds_concat_fresh S Bv).
+    destruct H; assert (v # S) by auto.
+    rewrite* (binds_prepend S1 (binds_concat_fresh S Bv H3)).
   destruct H.
   unfold typ_open_vars in *; simpl in *.
   rewrite* (IHn (S ++ (v,t)::nil) Xs).
-    unfold concat. rewrite* app_ass.
+      fold (((v,t)::nil) & S).
+      repeat rewrite <- concat_assoc. simpl*.
     fold (((v,t)::nil) & S).
     rewrite* dom_concat.
   split. inversion* H0.
@@ -570,20 +572,74 @@ Proof.
   auto*.
 Qed.
 
+Lemma dom_combine : forall (A:Set) Xs (As:list A),
+  length Xs = length As -> dom (combine Xs As) = mkset Xs.
+Proof.
+  induction Xs; destruct As; simpl; intros; try discriminate.
+    auto.
+  rewrite* IHXs.
+Qed.
+
+Lemma dom_kinds_open_vars : forall Xs Ks,
+  length Ks = length Xs ->
+  dom (kinds_open_vars Ks Xs) = mkset Xs.
+Proof.
+  intros. unfold kinds_open_vars; rewrite* dom_combine.
+  unfold kinds_open, typ_fvars; repeat rewrite* map_length.
+Qed.
+
+Lemma get_none_notin : forall (A : Set) x (S : Env.env A),
+  get x S = None -> x # S.
+Proof.
+  induction S; intro; simpl; auto*.
+  destruct* a.
+  simpl in H. destruct* (eq_var_dec x v).
+    discriminate.
+  intro. destruct* (proj1 (in_union _ _ _) H0).
+  elim n; apply (proj1 (in_singleton _ _) H1).
+Qed.
+
+Lemma typ_subst_intro0 : forall S Xs Us T, 
+  fresh (typ_fv T) (length Xs) Xs -> 
+  types (length Xs) Us ->
+  env_prop type S ->
+  typ_open (typ_subst S T) Us =
+  typ_subst (S & combine Xs Us) (typ_open_vars T Xs).
+Proof.
+  induction T; simpls; intros.
+      rewrite <- (concat_empty (combine Xs Us)).
+      rewrite <- concat_assoc.
+      apply* typ_subst_nth.
+    case_eq (get v S); intros.
+      rewrite* (binds_concat_fresh (combine Xs Us) H2).
+        rewrite* <- typ_open_type.
+        apply* (H1 _ _ H2).
+      rewrite* dom_combine.
+      destruct* (fresh_disjoint _ _ _ H v).
+      rewrite* (proj1 H0).
+    rewrite* get_notin_dom.
+    rewrite dom_concat.
+    rewrite* dom_combine.
+      destruct* (fresh_disjoint _ _ _ H v).
+      use (get_none_notin _ H2).
+    rewrite* (proj1 H0).
+  rewrite* IHT1. rewrite* IHT2.
+Qed.
+
 Lemma typ_subst_intro : forall Xs Us T, 
-  fresh (typ_fv T \u typ_fv_list Us) (length Xs) Xs -> 
+  fresh (typ_fv T) (length Xs) Xs -> 
   types (length Xs) Us ->
   (typ_open T Us) = typ_subst (combine Xs Us) (typ_open_vars T Xs).
 Proof.
-  induction T; simpls; intros.
-    rewrite <- (concat_empty (combine Xs Us)).
-    apply* typ_subst_nth.
-    rewrite* get_notin_dom.
-    destruct (fresh_union_r _ _ _ _ H).
-    intro; elim (fresh_rev _ _ H1 (x:=v)). auto.
-    eapply in_dom_combine. apply H3.
-  rewrite* IHT1.
-  rewrite* IHT2.
+  intros.
+  rewrite (app_nil_end (combine Xs Us)).
+  fold (empty(A:=typ)).
+  pattern T at 1.
+  rewrite <- (typ_subst_fresh empty T).
+    apply* (typ_subst_intro0 (S:=empty) Xs T (Us:=Us) H).
+    intro; intros.
+    elim (binds_empty H1).
+  simpl; intro; auto.
 Qed.
 
 (** Types are stable by type substitution *)
@@ -965,39 +1021,12 @@ Proof.
   apply* (IHXs _ _ _ _ _ (proj2 H) H0 H1).
 Qed.
 
-Lemma get_none_notin : forall (A : Set) x (S : Env.env A),
-  get x S = None -> x # S.
-Proof.
-  induction S; intro; simpl; auto*.
-  destruct* a.
-  simpl in H. destruct* (eq_var_dec x v).
-    discriminate.
-  intro. destruct* (proj1 (in_union _ _ _) H0).
-  elim n; apply (proj1 (in_singleton _ _) H1).
-Qed.
-
 Lemma map_get_none : forall (A : Set) (f : A -> A) x E,
   get x E = None -> get x (map f E) = None.
 Proof.
   induction E; simpl; intros; auto*.
   destruct a. simpl. destruct* (eq_var_dec x v).
     discriminate.
-Qed.
-
-Lemma dom_combine : forall (A:Set) Xs (As:list A),
-  length Xs = length As -> dom (combine Xs As) = mkset Xs.
-Proof.
-  induction Xs; destruct As; simpl; intros; try discriminate.
-    auto.
-  rewrite* IHXs.
-Qed.
-
-Lemma dom_kinds_open_vars : forall Xs Ks,
-  length Ks = length Xs ->
-  dom (kinds_open_vars Ks Xs) = mkset Xs.
-Proof.
-  intros. unfold kinds_open_vars; rewrite* dom_combine.
-  unfold kinds_open, typ_fvars; repeat rewrite* map_length.
 Qed.
 
 Lemma in_mkset : forall x Xs,
