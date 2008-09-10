@@ -1128,7 +1128,6 @@ Proof.
 Qed.
 
 Lemma kind_subst_compose : forall S1 S2 k,
-  disjoint (dom S1) (dom S2) ->
   kind_subst (compose S1 S2) k = kind_subst S1 (kind_subst S2 k).
 Proof.
   intros; symmetry; apply kind_subst_combine.
