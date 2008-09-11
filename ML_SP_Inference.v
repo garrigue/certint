@@ -69,6 +69,25 @@ Import Judge.
 Module Body := Unify.Mk2(Cstr2).
 Import Body.
 
+Definition moregen S0 S :=
+  exists S1, forall T, typ_subst S T = typ_subst S1 (typ_subst S0 T).
+
+Lemma extends_moregen : forall S S0,
+  extends S S0 -> moregen S0 S.
+Proof.
+  intros.
+  exists* S.
+Qed.
+
+Lemma moregen_extends : forall S S0,
+  moregen S0 S -> is_subst S0 -> extends S S0.
+Proof.
+  intros; intro.
+  destruct H as [S1 Heq].
+  rewrite Heq.
+  rewrite* typ_subst_idem.
+Qed.
+
 Definition unify K T1 T2 S :=
   unify (1 + size_pairs S K ((T1,T2)::nil)) ((T1,T2)::nil) K S.
 
@@ -1715,82 +1734,6 @@ Proof.
   rewrite <- AryM. rewrite* (fresh_length _ _ _ Fr).
 Qed.
 
-Definition moregen S0 S :=
-  exists S1, ok S1 /\
-    forall T, typ_subst S T = typ_subst S1 (typ_subst S0 T).
-
-Lemma extends_moregen : forall S S0,
-  extends S S0 -> ok S -> moregen S0 S.
-Proof.
-  intros.
-  exists S. split*.
-Qed.
-
-Lemma get_none_remove_env : forall (A:Set) x y (E:env A),
-  get x E = None -> get x (remove_env E y) = None.
-Proof.
-  induction E; simpl; intros. auto.
-  destruct a.
-  destruct (x == v). discriminate.
-  destruct (y == v). auto.
-  simpl. destruct* (x == v).
-Qed.
-
-Lemma moregen_extends : forall S S0,
-  moregen S0 S -> ok S -> ok S0 -> is_subst S0 ->
-  exists S1, ok S1 /\
-    (forall T, typ_subst S1 (typ_subst S1 T) = T) /\
-    extends (compose S S1) S0.
-Proof.
-  introv M OkS OkS0 HS0.
-  destruct M as [S1 [Ok Hext]].
-  gen S1 S0; induction OkS; intros.
-    gen S1; induction OkS0; intros.
-      exists (empty(A:=typ)).
-      split*.  split. induction T; simpl; congruence.
-      intro. repeat rewrite typ_subst_compose.
-      induction T; simpl; congruence.
-    use (Hext (typ_fvar x)).
-    simpl in H0. destruct* (x == x).
-    clear e.
-    destruct a; try discriminate.
-    assert (ok (E & x ~ typ_fvar v)) by auto.
-    assert (is_subst E).
-      intro; intros. use (binds_concat_ok _ H2 H1).
-      use (HS0 _ _ H3).
-      simpl in H4. disjoint_solve.
-    destruct* (IHOkS0 H2 (remove_env S1 v)) as [S2 Hext2].
-      induction T. auto.
-        simpl.
-        case_eq (get v0 E); intros.
-          use (Hext (typ_fvar v0)).
-          simpl in H4.
-          destruct (v0 == x).
-            subst. elim (binds_fresh H3 H).
-          rewrite H3 in H4.
-          destruct t; try discriminate.
-          destruct (v1 == v).
-            subst.
-            rewrite <- H0 in H4.
-            inversions H4.
-            elim (binds_fresh H3 H).
-          simpl. simpl in H4.
-          case_rewrite (get v1 S1) R1.
-            rewrite* (binds_remove_env R1 n0).
-          rewrite* (get_none_remove_env _ v _ R1).
-        simpl.
-        case_eq (get v0 (remove_env S1 v)); intros.
-        destruct (v0 == x).
-          subst.
-          use (Hext (typ_fvar v)). simpl in H5.
-          destruct (v == x).
-            subst.
-            simpl in H5.
-            rewrite (binds_orig_remove_env _ Ok H4) in H5. auto.
-          
-
-          
-      
 
 Definition principality S0 K0 S K E t T h :=
   is_subst S0 -> kenv_ok K0 -> disjoint (dom S0) (dom K0) ->
@@ -1801,8 +1744,9 @@ Definition principality S0 K0 S K E t T h :=
   exists K', exists S',
     typinf K0 E t T S0 h = Some (K', S') /\
     exists S'',
-      dom S'' << fvs S' K' E T /\ extends S'' S' /\
-      well_subst (map (kind_subst S') K') K S''.
+      dom S'' << S.diff (fvs S' K' E T) (fvs S0 K0 E T) /\
+      extends (S & S'') S' /\
+      well_subst (map (kind_subst S') K') K (S & S'').
 
 Theorem typinf_principal : forall S0 K0 S K E t T h,
   principality S0 K0 S K E t T h.
@@ -1852,7 +1796,64 @@ Proof.
       use (fv_in_spec sch_fv B).
       destruct (S.union_1 Hy); auto with sets.
     apply* well_subst_concat. subst*.
-  
+  destruct* (unify_kinds_ok _ _ H3).
+    rewrite dom_concat.
+    rewrite* dom_kinds_open_vars.
+    disjoint_solve.
+  destruct H8.
+  exists (combine Xs Us).
+  split.
+    rewrite dom_combine.
+    intros y Hy.
+    apply S.diff_3.
+Lemma unify_keep_fv : forall K S E T h pairs K0 S0,
+  Body.unify h pairs K0 S0 = Some (K, S) ->
+  fvs S0 K0 E T << fvs S K E T.
+Proof.
+  induction h; intros. discriminate.
+  simpl in H.
+  destruct pairs. inversions H; apply subset_refl.
+  destruct p.
+  case_rewrite (typ_subst S0 t) R1; case_rewrite (typ_subst S0 t0) R2.
+        destruct* (n === n0).
+        discriminate.
+       unfold unify_nv in H.
+       simpl in H. case_rewrite (S.mem v {}) R3.
+       case_rewrite (get_kind v K0) R4.
+       intros y Hy. apply* (IHh _ _ _ H).
+       unfold compose.
+       clear -Hy R4; unfold fvs in *.
+       rewrite dom_concat. rewrite dom_remove_env.
+       rewrite dom_map. rewrite fv_in_concat.
+       simpl dom.
+       destruct (S.union_1 Hy); clear Hy; auto with sets.
+       apply S.union_2.
+       destruct (S.union_1 H); clear H; auto with sets.
+       apply S.union_2.
+       destruct (y == v).
+         subst; auto 6 with sets.
+       union_solve y.
+Lemma fv_in_typ_subst : forall v T S,
+  fv_in typ_fv S << fv_in typ_fv (map (typ_subst (v ~ T)) S) \u {{v}}.
+Proof.
+  induction S; simpl; intros y Hy.  elim (in_empty Hy).
+  destruct a. simpl.
+  destruct (S.union_1 Hy); clear Hy.
+Lemma typ_fv_subst_keep : forall v T1 T,
+  typ_fv T << typ_fv (typ_subst (v ~ T1) T) \u {{v}}.
+Proof.
+  induction T; simpl; intros y Hy. elim (in_empty Hy).
+    destruct (v0 == v). subst. auto with sets.
+    simpl. auto with sets.
+  destruct (S.union_1 Hy); [use (IHT1 _ H) | use (IHT2 _ H)];
+    destruct (S.union_1 H0); auto with sets.
+Qed.
+    destruct (S.union_1 (typ_fv_subst_keep v T _ H)); auto with sets.
+  destruct (S.union_1 (IHS _ H)); auto with sets.
+Qed.
+         use (fv_in_typ_subst v (typ_bvar n) _ H).
+         destruct (S.union_1 H0); auto 6 with sets.
+        rewrite
     
 Search S.Subset.    
 
@@ -1863,10 +1864,6 @@ Search S.Subset.
     simpl.
     case_re
   
-  destruct* (unify_kinds_ok _ _ H3).
-    rewrite dom_concat.
-    rewrite* dom_kinds_open_vars.
-    disjoint_solve.
   
      
      
