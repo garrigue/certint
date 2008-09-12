@@ -1900,7 +1900,80 @@ Proof.
           unfold fvs, env_fv in H9.
           unfold env_fv; simpl.
           apply S.union_2.
-          union_solve y; auto 6 with sets.
+
+Fixpoint fv_pair (TP:typ*typ) {struct TP} :=
+  typ_fv (fst TP) \u typ_fv (snd TP).
+
+Lemma unify_keep_fv : forall K S E T h pairs K0 S0,
+  Body.unify h pairs K0 S0 = Some (K, S) ->
+  fvs S0 K0 E T \u accum fv_pair S.union S.empty pairs << fvs S K E T.
+Proof.
+  induction h; intros. discriminate.
+  simpl in H.
+  destruct pairs. inversions H. simpl.
+    rewrite union_empty_r. apply subset_refl.
+  destruct p.
+  case_rewrite (typ_subst S0 t) R1; case_rewrite (typ_subst S0 t0) R2.
+        destruct* (n === n0). simpl.
+        discriminate.
+       unfold unify_nv in H.
+       simpl in H. case_rewrite (S.mem v {}) R3.
+       case_rewrite (get_kind v K0) R4.
+       intros y Hy. apply* (IHh _ _ _ H).
+       unfold compose.
+       clear -Hy R4; unfold fvs in *.
+       rewrite dom_concat. rewrite dom_remove_env.
+       rewrite dom_map. rewrite fv_in_concat.
+       simpl dom.
+       destruct (S.union_1 Hy); clear Hy; auto with sets.
+       apply S.union_2.
+       destruct (S.union_1 H); clear H; auto with sets.
+       apply S.union_2.
+       destruct (y == v).
+         subst; auto 6 with sets.
+       union_solve y.
+Lemma fv_in_typ_subst : forall v T S,
+  fv_in typ_fv S << fv_in typ_fv (map (typ_subst (v ~ T)) S) \u {{v}}.
+Proof.
+  induction S; simpl; intros y Hy.  elim (in_empty Hy).
+  destruct a. simpl.
+  destruct (S.union_1 Hy); clear Hy.
+Lemma typ_fv_subst_keep : forall v T1 T,
+  typ_fv T << typ_fv (typ_subst (v ~ T1) T) \u {{v}}.
+Proof.
+  induction T; simpl; intros y Hy. elim (in_empty Hy).
+    destruct (v0 == v). subst. auto with sets.
+    simpl. auto with sets.
+  destruct (S.union_1 Hy); [use (IHT1 _ H) | use (IHT2 _ H)];
+    destruct (S.union_1 H0); auto with sets.
+Qed.
+    destruct (S.union_1 (typ_fv_subst_keep v T _ H)); auto with sets.
+  destruct (S.union_1 (IHS _ H)); auto with sets.
+Qed.
+         use (fv_in_typ_subst v (typ_bvar n) _ H).
+         destruct (S.union_1 H0); auto 6 with sets.
+        rewrite
+    
+Search S.Subset.    
+
+
+    inversions 
+    rewrite <- kind_subst_compose.
+    destruct k as [[kc kv kr kh]|]; try apply wk_any.
+    simpl.
+    case_re
+  
+  
+
+
+
+Lemma typ_subst_type' : forall S T,
+  type (typ_subst S T) -> type T.
+Proof.
+  induction T; simpl; intros; auto.
+  inversions H. auto.
+Qed.
+
         
 End Mk2.
 End MkInfer.
