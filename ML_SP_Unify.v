@@ -741,7 +741,6 @@ Definition unify_kinds_spec K S :=
   is_subst S -> ok K ->
   disjoint (dom S) (dom K) ->
   ok K' /\ disjoint (dom S') (dom K') /\
-  dom K \u dom S << dom K' \u dom S' /\
   well_subst (map (kind_subst S) K) (map (kind_subst S') K') S'.
 
 Lemma unify_kinds_nv : forall h pairs K S t t0 v T h' pairs',
@@ -760,22 +759,17 @@ Proof.
   case_rewrite (get_kind v K) R4.
   destruct* (IHh _ _ _ H); clear IHh.
   intuition.
-    intros x Hx; apply H1.
-    rewrite* dom_remove_env.
-    unfold compose. rewrite dom_concat. rewrite dom_map. simpl.
-    destruct (S.union_1 Hx); auto with sets.
-    destruct (x == v); subst; auto with sets.
   assert (His : is_subst (compose (v ~ T) S)) by auto*.
-  clear H0 H1 H2 R1 R2 R3 Dis.
+  clear H0 H2 R1 R2 R3 Dis.
   intro; intros.
-  unfold well_subst in H4.
+  unfold well_subst in H3.
   destruct (binds_map_inv _ _ H0) as [k0 [Hk0 HB]].
   subst k.
   destruct (Z == v).
     subst.
     rewrite (binds_get_kind HB) in R4. subst k0. apply wk_any.
   use (binds_map (kind_subst (compose (v ~ T) S)) (binds_remove_env HB n)).
-  use (H4 _ _ H1).
+  use (H3 _ _ H1).
   rewrite (@kind_subst_combine S') in H2;
     fold (extends S' (compose (v ~ T) S)); auto*.
   rewrite <- (@kind_subst_combine S' S' S) in H2;
@@ -1004,16 +998,6 @@ Proof.
     destruct* (Dis x).
     right; apply* notin_union_l.
   intuition.
-    intros x Hx; apply H1.
-    unfold compose.
-    repeat rewrite dom_concat.
-    rewrite dom_map.
-    rewrite* dom_remove_env.
-    rewrite* dom_remove_env.
-    simpl.
-    destruct (S.union_1 Hx); clear Hx; auto with sets.
-    destruct (x == v0); subst; auto with sets.
-    destruct (x == v); subst; auto 7 with sets.
   subst; apply* well_subst_unify.
   apply* typ_subst_res_fresh'.
 Qed.
@@ -1027,7 +1011,7 @@ Proof.
   simpl in H.
   destruct pairs.
     inversions H; clear H.
-    intuition. apply subset_refl.
+    intuition.
     intro; intros.
     destruct (binds_map_inv _ _ H) as [k' [Ek' Bk']]; subst k.
     rewrite* kind_subst_idem.
