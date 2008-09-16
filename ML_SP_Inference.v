@@ -2268,22 +2268,44 @@ Proof.
   forward~ (H3 Xs); clear H3; intros Typ1.
   assert (Hcb: x1 ~ sch_open_vars M Xs =
                combine (x1::nil) (sch_open_vars M Xs :: nil)) by simpl*.
+  assert (HSx1:
+    dom (S & x1 ~ sch_open_vars M Xs) << fvs S0 K0 E (typ_fvar x1) (T :: Ts)).
+    rewrite dom_concat; unfold fvs; simpl.
+    intros y Hy; union_solve y.
+    use (HS _ H). unfold fvs in H0; simpl in H0; union_solve y.
+    elim (in_empty H0).
+  assert (Hsub: forall t, typ_fv t << fvs S0 K0 E T Ts ->
+                  typ_subst (S & x1 ~ sch_open_vars M Xs) t = typ_subst S t).
+    intros.
+    apply typ_subst_concat_fresh.
+    simpl. intro y; destruct* (y == x1).
+  assert (Hext': extends (S & x1 ~ sch_open_vars M Xs) S0).
+    rewrite Hcb.
+    apply* (@extends_concat S0 S (fvs S0 K0 E T Ts) 1).
+    intros y Hy; unfold fvs; auto with sets.
   destruct* (IHh (T::Ts) S0 K0 (S&x1~sch_open_vars M Xs) K E t1 (typ_fvar x1)).
-       rewrite dom_concat; unfold fvs; simpl.
-       intros y Hy; union_solve y.
-       use (HS _ H). unfold fvs in H0; simpl in H0; union_solve y.
-       elim (in_empty H0).
-      rewrite Hcb.
-      apply* (@extends_concat S0 S (fvs S0 K0 E T Ts) 1).
-        intros y Hy; unfold fvs; auto with sets.
-      intros.
-      apply typ_subst_concat_fresh.
-      simpl. intro y; destruct* (y == x1).
      rewrite Hcb.
      apply* well_subst_concat.
-     rewrite* (map_compose (kind_subst S0) (kind_subst S0)).
-SearchRewrite (map _ _).
-     rewrite 
+       rewrite* (map_compose (kind_subst S0) (kind_subst S0)).
+     intros.
+     apply* Hsub.
+     assert (fvs S0 (map (kind_subst S0) K0) E T Ts << fvs S0 K0 E T Ts).
+       unfold fvs; rewrite dom_map; intros y Hy.
+       union_solve y.
+Search S.Subset.
+Lemma fv_in_kind_subst : forall S K,
+  fv_in kind_fv (map (kind_subst S) K) << fv_in kind_fv K \u fv_in typ_fv S.
+Proof.
+  induction K; simpl; intros y Hy. elim (in_empty Hy).
+  destruct a. simpl in Hy.
+  destruct (S.union_1 Hy); clear Hy.
+    destruct (S.union_1 (kind_fv_subst S _ H)); auto with sets.
+  destruct (S.union_1 (IHK _ H)); auto with sets.
+Qed.
+       clear -H0. apply S.union_2.
+       destruct (S.union_1 (fv_in_kind_subst S0 K0 H0)); auto with sets.
+     apply* subset_trans.
+    
 
 Qed.
 
