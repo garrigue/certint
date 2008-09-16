@@ -2340,8 +2340,36 @@ Proof.
   set (M0 := sch_generalize l (typ_subst S' (typ_fvar x1)) l0).
   destruct* (typinf_sound _ _ _ HI).
     apply* (ok_map_inv (sch_subst S)).
+  destruct* (split_env_ok _ H).
+  assert (Oke: kenv_ok (e0 & e)).
+    split*. intro; intuition.
+    use (proj2 (kenv_ok_map H9 H7)).
+  clear H4.
+  assert (Oke1: kenv_ok (e2 & e1)).
+    destruct (kenv_ok_concat_inv _ _ Oke).
+    destruct* (split_env_ok _ H0).
+    split*. intro; intuition. apply* (proj2 Oke).
+  assert (HM0: scheme M0).
+    unfold M0; apply* scheme_generalize.
+    destruct (kenv_ok_concat_inv _ _ Oke1).
+    use (split_combine e2).
+    rewrite H1 in H8.
+    rewrite <- H8 in H4; destruct H4.
+    apply* env_prop_list_forall.
   destruct* (IHh Ts S' e0 (S & x1 ~ MXs) K (E & x ~ M0) (t2 ^ x) T)
     as [K'' [S'' [HI' [Hext'' [Hfvs'' H''']]]]].
+         destruct* (kenv_ok_concat_inv _ _ Oke).
+        intuition.
+        intro y; destruct (H10 y). auto.
+        poses Hs (env_incl_subset_dom H12).
+        rewrite dom_map in Hs.
+        use (notin_subset Hs H13).
+       
+       intuition.
+       eapply subset_trans. apply HSx1.
+       eapply subset_trans. apply Hfvs'.
+       intuition.
+       
 
 Qed.
 
