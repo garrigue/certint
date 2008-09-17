@@ -403,7 +403,7 @@ Qed.
 
 Ltac union_solve x :=
   match goal with
-  | H: x \in _ |- _ =>
+  | H: x \in _ \u _ |- _ =>
     destruct (S.union_1 H); clear H; auto with sets; try union_solve x
   end.
 

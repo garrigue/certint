@@ -290,27 +290,27 @@ Definition has_scheme gc K E t M := forall Vs,
 (** Type schemes of terms can be instanciated *)
 
 Lemma kind_subst_open_combine : forall Xs Vs Ks,
-  fresh (typ_fv_list Vs \u kind_fv_list Ks) (length Ks) Xs ->
+  fresh (kind_fv_list Ks) (length Xs) Xs ->
   types (length Xs) Vs ->
   forall k : kind,
     In k Ks ->
     kind_open k Vs = kind_subst (combine Xs Vs) (kind_open k (typ_fvars Xs)).
 Proof.
-  introv Fr TV. intros.
-  destruct TV.
+  introv Fr. intros.
+  destruct H.
   rewrite* kind_subst_open.
     rewrite* kind_subst_fresh.
       rewrite* (fresh_subst {}).
-      rewrite* <- H0.
+      rewrite* <- H.
     rewrite* dom_combine.
-    apply (fresh_disjoint (length Ks)).
+    apply (fresh_disjoint (length Xs)).
     apply* (kind_fv_fresh k Ks).
   apply* list_forall_env_prop.
 Qed.
 
 Lemma well_subst_open_vars : forall (K:kenv) Vs (Ks:list kind) Xs,
   fresh (fv_in kind_fv K) (length Ks) Xs ->
-  fresh (typ_fv_list Vs \u kind_fv_list Ks) (length Ks) Xs ->
+  fresh (kind_fv_list Ks) (length Xs) Xs ->
   types (length Xs) Vs ->
   For_all2 (well_kinded K) (kinds_open Ks Vs) Vs ->
   well_subst (K & kinds_open_vars Ks Xs) K (combine Xs Vs).

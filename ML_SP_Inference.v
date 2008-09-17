@@ -1949,7 +1949,7 @@ Qed.
 
 Definition moregen_scheme K M0 M :=
   forall Xs Ys,
-    fresh (dom K \u fv_in kind_fv K) (sch_arity M0) Xs ->
+    fresh (dom K \u fv_in kind_fv K \u sch_fv M0) (sch_arity M0) Xs ->
     fresh (dom K) (sch_arity M) Ys ->
     exists Ts,
       sch_open M0 Ts = sch_open_vars M Ys /\
@@ -1974,10 +1974,76 @@ Proof.
     use (dom_combine _ _ H2).
     rewrite kind_subst_fresh.
       rewrite typ_subst_fresh.
-        destruct k. eapply wk_kind.
-        apply binds_concat_fresh. apply B.
-        rewrite* dom_kinds_open_vars.
-    
+        destruct k.
+          eapply wk_kind.
+            apply binds_concat_fresh. apply B.
+            rewrite* dom_kinds_open_vars.
+            use (binds_dom B).
+            destruct* (fresh_disjoint _ _ _ H0 Z).
+          apply entails_refl.
+        apply wk_any.
+      rewrite H3.
+      rewrite dom_kinds_open_vars in Fr; auto.
+      intro y; destruct* (y == Z).
+    rewrite H3.
+    apply disjoint_comm.
+    apply* disjoint_subset.
+    apply disjoint_comm.
+    apply* (fresh_disjoint (sch_arity M)).
+  destruct k; try apply wk_any.
+  unfold kinds_open_vars in B0.
+Lemma binds_subst_dom : forall (A:Set) x (a:A) Xs Ys Ks L,
+  fresh L (length Xs) Ys ->
+  binds x a (combine Xs Ks) ->
+  exists y,
+    binds x (typ_fvar y) (combine Xs (typ_fvars Ys)) /\
+    binds y a (combine Ys Ks).
+Proof.
+  induction Xs; destruct Ys; intros; try discriminate.
+    contradiction.
+  destruct Ks. discriminate.
+  unfold binds in *; simpl in *.
+  destruct (x == a0).
+    esplit; split*. destruct* (v == v).
+  destruct* (IHXs Ys Ks (L \u {{v}})) as [y [Bx By]].
+  esplit; split*.
+  destruct* (y == v).
+  subst.
+  destruct (fresh_disjoint _ _ _ (proj2 H) v).
+    elim H1.
+    use (binds_combine _ _ Bx).
+    unfold typ_fvars in H2.
+    destruct (proj1 (in_map_iff _ _ _) H2).
+    destruct H3. inversions H3.
+    apply* in_mkset.
+  notin_contradiction.
+Qed.
+  rewrite (fresh_length _ _ _ H) in H0.
+  destruct (binds_subst_dom _ _ _ _ H0 B0) as [Y [BZ BY]].
+  simpl typ_subst. rewrite BZ.
+  use (binds_map (kind_subst (combine Xs (typ_fvars Ys))) BY).
+  rewrite map_combine in H1.
+Lemma kinds_subst_open_combine : forall Xs Us Ks,
+  fresh (typ_fv_list Us \u kind_fv_list Ks) (length Ks) Xs ->
+  types (length Xs) Us ->
+  List.map (kind_subst (combine Xs Us)) (kinds_open Ks (typ_fvars Xs)) =
+  kinds_open Ks Us.
+Proof.
+  intros.
+  set (Ks' := Ks).
+  assert (incl Ks' Ks) by auto.
+  clearbody Ks'.
+  induction Ks'; intros. auto.
+  simpl in *.
+  rewrite* IHKs'.
+  rewrite* <- (@kind_subst_open_combine Xs Us Ks).
+Qed.
+   rewrite kinds_subst_open_combine in H1.
+       simpl in *. apply* wk_kind. apply entails_refl.
+     unfold sch_fv, sch_arity in H; auto.
+     
+
+Qed.    
 
 Definition principality S0 K0 E0 S K E t T Ts h :=
   is_subst S0 -> env_prop type S0 ->
