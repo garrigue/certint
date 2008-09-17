@@ -1947,23 +1947,54 @@ Proof.
   apply* IHh.
 Qed.
 
-Definition principality S0 K0 S K E t T Ts h :=
+Definition moregen_scheme K M0 M :=
+  forall Xs Ys,
+    fresh (dom K \u fv_in kind_fv K) (sch_arity M0) Xs ->
+    fresh (dom K) (sch_arity M) Ys ->
+    exists Ts,
+      sch_open M0 Ts = sch_open_vars M Ys /\
+      well_subst (K & kinds_open_vars (sch_kinds M0) Xs)
+        (K & kinds_open_vars (sch_kinds M) Ys) (combine Xs Ts).
+
+Definition moregen_env K E0 E :=
+  forall x M, binds x M E ->
+    exists M0, binds x M0 E0 /\ moregen_scheme K M0 M.
+
+Lemma moregen_scheme_refl : forall K M, moregen_scheme K M M.
+Proof.
+  intros; intro; intros.
+  exists (typ_fvars Ys).
+  split*.
+  intro; intros.
+  binds_cases H1.
+    use (fv_in_spec kind_fv B).
+    assert (length Xs = length (typ_fvars Ys)).
+      rewrite <- (fresh_length _ _ _ H).
+      unfold typ_fvars; rewrite* map_length.
+    use (dom_combine _ _ H2).
+    rewrite kind_subst_fresh.
+      rewrite typ_subst_fresh.
+        destruct k. eapply wk_kind.
+        apply binds_concat_fresh. apply B.
+        rewrite* dom_kinds_open_vars.
+    
+
+Definition principality S0 K0 E0 S K E t T Ts h :=
   is_subst S0 -> env_prop type S0 ->
-  kenv_ok K0 -> disjoint (dom S0) (dom K0) -> env_prop scheme E ->
-  env_prop type S -> dom S << fvs S0 K0 E T Ts -> extends S S0 ->
+  kenv_ok K0 -> disjoint (dom S0) (dom K0) ->
+  env_prop scheme E0 -> env_prop scheme E ->
+  moregen_env K (map (sch_subst S) E0) E ->
+  env_prop type S -> dom S << fvs S0 K0 E0 T Ts -> extends S S0 ->
   well_subst (map (kind_subst S0) K0) K S ->
-  K; map (sch_subst S) E |(false,GcAny)|= t ~: typ_subst S T ->
+  K; E |(false,GcAny)|= t ~: typ_subst S T ->
   trm_depth t < h ->
   exists K', exists S',
-    typinf K0 E t T Ts S0 h = Some (K', S') /\
+    typinf K0 E0 t T Ts S0 h = Some (K', S') /\
     extends S' S0 /\ fvs S0 K0 E T Ts << fvs S' K' E T Ts /\
-    exists S'',
-      dom S'' << S.diff (fvs S' K' E T Ts) (fvs S0 K0 E T Ts) /\
-      extends (S & S'') S' /\
-      well_subst (map (kind_subst S') K') K (S & S'').
+    extends S S' /\ well_subst (map (kind_subst S') K') K S.
 
-Lemma principal_var : forall h Ts S0 K0 S K E x T,
-  principality S0 K0 S K E (trm_fvar x) T Ts (Datatypes.S h).
+Lemma principal_var : forall h Ts S0 K0 E0 S K E x T,
+  principality S0 K0 E0 S K E (trm_fvar x) T Ts (Datatypes.S h).
 Proof.
   intros; intros HS0 HTS0 HK0 Dis HE HTS HS Hext WS Typ Hh.
   inversions Typ; clear Typ; try discriminate.
@@ -1974,7 +2005,7 @@ Proof.
   assert (AryM: sch_arity M0 = length Us).
     destruct H6. subst. rewrite sch_arity_subst in H.
     apply (proj1 H).
-  assert (Hsub: forall t, typ_fv t << fvs S0 K0 E T Ts ->
+  assert (Hsub: forall S t, typ_fv t << fvs S0 K0 E T Ts ->
                   typ_subst (S & combine Xs Us) t = typ_subst S t).
     rewrite AryM in Fr.
     intros.
@@ -1985,7 +2016,7 @@ Proof.
     rewrite* dom_kinds_open_vars.
     apply disjoint_comm. unfold fvs in Fr.
     apply* (fresh_disjoint (sch_arity M0)).
-  assert (Hext': extends (S & combine Xs Us) S0).
+  (* assert (Hext': extends (S & combine Xs Us) S0).
     clear -Fr Hext Hsub.
     apply* extends_concat. unfold fvs; intros x Hx; auto with sets.
   assert (HU: unifies (S & combine Xs Us) ((sch_open_vars M0 Xs, T) :: nil)).
@@ -1996,13 +2027,13 @@ Proof.
     apply* unifies_open.
     intros y Hy.
     use (fv_in_spec sch_fv B).
-    destruct (S.union_1 Hy); unfold fvs; simpl; auto with sets.
+    destruct (S.union_1 Hy); unfold fvs; simpl; auto with sets. *)
   case_eq
     (unify (K0 & kinds_open_vars (sch_kinds M0) Xs) (sch_open_vars M0 Xs) T S0);
     unfold unify; intros.
     destruct p as [K' S']. esplit; esplit. split*.
     unfold fvs in Fr.
-    destruct* (unify_mgu0 (K':=K) (S':=S & combine Xs Us) _ H).
+    destruct* (unify_mgu0 (K':=K) (S':=S) _ H).
       intro; intros.
       destruct (binds_map_inv _ _ H3) as [k1 [Hk1 Bk1]]; clear H3.
       subst.
