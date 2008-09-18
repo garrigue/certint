@@ -212,7 +212,7 @@ Tactic Notation "apply_fresh" "*" constr(T) "as" ident(x) :=
 (* ********************************************************************** *)
 (** ** Automation *)
 
-Hint Constructors type term.
+Hint Constructors type term well_kinded.
 
 Lemma typ_def_fresh : typ_fv typ_def = {}.
 Proof.
@@ -772,7 +772,38 @@ Proof.
   rewrite* kind_subst_open.
 Qed.
 
-(** Properties of wellkindedness *)
+(** Properties of entailment. *)
+
+Lemma entails_refl : forall k, entails k k.
+Proof.
+  intros. split*.
+Qed.
+
+Lemma entails_trans : forall k1 k2 k3,
+  entails k1 k2 -> entails k2 k3 -> entails k1 k3.
+Proof.
+  intros.
+  destruct H; destruct H0.
+  split.
+  apply* (Cstr.entails_trans H H0).
+  intros; auto.
+Qed.
+
+Lemma kind_subst_entails : forall S k k',
+  entails k' k ->
+  entails (ckind_map (typ_subst S) k') (ckind_map (typ_subst S) k).
+Proof.
+  intros.
+  destruct H.
+  destruct k as [kc kr]; destruct k' as [kc' kr'].
+  split; simpl*.
+  intros; simpl in *.
+  destruct (proj1 (in_map_iff _ _ _) H1) as [T' [e i]].
+  rewrite <- e.
+  apply* (in_map (fun XT : var * typ => (fst XT, typ_subst S (snd XT)))).
+Qed.
+
+(** Properties of well-kindedness *)
 
 Lemma well_kinded_extend : forall K K' x T,
   disjoint (dom K) (dom K') ->
@@ -813,6 +844,37 @@ Proof.
   destruct (ok_concat_inv _ _ H).
   disjoint_solve.
   rewrite dom_concat in H1. auto.
+Qed.
+
+(** Well substitutions *)
+
+(* Need to define typ_subst first *)
+Definition well_subst K K' S :=
+  forall Z k,
+    binds Z k K ->
+    well_kinded K' (kind_subst S k) (typ_subst S (typ_fvar Z)).
+
+Lemma well_kinded_subst: forall S K K' k T,
+  well_subst K K' S ->
+  well_kinded K k T ->
+  well_kinded K' (kind_subst S k) (typ_subst S T).
+Proof.
+  intros.
+  induction H0.
+    constructor.
+  generalize (H x _ H0); intro HW.
+  inversions HW.
+  simpl typ_subst.
+  case_eq (get x S); intros; rewrite H2 in H3.
+    subst.
+    simpl. apply* wk_kind.
+    apply* entails_trans.
+    apply* kind_subst_entails.
+  simpl.
+  inversions H3.
+  apply* wk_kind.
+  apply* entails_trans.
+  apply* kind_subst_entails.
 Qed.
 
 (** Properties of constants *)
@@ -877,7 +939,6 @@ Proof.
   destruct (IHl l0); rewrite fold_left_app in H; simpl in H; inversion* H.
   simpl. subst c1; rewrite* H1.
 Qed.
-
 
 
 (* Extra properties *)
@@ -1144,37 +1205,6 @@ Qed.
 
 Hint Resolve types_length.
         
-(** Properties of entailment. *)
-
-Lemma entails_refl : forall k, entails k k.
-Proof.
-  intros. split*.
-Qed.
-
-Lemma entails_trans : forall k1 k2 k3,
-  entails k1 k2 -> entails k2 k3 -> entails k1 k3.
-Proof.
-  intros.
-  destruct H; destruct H0.
-  split.
-  apply* (Cstr.entails_trans H H0).
-  intros; auto.
-Qed.
-
-Lemma kind_subst_entails : forall S k k',
-  entails k' k ->
-  entails (ckind_map (typ_subst S) k') (ckind_map (typ_subst S) k).
-Proof.
-  intros.
-  destruct H.
-  destruct k as [kc kr]; destruct k' as [kc' kr'].
-  split; simpl*.
-  intros; simpl in *.
-  destruct (proj1 (in_map_iff _ _ _) H1) as [T' [e i]].
-  rewrite <- e.
-  apply* (in_map (fun XT : var * typ => (fst XT, typ_subst S (snd XT)))).
-Qed.
-
 (** Schemes are stable by type substitution. *)
 
 Lemma typ_open_other_type : forall Us Vs T,

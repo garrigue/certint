@@ -105,34 +105,6 @@ Proof.
   apply* typing_weaken_kinds.
 Qed.
 
-Definition well_subst K K' S :=
-  forall Z k,
-    binds Z k K ->
-    well_kinded K' (kind_subst S k) (typ_subst S (typ_fvar Z)).
-
-Lemma well_kinded_subst: forall S K K' k T,
-  well_subst K K' S ->
-  well_kinded K k T ->
-  well_kinded K' (kind_subst S k) (typ_subst S T).
-Proof.
-  intros.
-  induction H0.
-    constructor.
-  generalize (H x _ H0); intro HW.
-  inversions HW.
-  simpl typ_subst.
-  case_eq (get x S); intros; rewrite H2 in H3.
-    subst.
-    simpl. apply* wk_kind.
-    apply* entails_trans.
-    apply* kind_subst_entails.
-  simpl.
-  inversions H3.
-  apply* wk_kind.
-  apply* entails_trans.
-  apply* kind_subst_entails.
-Qed.
-
 Lemma proper_instance_subst : forall K K' K'' M Us S,
   env_prop type S ->
   proper_instance (K & K' & K'') M Us ->
