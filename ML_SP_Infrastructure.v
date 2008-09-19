@@ -63,7 +63,7 @@ Fixpoint mkset (l:list var) {struct l} : vars :=
   end.
 
 Lemma fresh_disjoint : forall n Xs L,
-  fresh L n Xs -> disjoint (mkset Xs) L.
+  fresh L n Xs -> disjoint L (mkset Xs).
 Proof.
   induction n; destruct Xs; simpl; intros; auto*.
     intro; auto.
@@ -94,6 +94,16 @@ Ltac disjoint_solve :=
   end.
 
 (* Hint Extern 1 (disjoint _ _) => try solve [disjoint_solve]. *)
+
+Lemma disjoint_fresh : forall n L1 Xs L2,
+  fresh L1 n Xs ->
+  disjoint L2 (mkset Xs) ->
+  fresh L2 n Xs.
+Proof.
+  induction n; destruct Xs; simpl; intros; auto; try discriminate.
+  split. destruct* (H0 v). notin_contradiction.
+  destruct H; apply* IHn. disjoint_solve.
+Qed.
 
 Lemma disjoint_notin : forall s v,
   disjoint s {{v}} -> v \notin s.
