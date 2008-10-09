@@ -1773,9 +1773,6 @@ Proof.
   rewrite <- AryM. rewrite* (fresh_length _ _ _ Fr).
 Qed.
 
-Fixpoint fv_pair (TP:typ*typ) {struct TP} :=
-  typ_fv (fst TP) \u typ_fv (snd TP).
-
 Lemma typ_fv_subst_keep : forall S T,
   typ_fv T << typ_fv (typ_subst S T) \u dom S.
 Proof.
@@ -1849,6 +1846,94 @@ Proof.
   intros y Hy; auto with sets.
 Qed.
 
+Ltac sets_simpl_hyps x :=
+  match goal with
+  | H: _ \in {} |- _ => elim (in_empty H)
+  | H: _ \in {{?y}} |- _ =>
+    puts (proj1 (in_singleton _ _) H); clear H; subst y; try sets_simpl_hyps
+  | H: x \in (S.diff _ _) |- _ =>
+    let H1 := fresh "Hin" in let H2 := fresh "Hn" in
+    poses H1 (S.diff_1 H); poses H2 (S.diff_2 H); clear H; try sets_simpl_hyps
+  | H: x \in (S.inter _ _) |- _ =>
+    let H1 := fresh "Hin" in let H2 := fresh "Hin" in
+    poses H1 (S.inter_1 H); poses H2 (S.inter_2 H); clear H; try sets_simpl_hyps
+  end.
+
+Ltac sets_simpl :=
+  match goal with |- ?x \in _ => try sets_simpl_hyps x end.
+
+Ltac union_solve' x :=
+  try sets_simpl_hyps x;
+  try match goal with
+  | H: x \in _ \u _ |- _ =>
+    destruct (S.union_1 H); clear H; union_solve' x
+  | H: ?L1 << ?L2 |- _ =>
+    match goal with
+    | H': x \in ?L1 |- _ =>
+      let H1 := fresh "Hin" in poses H1 (H _ H'); clear H; union_solve' x
+    end
+  end.
+
+Ltac find_in_goal L :=
+  match goal with |- ?x \in ?E =>
+    match E with context[L] =>
+      match goal with
+      | |- x \in L => assumption
+      | |- _ \in ?L1 \u ?L2 =>
+        try (apply S.union_2; find_in_goal L);
+          apply S.union_3; find_in_goal L
+      | |- _ \in S.diff ?L1 ?L2 =>
+        apply S.diff_3; [find_in_goal L | notin_solve]
+      | |- _ \in S.remove ?y ?L1 =>
+        let H1 := fresh "HE" in
+        apply S.remove_2;
+        [intro HE; rewrite HE in *; solve [auto] | find_in_goal L]
+      end
+    end
+  end.
+
+Ltac find_in_solve x :=
+  match goal with
+  | |- ?y \in _ => puts (S.singleton_2 (refl_equal y)); find_in_goal {{y}}
+  | H: x \in ?L |- _ => find_in_goal L
+  end.
+
+Ltac sets_solve :=
+  match goal with |- ?x \in _ => try union_solve' x; try find_in_solve x end.
+
+Hint Extern 1 (_ \in _) => solve [sets_solve].
+
+Definition typing_fv S K E T :=
+  S.diff (fv_in kind_fv K \u env_fv E \u typ_fv T) (dom S) \u fv_in typ_fv S.
+
+Fixpoint pair_fv (TP:typ*typ) {struct TP} :=
+  typ_fv (fst TP) \u typ_fv (snd TP).
+
+Definition pairs_fv := accum pair_fv S.union S.empty.
+
+Definition unify_fv S K pairs :=
+  S.diff (fv_in kind_fv K \u pairs_fv pairs) (dom S) \u fv_in typ_fv S.
+
+Lemma fv_in_typ_subst' : forall S S0,
+  fv_in typ_fv (map (typ_subst S) S0) <<
+  S.diff (fv_in typ_fv S0) (dom S) \u fv_in typ_fv S.
+Proof.
+  induction S0; intros y Hy; simpl in *; sets_simpl.
+  destruct a. simpl in Hy.
+  sets_solve.
+  use (typ_fv_subst0 _ _ H).
+Qed.
+
+Lemma fv_in_compose : forall S S0,
+  fv_in typ_fv (compose S S0) <<
+  S.diff (fv_in typ_fv S0) (dom S) \u fv_in typ_fv S.
+Proof.
+  intros. unfold compose.
+  rewrite fv_in_concat.
+  intros y Hy; sets_solve.
+  apply* fv_in_typ_subst'.
+Qed.
+
 Lemma unify_keep_fv_nv : forall h pairs K0 S0 K S E T Ts t t0 T1 v,
   unify_nv (Body.unify h pairs) K0 S0 v T1 = Some (K, S) ->
   typ_subst S0 t = T1 -> typ_subst S0 t0 = typ_fvar v ->
@@ -1856,32 +1941,63 @@ Lemma unify_keep_fv_nv : forall h pairs K0 S0 K S E T Ts t t0 T1 v,
   (forall pairs K0 S0,
     Body.unify h pairs K0 S0 = Some (K, S) ->
     is_subst S0 -> ok K0 ->
-    fvs S0 K0 E T Ts << fvs S K E T Ts) ->
-  fvs S0 K0 E T Ts << fvs S K E T Ts.
+    fvs S0 K0 E T Ts << fvs S K E T Ts /\
+    (unify_fv S0 K0 pairs << dom K0 -> unify_fv S K nil << dom K)) ->
+  fvs S0 K0 E T Ts << fvs S K E T Ts /\
+  (unify_fv S0 K0 ((t,t0)::pairs) << dom K0 -> unify_fv S K nil << dom K).
 Proof.
   intros until v; intros HU R1 R2 HS0 HK0 IHh.
   unfold unify_nv in HU.
   simpl in HU. case_rewrite (S.mem v (typ_fv T1)) R3.
   case_rewrite (get_kind v K0) R4.
-  simpl; intros y Hy. apply* (IHh _ _ _ HU).
+  split.
+  (* fvs *)
+  simpl; intros y Hy. refine (proj1 (IHh _ _ _ HU _ _) _ _); auto*.
   unfold compose.
   clear -HK0 Hy R1 R2 R4; unfold fvs in *.
   rewrite dom_concat. rewrite* dom_remove_env.
   rewrite dom_map. rewrite fv_in_concat.
   simpl dom.
-  union_solve y.
-        repeat (apply S.union_2; auto 2 with sets).
-      destruct (S.union_1 (fv_in_typ_subst (v ~ T1) _ H)).
-        repeat (apply S.union_2; auto 3 with sets).
-      simpl in H; repeat apply* S.union_2.
-    destruct (v == y).
-      subst; repeat (apply S.union_2; auto 2 with sets).
-    use (S.remove_2 n H0). auto 6 with sets.
+  sets_solve.
+      destruct (S.union_1 (fv_in_typ_subst (v ~ T1) _ H)); clear H;
+      simpl in *; sets_solve.
+    destruct (v == y); subst*.
   use (kind_fv_in_remove_env v _ H).
   rewrite R4 in H0.
   replace (kind_fv None) with {} in H0 by reflexivity.
-  rewrite union_empty_l in H0.
-  auto with sets.
+  sets_solve.
+  (* unify_fv *)
+  intro Htf.
+  refine (proj2 (IHh _ _ _ HU _ _) _); clear IHh HU; auto*.
+  rewrite* dom_remove_env.
+  intros y Hy.
+  assert (disjoint (typ_fv T1) ({{v}} \u dom S0)).
+    use (mem_3 R3).
+    intro. destruct* (x == v).
+    destruct* (typ_subst_res_fresh _ HS0 R1 x).
+  destruct (S.union_1 Hy); clear Hy.
+    puts (S.diff_1 H0); puts (S.diff_2 H0); clear H0.
+    unfold compose in H2. rewrite dom_concat in H2; simpl in H2.
+    assert (v <> y) by auto.
+    apply* S.remove_2. apply Htf.
+    unfold unify_fv.
+    rewrite dom_map in H2.
+    simpl.
+    use (Body.fv_in_remove_env kind_fv v K0).
+  destruct (S.union_1 (fv_in_compose _ _ H0)); clear H0.
+    simpl in H1.
+    sets_solve.
+    assert (v <> y) by auto.
+    apply* S.remove_2.
+    apply Htf; unfold unify_fv; sets_solve.
+  simpl in H1.
+  sets_solve.
+  subst.
+  puts (typ_fv_subst0 _ _ H0).
+  puts (mem_3 R3).
+  assert (y <> v) by auto*.
+  apply* S.remove_2.
+  apply Htf; unfold unify_fv; simpl*.
 Qed.
 
 Lemma kind_entails_fv : forall k1 k2,
@@ -1901,22 +2017,171 @@ Proof.
   intros y Hy. elim (in_empty Hy).
 Qed.
 
+Lemma unify_fv_sub : forall S K p pairs,
+  unify_fv S K pairs << unify_fv S K (p::pairs).
+Proof.
+  unfold unify_fv; simpl.
+  introv y Hy.
+  sets_solve.
+Qed.
+
+Lemma unify_fv_swap : forall S K T1 T2 pairs,
+  unify_fv S K ((T1,T2)::pairs) = unify_fv S K ((T2,T1)::pairs).
+Proof.
+  unfold unify_fv.
+  simpl.
+  intros.
+  rewrite (union_comm (typ_fv T1)). auto.
+Qed.
+
+Lemma unify_keep_fvs_vars : forall K0 v v0 k l pairs K S S0 E T Ts h,
+  ok K0 -> v <> v0 ->
+  unify_kinds (get_kind v K0) (get_kind v0 K0) = Some (k, l) ->
+  Body.unify h (l ++ pairs) (remove_env (remove_env K0 v) v0 & v0 ~ k)
+         (compose (v ~ typ_fvar v0) S0) = Some (K, S) ->
+  is_subst (compose (v ~ typ_fvar v0) S0) ->
+  fvs (compose (v ~ typ_fvar v0) S0)
+    (remove_env (remove_env K0 v) v0 & v0 ~ k) E T Ts << fvs S K E T Ts ->
+  fvs S0 K0 E T Ts << fvs S K E T Ts.
+Proof.
+  unfold fvs.
+  intros until h; intros HK0 n R3 HU HSv HS.
+  unfold compose in HS. repeat rewrite dom_concat in HS.
+  rewrite dom_map in HS. repeat rewrite fv_in_concat in HS.
+  simpl in HS.
+  do 2 rewrite dom_remove_env in HS; auto.
+  intros y Hy.
+  sets_solve.
+        apply* HS.
+      apply HS.
+      destruct* (S.union_1 (fv_in_typ_subst (v ~ typ_fvar v0) _ H)).
+      simpl in H0; sets_solve.
+    apply HS.
+    destruct (v == y). subst*.
+    destruct* (v0 == y). subst*.
+  poses Hun (unify_types _ _ _ HU HSv).
+  destruct (unify_kinds_sound _ _ (S:=S) R3).
+    intro; intros. apply* Hun.
+  puts (kind_fv_in_remove_env v _ H).
+  destruct (S.union_1 H2); clear H H2 Hun.
+    destruct* (S.union_1 (kind_fv_subst_keep S _ H3)); clear H1 H3.
+    puts (kind_entails_fv _ _ H0 H).
+    destruct* (S.union_1 (kind_fv_subst _ _ H1)).
+  puts (kind_fv_in_remove_env v0 _ H3).
+  destruct* (S.union_1 H); clear H H0 H3 R3.
+  unfold get_kind in *.
+  case_rewrite (get v0 K0) R3.
+    rewrite (binds_remove_env (v:=v) R3) in H2.
+      destruct* (S.union_1 (kind_fv_subst_keep S _ H2)); clear H2.
+      puts (kind_entails_fv _ _ H1 H).
+      use (S.union_1 (kind_fv_subst _ _ H0)).
+    auto*.
+  rewrite get_notin_dom in H2. elim (in_empty H2).
+  rewrite* dom_remove_env.
+  intro. elim (get_none_notin _ R3). eauto with sets.
+Qed.
+
+Lemma kind_subst_id : forall k, kind_subst id k = k.
+Proof.
+  intros.
+  destruct k as [[kc kv kr kh]|]; simpl*.
+  apply* kind_pi.
+  simpl; clear kh.
+  induction kr; simpl*; rewrite typ_subst_id; rewrite* IHkr.
+Qed.
+
+Lemma get_kind_fv_in : forall K v,
+  kind_fv (get_kind v K) << fv_in kind_fv K.
+Proof.
+  unfold get_kind.
+  introv y Hy.
+  case_rewrite (get v K) R1.
+    apply (fv_in_spec _ R1 Hy).
+  elim (in_empty Hy).
+Qed.
+
+Lemma pairs_fv_app : forall l2 l1,
+  pairs_fv (l1 ++ l2) = pairs_fv l1 \u pairs_fv l2.
+Proof.
+  induction l1; simpl. rewrite* union_empty_l.
+  rewrite IHl1. rewrite* union_assoc.
+Qed.
+
+Lemma pairs_fv_all_fv : forall l, all_fv id l = pairs_fv l.
+Proof.
+  induction l; simpl. reflexivity.
+  unfold all_fv in *; simpl. repeat rewrite typ_subst_id.
+  rewrite IHl. rewrite* union_assoc.
+Qed.
+
+Lemma unify_fv_vars : forall S0 K0 t t0 v v0 k l pairs,
+  is_subst S0 -> ok K0 ->
+  typ_subst S0 t = typ_fvar v ->
+  typ_subst S0 t0 = typ_fvar v0 ->
+  unify_kinds (get_kind v K0) (get_kind v0 K0) = Some (k, l) ->
+  unify_fv S0 K0 ((t, t0) :: pairs) << dom K0 ->
+  unify_fv (compose (v ~ typ_fvar v0) S0)
+     (remove_env (remove_env K0 v) v0 & v0 ~ k) (l ++ pairs) <<
+  dom (remove_env (remove_env K0 v) v0 & v0 ~ k).
+Proof.
+  intros until pairs. intros HS0 HK0 R1 R2 R3 HS y Hy.
+  simpl dom.
+  destruct (v0 == y). subst y; auto with sets.
+  rewrite* dom_remove_env.
+  rewrite* dom_remove_env.
+  apply S.union_3.
+  apply* S.remove_2.
+  unfold unify_fv in Hy, HS. simpl in HS.
+  destruct (S.union_1 Hy); clear Hy.
+    puts (S.diff_2 H).
+    unfold compose in H0; rewrite dom_concat in H0; simpl in H0.
+    rewrite dom_map in H0.
+    apply* S.remove_2. intro. rewrite H1 in H0. notin_contradiction.
+    assert (y \in kind_fv k \u all_fv id l -> y \in dom K0).
+      poses Hkl (unify_kinds_fv _ _ id R3).
+      repeat rewrite kind_subst_id in Hkl.
+      clear H; intro.
+      apply HS.
+      destruct (S.union_1 (Hkl _ H)); use (get_kind_fv_in _ _ H1).
+    destruct (S.union_1 (S.diff_1 H)); clear H.
+      rewrite fv_in_concat in H2.
+      simpl in H2.
+      sets_solve. auto.
+      puts (Body.fv_in_remove_env _ _ _ H).
+      use (Body.fv_in_remove_env _ _ _ H2).
+    rewrite pairs_fv_app in H2.
+    destruct* (S.union_1 H2); clear H2.
+    rewrite pairs_fv_all_fv in H1. auto.
+  puts (fv_in_compose _ _ H); clear H.
+  simpl in H0.
+  sets_solve.
+    assert (v <> y) by auto.
+    apply* S.remove_2.
+  auto*.
+Qed.
+
 Lemma unify_keep_fv : forall K S E T Ts h pairs K0 S0,
   Body.unify h pairs K0 S0 = Some (K, S) ->
   is_subst S0 -> ok K0 ->
-  fvs S0 K0 E T Ts << fvs S K E T Ts.
+  fvs S0 K0 E T Ts << fvs S K E T Ts /\
+  (unify_fv S0 K0 pairs << dom K0 -> unify_fv S K nil << dom K).
 Proof.
   induction h; introv HU HS0 HK0. discriminate.
   simpl in HU.
-  destruct pairs. inversions HU. apply subset_refl.
+  destruct pairs. inversions HU.
+    split*. apply subset_refl.
   destruct p.
   case_rewrite (typ_subst S0 t) R1; case_rewrite (typ_subst S0 t0) R2.
         destruct (n === n0); try discriminate.
-        apply* IHh.
+        destruct* (IHh _ _ _ HU). intuition.
+        apply H0; clear H0 IHh.
+        apply* subset_trans. apply unify_fv_sub.
        apply* unify_keep_fv_nv.
+      rewrite unify_fv_swap.
       apply* unify_keep_fv_nv.
      destruct (v == v0).
-       apply* IHh.
+       destruct* (IHh _ _ _ HU). intuition.
+       apply H0. apply* subset_trans. apply unify_fv_sub.
      unfold unify_vars in HU.
      case_rewrite (unify_kinds (get_kind v K0) (get_kind v0 K0)) R3.
      destruct p.
@@ -1924,53 +2189,35 @@ Proof.
        apply* ok_push.
        rewrite* dom_remove_env.
      assert (HSv: is_subst (compose (v ~ typ_fvar v0) S0)) by auto*.
-     poses HS (IHh _ _ _ HU HSv H); clear IHh H.
-     unfold fvs in *.
-     unfold compose in HS. repeat rewrite dom_concat in HS.
-     rewrite dom_map in HS. repeat rewrite fv_in_concat in HS.
-     simpl in HS.
-     do 2 rewrite dom_remove_env in HS; auto.
-     intros y Hy.
-     union_solve y.
-        apply HS; do 5 apply S.union_2. auto with sets.
-       apply HS.
-       destruct (S.union_1 (fv_in_typ_subst (v ~ typ_fvar v0) _ H)).
-         repeat (apply S.union_2; auto 3 with sets).
-       simpl in H0; repeat apply* S.union_2.
-      apply HS.
-      destruct (v == y). subst. repeat apply* S.union_2.
-      destruct (v0 == y). subst. do 3 apply S.union_2. auto with sets.
-      do 3 apply S.union_2. auto with sets.
-     poses Hun (unify_types _ _ _ HU HSv).
-     destruct (unify_kinds_sound _ _ (S:=S) R3).
-       intro; intros. apply* Hun.
-     use (kind_fv_in_remove_env v _ H).
-     destruct (S.union_1 H2); clear H H2 Hun.
-       destruct (S.union_1 (kind_fv_subst_keep S _ H3)); clear H1 H3.
-         use (kind_entails_fv _ _ H0 H).
-         destruct (S.union_1 (kind_fv_subst _ _ H1)); clear H H1.
-           apply HS; clear -H2. auto 6 with sets.
-         auto 6 with sets.
-       repeat apply* S.union_2.
-     use (kind_fv_in_remove_env v0 _ H3).
-     destruct (S.union_1 H); clear H H0 H3 R3.
-       unfold get_kind in *.
-       case_rewrite (get v0 K0) R3.
-         rewrite (binds_remove_env (v:=v) R3) in H2.
-           destruct (S.union_1 (kind_fv_subst_keep S _ H2)); clear H2.
-             use (kind_entails_fv _ _ H1 H).
-             destruct (S.union_1 (kind_fv_subst _ _ H0)); clear H H0 H1.
-               apply HS; clear -H2. auto 6 with sets.
-             auto 6 with sets.
-           repeat apply* S.union_2.
-         auto*.
-       rewrite get_notin_dom in H2. elim (in_empty H2).
-       rewrite* dom_remove_env.
-       intro. elim (get_none_notin _ R3). eauto with sets.
-     apply HS; auto with sets.
+     destruct (IHh _ _ _ HU HSv H) as [HS HF]; clear IHh H.
+     split.
+     (* fvs *)
+     clear - R3 HS HSv HU HK0 n.
+     apply* unify_keep_fvs_vars.
+     (* unify_fv *)
+     intro; apply HF; clear HS HF HU HSv.
+     apply* unify_fv_vars.
+    rewrite unify_fv_swap.
     apply* unify_keep_fv_nv.
    apply* unify_keep_fv_nv.
-  apply* IHh.
+  destruct* (IHh _ _ _ HU). intuition.
+  apply H0; clear H0 IHh.
+  apply* subset_trans.
+  unfold unify_fv.
+  intros y Hy.
+  destruct* (S.union_1 Hy); clear H1 HU H Hy.
+  sets_solve.
+  simpl in *.
+  puts (typ_fv_subst0 S0 t).
+  rewrite R1 in H0; clear R1.
+  puts (typ_fv_subst0 S0 t0).
+  rewrite R2 in H1; clear R2.
+  simpl in *.
+  sets_solve.
+  use (H0 _ (S.union_2 _ H)).
+  use (H1 _ (S.union_2 _ H)).
+  use (H0 _ (S.union_3 _ H2)).
+  use (H1 _ (S.union_3 _ H2)).
 Qed.
 
 Definition moregen_scheme K M0 M :=
@@ -1983,35 +2230,6 @@ Definition moregen_env K E0 E :=
   dom E0 = dom E /\
   forall x M, binds x M E ->
     exists M0, binds x M0 E0 /\ moregen_scheme K M0 M.
-
-(*
-Lemma binds_subst_dom : forall (A:Set) x (a:A) Xs Ys Ks L,
-  fresh L (length Xs) Ys ->
-  binds x a (combine Xs Ks) ->
-  exists y,
-    binds x (typ_fvar y) (combine Xs (typ_fvars Ys)) /\
-    binds y a (combine Ys Ks).
-Proof.
-  induction Xs; destruct Ys; intros; try discriminate.
-    contradiction.
-  destruct Ks. discriminate.
-  unfold binds in *; simpl in *.
-  destruct (x == a0).
-    esplit; split*. destruct* (v == v).
-  destruct* (IHXs Ys Ks (L \u {{v}})) as [y [Bx By]].
-  esplit; split*.
-  destruct* (y == v).
-  subst.
-  destruct (fresh_disjoint _ _ _ (proj2 H) v).
-    elim H1.
-    use (binds_combine _ _ Bx).
-    unfold typ_fvars in H2.
-    destruct (proj1 (in_map_iff _ _ _) H2).
-    destruct H3. inversions H3.
-    apply* in_mkset.
-  notin_contradiction.
-Qed.
-*)
 
 Lemma kinds_subst_open_combine : forall Xs Us Ks,
   fresh (kind_fv_list Ks) (length Xs) Xs ->
@@ -2262,26 +2480,20 @@ Lemma sch_fv_subst : forall S M,
 Proof.
   destruct M as [T Ks].
   unfold sch_fv, sch_subst; simpl.
-  intros y Hy; destruct (S.union_1 Hy); clear Hy.
+  intros y Hy; sets_solve.
     use (typ_fv_subst S _ H).
-    destruct (S.union_1 H0); auto with sets.
-  rewrite <- union_assoc.
-  apply S.union_3.
-  induction Ks; simpl in *. auto with sets.
-  rewrite <- union_assoc.
-  destruct (S.union_1 H); auto with sets.
-  use (kind_fv_subst S _ H0).
-  destruct (S.union_1 H1); auto with sets.
+  induction Ks; simpl in *. auto.
+  sets_solve.
+    use (kind_fv_subst S _ H0).
+  use (IHKs H0).
 Qed.
 
 Lemma in_kind_fv : forall k Ks,
   In k Ks -> kind_fv k << kind_fv_list Ks.
 Proof.
-  induction Ks; simpl; intro. elim H.
-  destruct H. subst. intros y Hy; auto with sets.
-  intros y Hy.
+  induction Ks; simpl; intros; intros y Hy. elim H.
+  destruct H. subst*.
   use (IHKs H _ Hy).
-  auto with sets.
 Qed.
 
 Lemma proper_instance_inf : forall K M Us Ys M' Vs M0 S,
@@ -2326,7 +2538,7 @@ Proof.
       apply* fresh_sub.
       apply* subset_trans.
       apply* subset_trans.
-      intros y Hy; auto with sets.
+      intros y Hy; sets_solve.
     apply* well_kinded_subst.
     apply well_subst_open_vars.
           unfold sch_arity in FrYs. auto.
@@ -2351,8 +2563,7 @@ Proof.
   unfold sch_fv in FrYs; simpl in FrYs.
   apply* fresh_sub.
   apply* subset_trans.
-  intros y Hy.
-  destruct (S.union_1 Hy); auto with sets.
+  intros y Hy; sets_solve.
 Qed.
 
 Lemma sch_open_inf : forall M Us S M0 Vs Ys,
@@ -2388,15 +2599,46 @@ Proof.
   apply (proj1 HUs).
 Qed.
 
-Definition typing_fvs S K E T :=
-  env_fv (map (sch_subst S) E) \u fv_in kind_fv (map (kind_subst S) K) \u
-  typ_fv (typ_subst S T).
+Axiom unify_keep_doms : forall h pairs K0 S0 K S,
+  Body.unify h pairs K0 S0 = Some (K, S) ->
+  dom K0 \u dom S0 << dom K \u dom S.
+
+Lemma unify_fv_dom_var : forall S0 K0 E0 T M0 Xs x,
+  typing_fv S0 K0 E0 T << dom K0 ->
+  binds x M0 E0 ->
+  length (sch_kinds M0) = length Xs ->
+  unify_fv S0 (K0 & kinds_open_vars (sch_kinds M0) Xs)
+    ((sch_open_vars M0 Xs, T) :: nil) <<
+    dom (K0 & kinds_open_vars (sch_kinds M0) Xs).
+Proof.
+  introv DomK0 B AryM0.
+  unfold unify_fv; simpl.
+  rewrite fv_in_concat; rewrite dom_concat.
+  rewrite* dom_kinds_open_vars.
+  intros z Hz.
+  sets_solve;
+    try solve [apply S.union_2; apply DomK0; unfold typing_fv; auto].
+    puts (fv_in_kinds_open_vars _ _ H0).
+    sets_solve.
+    apply S.union_2; apply DomK0.
+    unfold typing_fv, env_fv.
+    puts (fv_in_spec sch_fv B).
+    use (H _ (S.union_3 _ H1)).
+  unfold sch_open_vars, typ_open_vars in H.
+  puts (typ_fv_open _ _ H); clear H.
+  rewrite typ_fv_typ_fvars in H0.
+  sets_solve.
+  apply S.union_2; apply DomK0.
+  unfold typing_fv, env_fv.
+  puts (fv_in_spec sch_fv B).
+  use (H0 _ (S.union_2 _ H)).
+Qed.
 
 Definition principality S0 K0 E0 S K E t T Ts h :=
   is_subst S0 -> env_prop type S0 ->
   kenv_ok K0 -> disjoint (dom S0) (dom K0) ->
   env_prop scheme E0 -> ok E0 ->
-  typing_fvs S0 K0 E0 T << dom K0 ->
+  typing_fv S0 K0 E0 T << dom K0 ->
   moregen_env K (map (sch_subst S) E0) E ->
   env_prop type S -> dom S << fvs S0 K0 E0 T Ts ->
   extends S S0 -> well_subst K0 K S ->
@@ -2405,7 +2647,7 @@ Definition principality S0 K0 E0 S K E t T Ts h :=
   exists K', exists S',
     typinf K0 E0 t T Ts S0 h = Some (K', S') /\
     extends S' S0 /\ fvs S0 K0 E0 T Ts << fvs S' K' E0 T Ts /\
-    typing_fvs S' K' E0 T << dom K' /\
+    typing_fv S' K' E0 T << dom K' /\
     exists S'',
       dom S'' << S.diff (fvs S' K' E0 T Ts) (fvs S0 K0 E0 T Ts) /\
       extends (S & S'') S' /\
@@ -2456,7 +2698,7 @@ Proof.
         apply (proj2 (proj1 H6)).
       intros y Hy.
       use (fv_in_spec sch_fv B).
-      destruct (S.union_1 Hy); unfold fvs; simpl; auto with sets.
+      unfold fvs, env_fv; simpl; sets_solve.
     rewrite <- H0.
     unfold Vs'. apply* (sch_open_inf _ _ _ _ _ (proj1 H6) EVs).
   case_eq
@@ -2474,13 +2716,39 @@ Proof.
       disjoint_solve.
     split.
       apply (typ_subst_extend _ _ _ HS0 H).
-    use (unify_keep_fv _ _ (E:=E0) (T:=T) (Ts:=Ts) H HS0 Ok).
+    destruct (unify_keep_fv E0 T Ts _ _ H HS0 Ok).
     split.
       intros y Hy; apply H9; clear -Hy.
       unfold fvs in *.
       rewrite dom_concat; rewrite fv_in_concat.
-      union_solve y. repeat (apply S.union_2; auto 3 with sets).
+      sets_solve.
     split.
+      intros y Hy.
+      assert (unify_fv S' K' nil << dom K').
+        apply H10. apply* unify_fv_dom_var.
+      unfold typing_fv in Hy; unfold unify_fv in H11.
+      destruct* (S.union_1 Hy); clear Hy.
+      assert (y # S' -> y \in dom K0 \u dom S0 -> y \in dom K').
+        intros Hn Hy.
+        assert (y \in dom K' \u dom S').
+          refine (unify_keep_doms _ _ _ _ H _).
+          rewrite* dom_concat.
+        clear H12; sets_solve; auto*.
+      unfold typing_fv in DomK0.
+      sets_solve.
+          apply* H11.
+        apply* H13.
+        clear -H14 DomK0.
+        case_eq (S.mem y (dom S0)); intros.
+          use (S.mem_2 H).
+        use (mem_3 H); clear H.
+        apply S.union_2; apply* DomK0.
+      apply* H13.
+      clear -H12 DomK0.
+      case_eq (S.mem y (dom S0)); intros.
+        use (S.mem_2 H).
+      use (mem_3 H); clear H.
+      apply S.union_2; apply* DomK0.
     exists (combine Xs Vs').
     intuition.
     intros y Hy.
@@ -2490,7 +2758,6 @@ Proof.
       unfold fvs.
       rewrite dom_concat.
       rewrite* dom_kinds_open_vars.
-      repeat (apply S.union_2; auto 3 with sets).
     destruct* (fresh_disjoint _ _ _ Fr y).
     rewrite* <- (fresh_length _ _ _ Fr).
   elimtype False.
