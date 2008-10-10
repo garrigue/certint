@@ -1846,63 +1846,6 @@ Proof.
   intros y Hy; auto with sets.
 Qed.
 
-Ltac sets_simpl_hyps x :=
-  match goal with
-  | H: _ \in {} |- _ => elim (in_empty H)
-  | H: _ \in {{?y}} |- _ =>
-    puts (proj1 (in_singleton _ _) H); clear H; subst y; try sets_simpl_hyps
-  | H: x \in (S.diff _ _) |- _ =>
-    let H1 := fresh "Hin" in let H2 := fresh "Hn" in
-    poses H1 (S.diff_1 H); poses H2 (S.diff_2 H); clear H; try sets_simpl_hyps
-  | H: x \in (S.inter _ _) |- _ =>
-    let H1 := fresh "Hin" in let H2 := fresh "Hin" in
-    poses H1 (S.inter_1 H); poses H2 (S.inter_2 H); clear H; try sets_simpl_hyps
-  end.
-
-Ltac sets_simpl :=
-  match goal with |- ?x \in _ => try sets_simpl_hyps x end.
-
-Ltac union_solve' x :=
-  try sets_simpl_hyps x;
-  try match goal with
-  | H: x \in _ \u _ |- _ =>
-    destruct (S.union_1 H); clear H; union_solve' x
-  | H: ?L1 << ?L2 |- _ =>
-    match goal with
-    | H': x \in ?L1 |- _ =>
-      let H1 := fresh "Hin" in poses H1 (H _ H'); clear H; union_solve' x
-    end
-  end.
-
-Ltac find_in_goal L :=
-  match goal with |- ?x \in ?E =>
-    match E with context[L] =>
-      match goal with
-      | |- x \in L => assumption
-      | |- _ \in ?L1 \u ?L2 =>
-        try (apply S.union_2; find_in_goal L);
-          apply S.union_3; find_in_goal L
-      | |- _ \in S.diff ?L1 ?L2 =>
-        apply S.diff_3; [find_in_goal L | notin_solve]
-      | |- _ \in S.remove ?y ?L1 =>
-        let H1 := fresh "HE" in
-        apply S.remove_2;
-        [intro HE; rewrite HE in *; solve [auto] | find_in_goal L]
-      end
-    end
-  end.
-
-Ltac find_in_solve x :=
-  match goal with
-  | |- ?y \in _ => puts (S.singleton_2 (refl_equal y)); find_in_goal {{y}}
-  | H: x \in ?L |- _ => find_in_goal L
-  end.
-
-Ltac sets_solve :=
-  match goal with |- ?x \in _ => try union_solve' x; try find_in_solve x end.
-
-Hint Extern 1 (_ \in _) => solve [sets_solve].
-
 Definition typing_fv S K E T :=
   S.diff (fv_in kind_fv K \u env_fv E \u typ_fv T) (dom S) \u fv_in typ_fv S.
 
