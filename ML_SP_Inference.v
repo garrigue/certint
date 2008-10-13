@@ -1407,6 +1407,51 @@ Proof.
   auto.
 Qed.
 
+Lemma typing_let_kenv_ok : forall K' T1 ftve e2 l l0 e0 e e1,
+  let Bs := S.elements (S.diff (close_fvk K' (typ_fv T1)) (ftve \u dom e2)) in
+  let l0' := List.map (fun _ : var => None) Bs in
+  split e2 = (l, l0) ->
+  kenv_ok K' -> ok (e0 & e) -> ok (e2 & e1) ->
+  dom e0 << ftve -> env_incl (e0 & e) K' -> env_incl (e2 & e1) e ->
+  combine l l0 = e2 ->
+  kenv_ok (e0 & combine Bs l0' & combine l l0).
+Proof.
+  intros until l0'; intros R4 HK' Ok Ok' Se0 Inc2 Inc4 He2.
+  destruct (ok_concat_inv _ _ Ok') as [Oke2 _].
+  rewrite concat_assoc.
+  puts (diff_disjoint (close_fvk K' (typ_fv T1)) (ftve \u dom e2)).
+  puts (elements_fresh (disjoint_comm H)).
+  apply kenv_ok_concat.
+      split. destruct* (ok_concat_inv _ _ Ok).
+      intro; intros. apply (proj2 HK' x). apply* Inc2.
+    split.
+      apply disjoint_ok.
+          eapply ok_combine_fresh.
+          unfold Bs. apply H0.
+        rewrite* He2.
+      rewrite* dom_combine. rewrite* dom_combine.
+        unfold Bs; rewrite mkset_elements.
+        rewrite* <- (dom_combine l l0). rewrite He2.
+        disjoint_solve.
+      unfold l0'; rewrite* map_length.
+    apply env_prop_concat.
+      apply list_forall_env_prop.
+      unfold l0'; clear; induction Bs; simpl*.
+    rewrite He2. intro; intros. apply (proj2 HK' x). apply* Inc2.
+  rewrite dom_concat. rewrite He2.
+  apply disjoint_comm; apply disjoint_union.
+    rewrite dom_combine.
+      apply disjoint_comm.
+      apply (disjoint_subset (L3:=mkset Bs) Se0).
+      unfold Bs; rewrite mkset_elements.
+      disjoint_solve.
+    unfold l0'; rewrite* map_length.
+  puts (ok_disjoint _ _ Ok).
+  refine (disjoint_subset _ (disjoint_comm H1)).
+  apply env_incl_subset_dom.
+  intro; intros. apply* Inc4.
+Qed.
+
 Lemma soundness_let : forall h Ts t1 t2 K0 E T S0 S K,
   (forall t K0 E T Ts S0 K S, soundness_spec h t K0 E T Ts S0 K S) ->
   soundness_spec (Datatypes.S h) (trm_let t1 t2) K0 E T Ts S0 K S.
@@ -1437,17 +1482,16 @@ Proof.
   poses He2 (split_combine e2). rewrite R4 in He2.
   assert (Oke0: ok e0) by destruct* (ok_concat_inv _ _ Ok).
   assert (Oke2: ok e2) by destruct* (ok_concat_inv _ _ Ok').
+  assert (Hkt: list_forall (All_kind_types type) (l0 ++ l0')).
+    apply list_forall_app.
+      apply* env_prop_list_forall.
+        rewrite He2. intro; intros. apply* (proj2 HK' x1).
+      rewrite* He2.
+    unfold l0'. clear; induction Bs; simpl*.
   assert (HM: scheme M).
     unfold M, l0'.
     apply* scheme_generalize.
-      do 2 rewrite app_length. rewrite map_length. rewrite* (split_length _ R4).
-    apply* list_forall_app.
-    apply* env_prop_list_forall.
-      rewrite He2.
-      intro; intros.
-      apply* (proj2 HK' x1).
-    rewrite* He2.
-    clear; induction Bs; simpl*.
+    do 2 rewrite app_length. rewrite map_length. rewrite* (split_length _ R4).
   destruct* (IHh _ _ _ _ _ _ _ _ HI); clear IHh HI.
           split*.
           intro; destruct* HK'.
@@ -1492,13 +1536,6 @@ Proof.
       fold K'. fold ftve. fold Bs. rewrite <- AryM. rewrite* mkset_app.
     fold K'. fold ftve. fold Bs.
     unfold M.
-    use (split_combine e2). rewrite R4 in H8.
-    assert (list_forall (All_kind_types type) (l0 ++ l0')).
-      apply list_forall_app.
-      apply* env_prop_list_forall.
-        rewrite H8. intro; intros. apply* (proj2 HK' x1).
-      rewrite* H8.
-      unfold l0'. clear; induction Bs; simpl*.
     unfold sch_open_vars, typ_open_vars. simpl sch_type.
     rewrite* typ_generalize_reopen.
     unfold sch_generalize. simpl sch_kinds.
@@ -1506,8 +1543,9 @@ Proof.
     rewrite* combine_app.
     fold (@combine var kind Bs l0' & combine l l0).
     rewrite <- concat_assoc.
-    apply typing_weaken_kinds.
-    rewrite H8. clear H9.
+    puts (typing_let_kenv_ok T1 _ _ R4 HK' Ok Ok' Se0 Inc2 Inc4 He2).
+    apply* typing_weaken_kinds; clear H8.
+    rewrite He2.
     poses He1 (split_combine e1). case_rewrite (split e1) R5.
     pose (Ks := List.map (kind_map (typ_generalize l1)) l2).
     apply* (@typing_gc (true,GcLet) Ks). simpl*.
@@ -1522,14 +1560,14 @@ Proof.
         unfold K' in HK'.
         unfold ftve in *.
         apply* (@typing_let_fresh_2 l1 l2 s).
-      unfold Ks in H9. rewrite map_length in H9.
+      unfold Ks in H8. rewrite map_length in H8.
       rewrite* (split_length _ R5).
     assert (list_forall (All_kind_types type) l2).
       apply* env_prop_list_forall.
         rewrite He1. intro; intros. apply* (proj2 HK' x1).
       rewrite* He1. destruct* (ok_concat_inv _ _ Ok').
     simpl sch_kinds.
-    unfold Ks; rewrite* kinds_generalize_reopen. rewrite He1; clear H10.
+    unfold Ks; rewrite* kinds_generalize_reopen. rewrite He1; clear H9.
     unfold sch_open_vars, typ_open_vars.
     simpl sch_type. rewrite* <- typ_open_type.
     destruct* (typing_let_incl _ _ _ _ Hs Ok Ok' Inc1 Inc2 Inc3 Inc4).
@@ -1541,38 +1579,6 @@ Proof.
       eapply disjoint_subset. apply (env_incl_subset_dom Inc4).
       apply disjoint_comm. apply* ok_disjoint.
     intro; intros. apply* (proj2 (proj1 (typing_regular Typ)) x1).
-    rewrite concat_assoc.
-    puts (diff_disjoint (close_fvk K' (typ_fv T1)) (ftve \u dom e2)).
-    puts (elements_fresh (disjoint_comm H10)).
-    apply kenv_ok_concat.
-        split. auto.
-        intro; intros. apply (proj2 HK' x1). apply* Inc2.
-      split.
-        apply disjoint_ok.
-            eapply ok_combine_fresh.
-            unfold Bs. apply H11.
-          rewrite* H8.
-        rewrite* dom_combine. rewrite* dom_combine.
-          unfold Bs; rewrite mkset_elements.
-          rewrite* <- (dom_combine l l0). rewrite H8.
-          clear -H10; disjoint_solve.
-        unfold l0'; rewrite* map_length.
-      apply env_prop_concat.
-        apply list_forall_env_prop.
-        unfold l0'; clear; induction Bs; simpl*.
-      rewrite H8. intro; intros. apply (proj2 HK' x1). apply* Inc2.
-    rewrite dom_concat. rewrite H8.
-    apply disjoint_comm; apply disjoint_union.
-      rewrite dom_combine.
-        apply disjoint_comm.
-        apply (disjoint_subset (L3:=mkset Bs) Se0).
-        unfold Bs; rewrite mkset_elements.
-        clear -H10; disjoint_solve.
-      unfold l0'; rewrite* map_length.
-    puts (ok_disjoint _ _ Ok).
-    refine (disjoint_subset _ (disjoint_comm H12)).
-    apply env_incl_subset_dom.
-    intro; intros. apply* Inc4.
   intros.
   instantiate (1 := dom E \u trm_fv t2 \u {{x0}}) in H6.
   apply typing_gc_raise.
