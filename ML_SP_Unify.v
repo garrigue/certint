@@ -82,7 +82,7 @@ Ltac find_in_goal L :=
 
 Ltac find_in_solve x :=
   match goal with
-  | |- ?y \in _ => puts (S.singleton_2 (refl_equal y)); find_in_goal {{y}}
+  | |- ?y \in _ => puts (S.singleton_2 (S.E.eq_refl y)); find_in_goal {{y}}
   | H: x \in ?L |- _ => find_in_goal L
   end.
 
@@ -93,6 +93,10 @@ Ltac sets_solve :=
     let y := fresh "y" in let Hy := fresh "Hy" in
     intros y Hy; sets_solve
   end.
+
+Lemma test_self : forall x, x \in {{x}}.
+  intros; sets_solve.
+Qed.
 
 Lemma test_remove : forall x L1 L2,
   S.remove x (L1 \u L2) << S.remove x (L2 \u L1).
