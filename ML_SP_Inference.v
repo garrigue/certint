@@ -1190,15 +1190,14 @@ Proof.
   apply kinds_generalize_disjoint.
 Qed.
 
-Lemma typing_let_disjoint : forall k EK0 L e e0 s,
-  let K' := map (kind_subst s) k in
-  ok (e0 & e) -> is_subst s ->
+Lemma typing_let_disjoint : forall EK0 L e e0 K',
+  ok (e0 & e) ->
   ok K' -> env_incl (e0 & e) K' ->
   disjoint (close_fvk K' EK0) L ->
   dom e0 << close_fvk K' EK0 ->
   disjoint L (EK0 \u dom e0 \u fv_in kind_fv e0).
 Proof.
-  intros until K'; intros Ok Hs HK' Inc2 Dise Se0.
+  intros until K'; intros Ok HK' Inc2 Dise Se0.
   apply disjoint_comm.
   repeat apply disjoint_union.
   (* env_fv E *)
@@ -1263,28 +1262,30 @@ Proof.
   use (mem_3 H).
 Qed.
 
-Lemma typing_let_fresh : forall x l l0 k e e0 e1 e2 s fvT1 fvE sK0,
-  let K' := map (kind_subst s) k in
+Definition ok_concat_inv1 A (E1 E2:env A) H := proj1 (ok_concat_inv E1 E2 H).
+Definition ok_concat_inv2 A (E1 E2:env A) H := proj2 (ok_concat_inv E1 E2 H).
+Hint Immediate ok_concat_inv1 ok_concat_inv2.
+
+Lemma typing_let_fresh : forall T1 l l0 K' e e0 e1 e2 fvT1 fvE sK0,
   let ftve := close_fvk K' (fvE \u sK0) in
   let Bs := S.elements (S.diff fvT1 (ftve \u dom e2)) in
   let l0' := List.map (fun _:var => @None ckind) Bs in
-  let M := sch_generalize (@app var l Bs) (typ_subst s (typ_fvar x))
-                (@app kind l0 l0') in
+  let M := sch_generalize (@app var l Bs) T1 (@app kind l0 l0') in
   split e2 = (l, l0) ->
-  ok (e0 & e) -> ok (e2 & e1) -> is_subst s ->
+  ok (e0 & e) -> ok (e2 & e1) ->
   ok K' -> env_incl (e0 & e) K' -> env_incl (e2 & e1) e ->
   disjoint ftve (dom e) ->
   dom e0 << ftve ->
   fresh (fvE \u sch_fv M \u dom e0 \u fv_in kind_fv e0) (sch_arity M) (l++Bs).
 Proof.
-  intros until M. intros R4 Ok Ok' Hs HK' Inc2 Inc4 Dise Se0.
+  intros until M. intros R4 Ok Ok' HK' Inc2 Inc4 Dise Se0.
   unfold sch_arity; simpl length.
   rewrite map_length. rewrite app_length.
   rewrite <- (split_length _ R4).
   use (split_combine e2). rewrite R4 in H.
   apply fresh_app.
   apply* (ok_fresh l l0).
-    rewrite H. destruct* (ok_concat_inv _ _ Ok').
+    rewrite* H.
   rewrite* <- (dom_combine l l0).
   rewrite H.
   use (env_incl_subset_dom Inc4).
@@ -1292,12 +1293,12 @@ Proof.
   assert (dom e2 << dom e).
     intros v Hv. apply* (H0 v).
   use (disjoint_subset H1
-          (typing_let_disjoint _ _ _ _ Ok Hs HK' Inc2 Dise Se0)).
+          (typing_let_disjoint _ _ _ Ok HK' Inc2 Dise Se0)).
   assert (disjoint (sch_fv M) (dom e2)).
     unfold M.
     rewrite <- H.
     rewrite* dom_combine.
-    use(sch_generalize_disjoint (l++Bs) (typ_subst s (typ_fvar x)) (l0 ++ l0')).
+    use(sch_generalize_disjoint (l++Bs) T1 (l0 ++ l0')).
     rewrite mkset_app in H3.
     disjoint_solve.
   disjoint_solve.
@@ -1310,11 +1311,11 @@ Proof.
   puts (diff_disjoint fvT1 (ftve \u mkset l)).
   set (l' := S.diff fvT1 (ftve \u mkset l)) in *.
   assert (disjoint ftve l') by disjoint_solve.
-  puts (typing_let_disjoint _ _ _ _ Ok Hs HK' Inc2 H1 Se0).
+  puts (typing_let_disjoint _ _ _ Ok HK' Inc2 H1 Se0).
   clear H1.
   assert (disjoint (sch_fv M) l').
     unfold M.
-    use(sch_generalize_disjoint (l++Bs) (typ_subst s (typ_fvar x)) (l0 ++ l0')).
+    use(sch_generalize_disjoint (l++Bs) T1 (l0 ++ l0')).
     rewrite mkset_app in H1.
     rewrite <- (mkset_elements l').
     unfold l'.
@@ -1324,11 +1325,10 @@ Proof.
   disjoint_solve.
 Qed.
 
-Lemma typing_let_fresh_2 : forall l1 l2 s k T fvE sK0 e e0 e1 e2,
-  let K' := map (kind_subst s) k in
+Lemma typing_let_fresh_2 : forall l1 l2 K' T fvE sK0 e e0 e1 e2,
   let Ks := List.map (kind_map (typ_generalize l1)) l2 in
   let M' := Sch T Ks in
-  is_subst s -> kenv_ok K' ->  ok (e0 & e) -> ok (e2 & e1) ->
+  kenv_ok K' ->  ok (e0 & e) -> ok (e2 & e1) ->
   env_incl (e0 & e) K' -> env_incl (e2 & e1) e ->
   split e1 = (l1, l2) ->
   disjoint (close_fvk K' (fvE \u sK0)) (dom e) ->
@@ -1339,14 +1339,14 @@ Lemma typing_let_fresh_2 : forall l1 l2 s k T fvE sK0 e e0 e1 e2,
     (sch_arity M') l1.
 Proof.
   intros until M'.
-  intros Hs HK' Ok Ok' Inc2 Inc4 R5 Dise Se0 Dise1 Se2.
+  intros HK' Ok Ok' Inc2 Inc4 R5 Dise Se0 Dise1 Se2.
   rewrite dom_concat; rewrite fv_in_concat.
   unfold sch_arity; simpl length.
   unfold Ks; rewrite map_length.
   rewrite <- (split_length _ R5).
   poses He1 (split_combine e1). rewrite R5 in He1.
   apply* (ok_fresh l1 l2).
-    rewrite* He1. destruct* (ok_concat_inv _ _ Ok').
+    rewrite* He1.
   rewrite* <- (dom_combine l1 l2).
   rewrite He1.
   use (env_incl_subset_dom Inc4).
@@ -1354,7 +1354,7 @@ Proof.
   assert (dom e1 << dom e).
     intros v Hv. apply* (H v).
   use (disjoint_subset H0
-         (typing_let_disjoint _ _ _ _ Ok Hs (proj1 HK') Inc2 Dise Se0)).
+         (typing_let_disjoint _ _ _ Ok (proj1 HK') Inc2 Dise Se0)).
   apply disjoint_comm.
   repeat apply disjoint_union; try solve [disjoint_solve].
   (* sch_fv M' *)
@@ -1367,7 +1367,7 @@ Proof.
   (* e2 *)
   refine (disjoint_subset (proj2 (fv_in_subset_inv _ _ _) _) Dise1).
   intros.
-  destruct (ok_concat_inv _ _ Ok').
+  assert (ok e2) by auto*.
   use (in_ok_binds _ _ H2 H3).
   apply* (@close_fvk_ok K' (typ_fv T) x).
   apply Se2.
@@ -1381,9 +1381,7 @@ Proof.
   rewrite* <- typ_open_type.
 Qed.
 
-Lemma typing_let_incl : forall s k e e0 e1 e2,
-  let K' := map (kind_subst s) k in
-  is_subst s ->
+Lemma typing_let_incl : forall K' e e0 e1 e2 : kenv,
   ok (e0 & e) -> ok (e2 & e1) ->
   env_incl K' (e0 & e) ->
   env_incl (e0 & e) K' ->
@@ -1391,7 +1389,7 @@ Lemma typing_let_incl : forall s k e e0 e1 e2,
   env_incl (e2 & e1) e ->
   env_incl K' (e0 & e2 & e1) /\ env_incl (e0 & e2 & e1) K'.
 Proof.
-  intros until K'; intros Hs Ok Ok' I1 I2 I3 I4.
+  intros until e2; intros Ok Ok' I1 I2 I3 I4.
   rewrite concat_assoc.
   set (e' := e2 & e1) in *.
   split; intro; intros.
@@ -1417,13 +1415,11 @@ Lemma typing_let_kenv_ok : forall K' T1 ftve e2 l l0 e0 e e1,
   kenv_ok (e0 & combine Bs l0' & combine l l0).
 Proof.
   intros until l0'; intros R4 HK' Ok Ok' Se0 Inc2 Inc4 He2.
-  destruct (ok_concat_inv _ _ Ok') as [Oke2 _].
   rewrite concat_assoc.
   puts (diff_disjoint (close_fvk K' (typ_fv T1)) (ftve \u dom e2)).
   puts (elements_fresh (disjoint_comm H)).
   apply kenv_ok_concat.
-      split. destruct* (ok_concat_inv _ _ Ok).
-      intro; intros. apply (proj2 HK' x). apply* Inc2.
+      split*. intro; intros. apply (proj2 HK' x). apply* Inc2.
     split.
       apply disjoint_ok.
           eapply ok_combine_fresh.
@@ -1478,10 +1474,7 @@ Proof.
   assert (HK':kenv_ok K') by (unfold K'; apply* kenv_ok_map).
   destruct* (split_env_ok _ R2) as [Ok [Dise [Se0 [Inc1 Inc2]]]].
   destruct* (split_env_ok _ R3) as [Ok' [Dise' [Se2 [Inc3 Inc4]]]].
-    destruct* (ok_concat_inv _ _ Ok).
   poses He2 (split_combine e2). rewrite R4 in He2.
-  assert (Oke0: ok e0) by destruct* (ok_concat_inv _ _ Ok).
-  assert (Oke2: ok e2) by destruct* (ok_concat_inv _ _ Ok').
   assert (Hkt: list_forall (All_kind_types type) (l0 ++ l0')).
     apply list_forall_app.
       apply* env_prop_list_forall.
@@ -1530,11 +1523,11 @@ Proof.
       autorewrite with list.
       rewrite* (split_length _ R4).
     apply* typing_rename_typ.
-        apply* (@typing_let_fresh x l l0 k e e0 e1 e2 s
+        apply* (@typing_let_fresh T1 l l0 K' e e0 e1 e2
           (close_fvk K' (typ_fv T1))
           (env_fv (map (sch_subst s) E)) (vars_subst s (dom K0))).
-      fold K'. fold ftve. fold Bs. rewrite <- AryM. rewrite* mkset_app.
-    fold K'. fold ftve. fold Bs.
+      fold ftve. fold Bs. rewrite <- AryM. rewrite* mkset_app.
+    fold ftve. fold Bs.
     unfold M.
     unfold sch_open_vars, typ_open_vars. simpl sch_type.
     rewrite* typ_generalize_reopen.
@@ -1557,20 +1550,19 @@ Proof.
     apply* typing_rename_typ.
         instantiate (1 := l1).
         unfold M', Ks.
-        unfold K' in HK'.
         unfold ftve in *.
-        apply* (@typing_let_fresh_2 l1 l2 s).
+        apply* (@typing_let_fresh_2 l1 l2 K').
       unfold Ks in H8. rewrite map_length in H8.
       rewrite* (split_length _ R5).
     assert (list_forall (All_kind_types type) l2).
       apply* env_prop_list_forall.
         rewrite He1. intro; intros. apply* (proj2 HK' x1).
-      rewrite* He1. destruct* (ok_concat_inv _ _ Ok').
+      rewrite* He1.
     simpl sch_kinds.
     unfold Ks; rewrite* kinds_generalize_reopen. rewrite He1; clear H9.
     unfold sch_open_vars, typ_open_vars.
     simpl sch_type. rewrite* <- typ_open_type.
-    destruct* (typing_let_incl _ _ _ _ Hs Ok Ok' Inc1 Inc2 Inc3 Inc4).
+    destruct* (typing_let_incl _ _ _ Ok Ok' Inc1 Inc2 Inc3 Inc4).
     unfold T1; apply* typing_kenv_incl.
     split.
       rewrite concat_assoc.
