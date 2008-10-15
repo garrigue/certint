@@ -48,18 +48,6 @@ Ltac sets_simpl_hyps x :=
 Ltac sets_simpl :=
   match goal with |- ?x \in _ => try sets_simpl_hyps x end.
 
-Ltac union_solve' x :=
-  try sets_simpl_hyps x;
-  try match goal with
-  | H: x \in _ \u _ |- _ =>
-    destruct (S.union_1 H); clear H; union_solve' x
-  | H: ?L1 << ?L2 |- _ =>
-    match goal with
-    | H': x \in ?L1 |- _ =>
-      let H1 := fresh "Hin" in poses H1 (H _ H'); clear H; union_solve' x
-    end
-  end.
-
 Ltac find_in_goal L :=
   match goal with |- ?x \in ?E =>
     match E with context[L] =>
@@ -79,16 +67,33 @@ Ltac find_in_goal L :=
     end
   end.
 
-
 Ltac find_in_solve x :=
   match goal with
   | |- ?y \in _ => puts (S.singleton_2 (S.E.eq_refl y)); find_in_goal {{y}}
   | H: x \in ?L |- _ => find_in_goal L
   end.
 
+Ltac union_solve x :=
+  try sets_simpl_hyps x;
+  try match goal with
+  | H: x \in _ \u _ |- _ =>
+    destruct (S.union_1 H); clear H; union_solve x
+  | H: ?L1 << ?L2 |- _ =>
+    match goal with
+    | H': x \in ?L1 |- _ =>
+      let H1 := fresh "Hin" in poses H1 (H _ H'); clear H; union_solve x
+    | H': x \in ?L3 |- _ =>
+      match L1 with context[L3] =>
+        let H1 := fresh "Hin" in 
+        assert (H1: x \in L2) by (apply H; find_in_solve x);
+        clear H; union_solve x
+      end
+    end
+  end.
+
 Ltac sets_solve :=
   match goal with
-  | |- ?x \in _ => try union_solve' x; try find_in_solve x
+  | |- ?x \in _ => try union_solve x; try find_in_solve x
   | |- _ << _ =>
     let y := fresh "y" in let Hy := fresh "Hy" in
     intros y Hy; sets_solve
@@ -100,6 +105,12 @@ Qed.
 
 Lemma test_remove : forall x L1 L2,
   S.remove x (L1 \u L2) << S.remove x (L2 \u L1).
+Proof.
+  intros; sets_solve.
+Qed.
+
+Lemma test_subset : forall L1 L2 L3,
+  L2 << L1 -> L1 \u L2 << L3 -> L2 << L3.
 Proof.
   intros; sets_solve.
 Qed.
@@ -1065,9 +1076,8 @@ Proof.
   induction E; intros; split; intros. elim H0.
       simpl*.
     simpl in *; destruct H0.
-      subst. sets_solve. apply* H.
-    destruct a.
-    destruct* (proj1 (subset_union_l (fv a) (fv_in fv E) F)).
+      subst. sets_solve.
+    destruct* a.
   simpl in *.
   destruct a.
   apply* (proj2 (subset_union_l (fv a) (fv_in fv E) F)).
@@ -2086,19 +2096,10 @@ Proof.
     unfold really_all_fv in *.
     simpl in *.
     rewrite all_fv_app in Hy.
-    sets_solve.
-      use (Hfv y (S.union_2 _ H8)).
-      clear -H1.
-      apply S.union_2.
-      destruct (S.union_1 H1); apply (get_kind_fv_in _ _ _ H).
-     rewrite map_remove_env in H8.
-     use (fv_in_remove_env _ _ _ H8).
-     rewrite map_remove_env in H1.
-     use (fv_in_remove_env _ _ _ H1).
-    use (Hfv _ (S.union_3 _ H8)).
-    apply S.union_2.
-    clear -H1.
-    destruct (S.union_1 H1); apply (get_kind_fv_in _ _ _ H).
+    do 2 rewrite map_remove_env in Hy.
+    sets_solve; try use (get_kind_fv_in _ _ _ H1).
+      use (fv_in_remove_env _ _ _ H8).
+    use (fv_in_remove_env _ _ _ H1).
   unfold really_all_fv, all_fv.
   rewrite <- H2; rewrite <- H3.
   simpl.

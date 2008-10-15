@@ -144,7 +144,7 @@ Fixpoint split_env (A:Set) (B:vars) (E:env A) {struct E} : env A * env A :=
 Definition vars_subst S L :=
   typ_fv_list (List.map (fun x => typ_subst S (typ_fvar x)) (S.elements L)).
 
-Definition typinf_scheme K' E' L T1 :=
+Definition typinf_generalize K' E' L T1 :=
   let ftve := close_fvk K' (env_fv E' \u L) in
   let (K'', KA) := split_env ftve K' in
   let B := close_fvk K' (typ_fv T1) in
@@ -185,7 +185,7 @@ Fixpoint typinf (K:kenv) (E:Defs.env) (t:trm) (T:typ) (Ts:list typ) (S:subs)
       let K' := Env.map (kind_subst S') K0 in
       let E' := Env.map (sch_subst S') E in
       let T1 := typ_subst S' V in
-      let (KA, M) := typinf_scheme K' E' (vars_subst S' (dom K)) T1 in
+      let (KA, M) := typinf_generalize K' E' (vars_subst S' (dom K)) T1 in
       let x := proj1_sig (var_fresh (dom E \u trm_fv t1 \u trm_fv t2)) in
       typinf KA (E & x ~ M) (t2 ^ x) T Ts S' h'
     end
@@ -1451,6 +1451,47 @@ Proof.
   intro; intros. apply* Inc4.
 Qed.
 
+Lemma soundness_generalize : forall L K' E' t T1 KA M,
+  K'; E' |Gc|= t ~: T1 ->
+  typinf_generalize K' E' L T1 = (KA, M) ->
+  forall Xs,
+    fresh (L \u env_fv E' \u dom K' \u fv_in kind_fv K' \u typ_fv T1)
+      (sch_arity M) Xs ->
+    KA & kinds_open_vars (sch_kinds M) Xs; E' |Gc|= t ~: M ^ Xs.
+Proof.
+  unfold typinf_generalize.
+  introv Typ HI.
+  set (ftve := close_fvk K' (env_fv E' \u L)) in *.
+  case_rewrite (split_env ftve K') R2.
+  case_rewrite (split_env (close_fvk K' (typ_fv T1)) e) R3.
+  case_rewrite (split e2) R4.
+  set (Bs := S.elements (S.diff (close_fvk K' (typ_fv T1)) (ftve \u dom e2)))
+    in *.
+  set (l0' := List.map (fun _:var => @None ckind) Bs) in *.
+  inversion HI; clear HI. subst e0.
+  destruct* (split_env_ok _ R2) as [Ok [Dise [Se0 [Inc1 Inc2]]]].
+  destruct* (split_env_ok _ R3) as [Ok' [Dise' [Se2 [Inc3 Inc4]]]].
+  poses He2 (split_combine e2). rewrite R4 in He2.
+  assert (HK': kenv_ok K') by auto.
+  assert (Hkt: list_forall (All_kind_types type) (l0 ++ l0')).
+    apply list_forall_app.
+      apply* env_prop_list_forall.
+        rewrite He2. intro; intros. apply* (proj2 HK' x).
+      rewrite* He2.
+    unfold l0'. clear; induction Bs; simpl*.
+  assert (HM: scheme M).
+    subst M; unfold l0'.
+    apply* scheme_generalize.
+    do 2 rewrite app_length. rewrite map_length. rewrite* (split_length _ R4).
+  rewrite H1.
+  intros.
+  assert (AryM: sch_arity M = length (l ++ Bs)).
+    rewrite <- H1.
+    unfold sch_arity; simpl. unfold l0'.
+    autorewrite with list.
+    rewrite* (split_length _ R4).
+  apply* typing_rename_typ.
+
 Lemma soundness_let : forall h Ts t1 t2 K0 E T S0 S K,
   (forall t K0 E T Ts S0 K S, soundness_spec h t K0 E T Ts S0 K S) ->
   soundness_spec (Datatypes.S h) (trm_let t1 t2) K0 E T Ts S0 K S.
@@ -1459,7 +1500,7 @@ Proof.
   destruct (var_fresh (fvs S0 K0 E T Ts)); simpl in HI.
   case_rewrite (typinf K0 E t1 (typ_fvar x) (T::Ts) S0 h) R1. destruct p.
   fold (typ_subst s (typ_fvar x)) in HI.
-  unfold typinf_scheme in HI.
+  unfold typinf_generalize in HI.
   set (K' := map (kind_subst s) k) in *.
   set (T1 := typ_subst s (typ_fvar x)) in *.
   set (ftve :=
