@@ -110,10 +110,11 @@ Definition binds x a (E : env A) :=
   get x E = Some a.
 
 (** Proposition capturing the idea that a proposition P holds on all 
-  values containted in the environment. *)
+  values containted in the environment.
+  Use In rather than binds for compatibility with fv_in. *)
 
 Definition env_prop (P : A -> Prop) (E : env A) := 
-  forall x a, binds x a E  -> P a.
+  forall x a, In (x,a) E  -> P a.
 
 (** Inclusion of an environment in another one. *)
 
@@ -594,29 +595,35 @@ End IterPush.
 
 Hint Resolve ok_concat_iter_push.
 
+Section Fv_in.
+
 (* ********************************************************************** *)
 (** ** Gathering free variables of the values contained in an
   environment *)
 
+Variables (A : Set) (fv : A -> vars).
+
 (** Computing free variables contained in an environment. *)
 
-Fixpoint fv_in (A : Set) (fv : A -> vars) (E : env A) {struct E} : vars :=
+Fixpoint fv_in (E : env A) : vars :=
   match E with
   | nil => {}
-  | (x,a)::E' => (fv a) \u fv_in fv E'
+  | (x,a)::E' => fv a \u fv_in E'
   end.
 
 (** Specification of the above function in terms of [bind]. *)
 
-Lemma fv_in_spec : forall (A : Set) (fv : A -> vars) x a (E : env A),
-  binds x a E -> (fv a) << (fv_in fv E).
+Lemma fv_in_spec : forall E, env_prop (fun a => fv a << fv_in E) E.
 Proof.
-  unfold binds; induction E as [|(y,b)]; simpl; intros B.
-  contradictions.
-  case_var.
-    inversions B. apply subset_union_weak_l.
-    apply* (@subset_trans (fv_in fv E)). apply subset_union_weak_r.
+  induction E; intro; simpl; intros. elim H.
+  destruct H; intro; intros.
+    subst. auto with sets.
+  destruct a.
+  puts (IHE _ _ H).
+  auto with sets.
 Qed.
+
+End Fv_in.
 
 (* ********************************************************************** *)
 (** ** Tactics *)

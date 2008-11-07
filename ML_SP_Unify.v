@@ -9,115 +9,6 @@ Require Import ML_SP_Soundness.
 
 Set Implicit Arguments.
 
-Hint Resolve in_or_app.
-
-Lemma mem_3 : forall v L, S.mem v L = false -> v \notin L.
-Proof.
-  intros. intro.
-  rewrite (S.mem_1 H0) in H.
-  discriminate.
-Qed.
-
-Hint Resolve mem_3.
-
-Lemma remove_4 : forall y x L, y \in S.remove x L -> ~ E.eq x y.
-Proof.
-  intros; intro.
-  elim (S.remove_1 H0 H).
-Qed.
-
-Ltac sets_simpl_hyps x :=
-  match goal with
-  | H: _ \in {} |- _ => elim (in_empty H)
-  | H: _ \in {{?y}} |- _ =>
-    puts (proj1 (in_singleton _ _) H); clear H; subst y; try sets_simpl_hyps
-  | H: x \in S.diff _ _ |- _ =>
-    let H1 := fresh "Hin" in let H2 := fresh "Hn" in
-    poses H1 (S.diff_1 H); poses H2 (S.diff_2 H); clear H; try sets_simpl_hyps
-  | H: x \in S.inter _ _ |- _ =>
-    let H1 := fresh "Hin" in let H2 := fresh "Hin" in
-    poses H1 (S.inter_1 H); poses H2 (S.inter_2 H); clear H; try sets_simpl_hyps
-  | H: S.mem x _ = false |- _ =>
-    let H1 := fresh "Hn" in
-    poses H1 (mem_3 H); clear H; try sets_simpl_hyps
-  | H: x \in S.remove _ _ |- _ =>
-    let H1 := fresh "Hin" in let H2 := fresh "Hn" in
-    poses H1 (S.remove_3 H); poses H2 (remove_4 H); clear H; try sets_simpl_hyps
-  end.
-
-Ltac sets_simpl :=
-  match goal with |- ?x \in _ => try sets_simpl_hyps x end.
-
-Ltac find_in_goal L :=
-  match goal with |- ?x \in ?E =>
-    match E with context[L] =>
-      match goal with
-      | |- x \in L => assumption
-      | |- _ \in ?L1 \u ?L2 =>
-        try (apply S.union_2; find_in_goal L);
-          apply S.union_3; find_in_goal L
-      | |- _ \in S.diff ?L1 ?L2 =>
-        apply S.diff_3; [find_in_goal L | notin_solve]
-      | |- _ \in S.remove ?y ?L1 =>
-        let H1 := fresh "HE" in
-        apply S.remove_2;
-        [try assumption; intro HE; rewrite HE in *; solve [auto]
-        | find_in_goal L]
-      end
-    end
-  end.
-
-Ltac find_in_solve x :=
-  match goal with
-  | |- ?y \in _ => puts (S.singleton_2 (S.E.eq_refl y)); find_in_goal {{y}}
-  | H: x \in ?L |- _ => find_in_goal L
-  end.
-
-Ltac union_solve x :=
-  try sets_simpl_hyps x;
-  try match goal with
-  | H: x \in _ \u _ |- _ =>
-    destruct (S.union_1 H); clear H; union_solve x
-  | H: ?L1 << ?L2 |- _ =>
-    match goal with
-    | H': x \in ?L1 |- _ =>
-      let H1 := fresh "Hin" in poses H1 (H _ H'); clear H; union_solve x
-    | H': x \in ?L3 |- _ =>
-      match L1 with context[L3] =>
-        let H1 := fresh "Hin" in 
-        assert (H1: x \in L2) by (apply H; find_in_solve x);
-        clear H; union_solve x
-      end
-    end
-  end.
-
-Ltac sets_solve :=
-  match goal with
-  | |- ?x \in _ => try union_solve x; try find_in_solve x
-  | |- _ << _ =>
-    let y := fresh "y" in let Hy := fresh "Hy" in
-    intros y Hy; sets_solve
-  end.
-
-Lemma test_self : forall x, x \in {{x}}.
-  intros; sets_solve.
-Qed.
-
-Lemma test_remove : forall x L1 L2,
-  S.remove x (L1 \u L2) << S.remove x (L2 \u L1).
-Proof.
-  intros; sets_solve.
-Qed.
-
-Lemma test_subset : forall L1 L2 L3,
-  L2 << L1 -> L1 \u L2 << L3 -> L2 << L3.
-Proof.
-  intros; sets_solve.
-Qed.
-
-Hint Extern 1 (_ \in _) => solve [sets_solve].
-Hint Extern 1 (_ << _) => solve [sets_solve].
-
 Module MkUnify(Cstr:CstrIntf)(Const:CstIntf).
 
 Module Sound := MkSound(Cstr)(Const).
@@ -148,7 +39,8 @@ Definition extends S S0 :=
 Definition unifies S pairs :=
   forall T1 T2, In (T1, T2) pairs -> typ_subst S T1 = typ_subst S T2.
 
-Definition is_subst S := env_prop (fun T => disjoint (dom S) (typ_fv T)) S.
+Definition is_subst (S : subs) :=
+  env_prop (fun T => disjoint (dom S) (typ_fv T)) S.
 
 Fixpoint unify_kind_rel (kr kr':list(var*typ)) (un:list var)
   (pairs:list(typ*typ)) {struct kr} :=
@@ -364,6 +256,13 @@ Proof.
   disjoint_solve.
 Qed.
 
+Lemma map_snd_env_map : forall (A:Set) (f:A->A) l,
+  List.map (fun X:var*A => (fst X, f (snd X))) l = Env.map f l.
+Proof.
+  induction l; simpl*.
+  destruct a. rewrite* IHl.
+Qed.
+
 Lemma add_binding_is_subst : forall S x T,
   is_subst S ->
   disjoint (dom S) (typ_fv T) ->
@@ -373,16 +272,19 @@ Proof.
   intros.
   unfold compose.
   intro; intros.
-  binds_cases H2.
-    destruct (binds_single_inv B); subst.
-    disjoint_solve.
-    destruct* (v == x0).
-  destruct (binds_map_inv _ _ B0) as [b [F B']].
-  subst.
-  use (H _ _ B').
-  simpl in *.
-  apply* disjoint_subst.
-  intro y; destruct* (H0 y). destruct* (y == x).
+  rewrite dom_concat; rewrite dom_map.
+  simpl. rewrite union_empty_r.
+  destruct (in_app_or _ _ _ H2).
+    destruct (in_map_inv _ _ _ _ H3) as [b [F B']].
+    subst.
+    use (H _ _ B').
+    simpl in *.
+    apply* disjoint_subst.
+    intro y; destruct* (H0 y). destruct* (y == x).
+  simpl in H3. destruct* H3.
+  inversions H3.
+  disjoint_solve.
+  destruct* (v == x0).
 Qed.
 
 Hint Resolve add_binding_is_subst.
@@ -393,7 +295,7 @@ Proof.
   intros; induction T; simpl in *.
       intro; auto.
     case_eq (get v S); intros.
-    use (H _ _ H0).
+      use (H _ _ (binds_in H0)).
     use (get_none_notin _ H0).
     simpl; intro x; destruct* (x == v).
   disjoint_solve.
@@ -530,7 +432,7 @@ Qed.
 
 Lemma is_subst_id : is_subst id.
 Proof.
-  unfold id, is_subst. intro; intros. elim (binds_empty H).
+  unfold id, is_subst. intro; intros. elim H.
 Qed.
 
 Lemma binds_remove_env : forall (A:Set) v K x (a:A),
@@ -694,7 +596,7 @@ Proof.
   induction T; simpl. auto.
     case_eq (get v S); intros.
       rewrite* typ_subst_fresh.
-      apply (H _ _ H0).
+      apply (H _ _ (binds_in H0)).
     simpl.
     rewrite* H0.
   simpl; congruence.
@@ -817,14 +719,6 @@ Proof.
   rewrite* (map_get_none (kind_subst S) _ _ R1).
 Qed.
 
-Lemma binds_in : forall (A:Set) x (a:A) E,
-  binds x a E -> In (x, a) E.
-Proof.
-  unfold binds; induction E; intros. elim (binds_empty H).
-  destruct a0; simpl in *.
-  destruct* (x == v). inversions* H.
-Qed.
-
 Lemma unify_kind_rel_keep : forall kr kr' un pairs k' l,
   unify_kind_rel kr kr' un pairs = (k', l) ->
   incl kr' k' /\ incl pairs l.
@@ -906,19 +800,33 @@ Proof.
   rewrite* IHE.
 Qed.
 
-Lemma fv_in_remove_env : forall (A:Set) (fv:A->vars) x E,
-  fv_in fv (remove_env E x) << fv_in fv E.
+(*
+Lemma fv_in0_strengthen : forall (A:Set) (fv:A->vars) x E L,
+  x # E -> fv_in0 fv E (L \u {{x}}) = fv_in0 fv E L.
 Proof.
-  induction E; simpl. apply subset_refl.
-  destruct a; simpl.
-  destruct* (x == v); simpl; intros y Hy; auto.
+  induction E; intros.
+    reflexivity.
+  simpl. destruct a; simpl.
+  simpl in H.
+  case_eq (S.mem v L); introv R1.
+    assert (S.mem v (L \u {{x}}) = true) by auto with sets.
+    rewrite H0.
+    apply* IHE.
+  puts (mem_3 R1).
+  case_eq (S.mem v (L \u {{x}})); introv R2.
+    use (S.mem_2 R2).
+    elim H0. sets_solve.
+    elim H; auto.
+  rewrite <- union_assoc. rewrite (union_comm {{x}}). rewrite union_assoc.
+  rewrite* IHE.
 Qed.
+*)
 
-Lemma map_snd_env_map : forall (A:Set) (f:A->A) l,
-  List.map (fun X:var*A => (fst X, f (snd X))) l = Env.map f l.
+Lemma fv_in_remove_env : forall (A:Set) (fv:A->vars) x E,
+  ok E -> fv_in fv (remove_env E x) << fv_in fv E.
 Proof.
-  induction l; simpl*.
-  destruct a. rewrite* IHl.
+  induction 1; simpl; intros. auto.
+  destruct* (x == x0); simpl*.
 Qed.
 
 Lemma unify_kinds_subst : forall k1 k2 k3 l S,
@@ -1054,7 +962,7 @@ Proof.
   assert (env_prop (fun T => typ_subst S T = T) S0).
     intro; intros.
     rewrite <- HeqS0.
-    rewrite <- (binds_typ_subst H1).
+    rewrite <- (binds_typ_subst (in_ok_binds _ _ H1 H0)).
     apply* typ_subst_idem.
   clear HeqS0 H.
   induction S0. auto.
@@ -1063,24 +971,24 @@ Proof.
     rewrite* IHS0.
     intro; intros.
     apply (H1 x0 a).
-    unfold binds. simpl.
+    simpl.
     destruct* (x0 == x).
-    subst. elim (binds_fresh H H4).
-  unfold binds; simpl.
-  destruct* (x == x).
+  simpl*.
 Qed.
 
 Lemma fv_in_subset_inv : forall (A:Set) fv F E,
-  fv_in fv E << F <-> forall x (a:A), In (x,a) E -> fv a << F.
+  fv_in fv E << F <-> env_prop (fun a:A => fv a << F) E.
 Proof.
-  induction E; intros; split; intros. elim H0.
-      simpl*.
-    simpl in *; destruct H0.
-      subst. sets_solve.
-    destruct* a.
-  simpl in *.
-  destruct a.
-  apply* (proj2 (subset_union_l (fv a) (fv_in fv E) F)).
+  split; intros.
+    intro; intros.
+    apply* subset_trans.
+    apply* (fv_in_spec fv _ _ _ H0).
+  induction E. simpl*.
+  simpl in *. destruct a.
+  sets_solve.
+    refine (H v _ _ _ H0). auto.
+  refine (IHE _ _ H0).
+  intro; intros. apply* (H x).
 Qed.
 
 Lemma typ_subst_prebind : forall v T S T1,
@@ -1560,10 +1468,9 @@ Lemma fv_in_decr : forall (A:Set) v T S (E:Env.env A) fv (sub:subs -> A -> A),
   S.remove v (typ_fv T \u fv_in fv (map (sub S) E)).
 Proof.
   intros.
-  induction E; simpl*.
+  induction E; simpl*; intros.
   destruct a.
   simpl.
-  sets_solve.
   use (H1 a).
 Qed.
 
@@ -1626,6 +1533,7 @@ Proof.
     unfold really_all_fv. rewrite map_remove_env.
     sets_solve.
     apply S.union_2. refine (fv_in_remove_env _ _ _ H4).
+    auto.
   unfold really_all_fv, all_fv; simpl.
   rewrite* get_notin_dom.
   simpl*.
@@ -1935,10 +1843,9 @@ Proof.
   induction K; simpl. apply subset_refl.
   unfold get_kind; simpl.
   destruct a. destruct (v == v0).
-    simpl. intros x Hx; auto with sets.
+    simpl*.
   fold (get_kind v K).
-  intros x Hx.
-  simpl. apply S.union_3. apply* IHK.
+  simpl*.
 Qed.
 
 Lemma in_typ_fv : forall t l,
@@ -2098,8 +2005,9 @@ Proof.
     rewrite all_fv_app in Hy.
     do 2 rewrite map_remove_env in Hy.
     sets_solve; try use (get_kind_fv_in _ _ _ H1).
-      use (fv_in_remove_env _ _ _ H8).
-    use (fv_in_remove_env _ _ _ H1).
+    apply S.union_2.
+    refine (fv_in_remove_env _ v _ _); auto.
+    refine (fv_in_remove_env _ v0 _ _); auto.
   unfold really_all_fv, all_fv.
   rewrite <- H2; rewrite <- H3.
   simpl.

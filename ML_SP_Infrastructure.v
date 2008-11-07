@@ -10,22 +10,130 @@ Require Import List Metatheory ML_SP_Definitions.
 Require Import ProofIrrelevance.
 
 (* ====================================================================== *)
-(** * The infrastructure needs to be parameterized over definitions *)
-
-Module MkInfra(Cstr:CstrIntf)(Const:CstIntf).
-
-Module Defs := MkDefs(Cstr)(Const).
-Import Defs.
-
-(* ====================================================================== *)
 (** * Extra definitions and tactics extending Metatheory *)
 
-Lemma self_in_singleton : forall v, v \in {{v}}.
+(* First some tactics to handle finite sets *)
+
+Hint Resolve in_or_app.
+
+Lemma binds_in : forall (A:Set) x (a:A) E,
+  binds x a E -> In (x, a) E.
 Proof.
-  intros; apply* (proj2 (in_singleton v v)).
+  unfold binds; induction E; intros. elim (binds_empty H).
+  destruct a0; simpl in *.
+  destruct* (x == v). inversions* H.
 Qed.
 
-Hint Resolve self_in_singleton.
+Hint Immediate binds_in.
+
+Lemma mem_3 : forall v L, S.mem v L = false -> v \notin L.
+Proof.
+  intros. intro.
+  rewrite (S.mem_1 H0) in H.
+  discriminate.
+Qed.
+
+Hint Resolve mem_3.
+
+Lemma remove_4 : forall y x L, y \in S.remove x L -> ~ E.eq x y.
+Proof.
+  intros; intro.
+  elim (S.remove_1 H0 H).
+Qed.
+
+Ltac sets_simpl_hyps x :=
+  match goal with
+  | H: _ \in {} |- _ => elim (in_empty H)
+  | H: _ \in {{?y}} |- _ =>
+    puts (proj1 (in_singleton _ _) H); clear H; subst y; try sets_simpl_hyps
+  | H: x \in S.diff _ _ |- _ =>
+    let H1 := fresh "Hin" in let H2 := fresh "Hn" in
+    poses H1 (S.diff_1 H); poses H2 (S.diff_2 H); clear H; try sets_simpl_hyps
+  | H: x \in S.inter _ _ |- _ =>
+    let H1 := fresh "Hin" in let H2 := fresh "Hin" in
+    poses H1 (S.inter_1 H); poses H2 (S.inter_2 H); clear H; try sets_simpl_hyps
+  | H: S.mem x _ = false |- _ =>
+    let H1 := fresh "Hn" in
+    poses H1 (mem_3 H); clear H; try sets_simpl_hyps
+  | H: x \in S.remove _ _ |- _ =>
+    let H1 := fresh "Hin" in let H2 := fresh "Hn" in
+    poses H1 (S.remove_3 H); poses H2 (remove_4 H); clear H; try sets_simpl_hyps
+  end.
+
+Ltac sets_simpl :=
+  match goal with |- ?x \in _ => try sets_simpl_hyps x end.
+
+Ltac find_in_goal L :=
+  match goal with |- ?x \in ?E =>
+    match E with context[L] =>
+      match goal with
+      | |- x \in L => assumption
+      | |- _ \in ?L1 \u ?L2 =>
+        try (apply S.union_2; find_in_goal L);
+          apply S.union_3; find_in_goal L
+      | |- _ \in S.diff ?L1 ?L2 =>
+        apply S.diff_3; [find_in_goal L | notin_solve]
+      | |- _ \in S.remove ?y ?L1 =>
+        let H1 := fresh "HE" in
+        apply S.remove_2;
+        [try assumption; intro HE; rewrite HE in *; solve [auto]
+        | find_in_goal L]
+      end
+    end
+  end.
+
+Ltac find_in_solve x :=
+  match goal with
+  | |- ?y \in _ => puts (S.singleton_2 (S.E.eq_refl y)); find_in_goal {{y}}
+  | H: x \in ?L |- _ => find_in_goal L
+  end.
+
+Ltac union_solve x :=
+  try sets_simpl_hyps x;
+  try match goal with
+  | H: x \in _ \u _ |- _ =>
+    destruct (S.union_1 H); clear H; union_solve x
+  | H: ?L1 << ?L2 |- _ =>
+    match goal with
+    | H': x \in ?L1 |- _ =>
+      let H1 := fresh "Hin" in poses H1 (H _ H'); clear H; union_solve x
+    | H': x \in ?L3 |- _ =>
+      match L1 with context[L3] =>
+        let H1 := fresh "Hin" in 
+        assert (H1: x \in L2) by (apply H; find_in_solve x);
+        clear H; union_solve x
+      end
+    end
+  end.
+
+Ltac sets_solve :=
+  match goal with
+  | |- ?x \in _ => try union_solve x; try find_in_solve x
+  | |- _ << _ =>
+    let y := fresh "y" in let Hy := fresh "Hy" in
+    intros y Hy; sets_solve
+  end.
+
+Lemma test_self : forall x, x \in {{x}}.
+  intros; sets_solve.
+Qed.
+
+Lemma test_remove : forall x L1 L2,
+  S.remove x (L1 \u L2) << S.remove x (L2 \u L1).
+Proof.
+  intros; sets_solve.
+Qed.
+
+Lemma test_subset : forall L1 L2 L3,
+  L2 << L1 -> L1 \u L2 << L3 -> L2 << L3.
+Proof.
+  intros; sets_solve.
+Qed.
+
+Hint Extern 1 (_ \in _) => solve [sets_solve].
+Hint Extern 1 (_ << _) => solve [sets_solve].
+
+(* Disjointness *)
 
 Definition disjoint s1 s2 :=
   forall x, x \notin s1 \/ x \notin s2.
@@ -74,6 +182,25 @@ Proof.
   destruct* (eq_var_dec x v).
 Qed.
 
+Lemma disjoint_notin : forall s v,
+  disjoint s {{v}} -> v \notin s.
+Proof.
+  intros.
+  destruct* (H v).
+Qed.
+
+Hint Resolve disjoint_notin.
+
+(* ====================================================================== *)
+(** * The infrastructure needs to be parameterized over definitions *)
+
+Module MkInfra(Cstr:CstrIntf)(Const:CstIntf).
+
+Module Defs := MkDefs(Cstr)(Const).
+Import Defs.
+
+(* These tactics needs definitions *)
+
 Ltac disjoint_solve_from_one v :=
   match goal with
   | H: disjoint _ _ |- _ => destruct (H v); clear H
@@ -101,18 +228,9 @@ Lemma disjoint_fresh : forall n L1 Xs L2,
   fresh L2 n Xs.
 Proof.
   induction n; destruct Xs; simpl; intros; auto; try discriminate.
-  split. destruct* (H0 v). notin_contradiction.
+  split. destruct* (H0 v).
   destruct H; apply* IHn. disjoint_solve.
 Qed.
-
-Lemma disjoint_notin : forall s v,
-  disjoint s {{v}} -> v \notin s.
-Proof.
-  intros.
-  destruct* (H v).
-Qed.
-
-Hint Resolve disjoint_notin.
 
 Hint Extern 1 (?n = length ?Xs) =>
   match goal with
@@ -470,7 +588,7 @@ Proof.
   intros. induction T1; intros; simpl; f_equal*.
   apply list_map_nth. apply* typ_subst_fresh.
     intro; auto.
-  case_eq (get v S); intros. apply* typ_open_type. apply (H v t H0).
+  case_eq (get v S); intros. apply* typ_open_type. apply* (H v).
   auto.
 Qed.
 
@@ -623,7 +741,7 @@ Proof.
     case_eq (get v S); intros.
       rewrite* (binds_concat_fresh (combine Xs Us) H2).
         rewrite* <- typ_open_type.
-        apply* (H1 _ _ H2).
+        apply* (H1 v).
       rewrite* dom_combine.
       destruct* (fresh_disjoint _ _ _ H v).
       rewrite* (proj1 H0).
@@ -648,7 +766,7 @@ Proof.
   rewrite <- (typ_subst_fresh empty T).
     apply* (typ_subst_intro0 (S:=empty) Xs T (Us:=Us) H).
     intro; intros.
-    elim (binds_empty H1).
+    elim H1.
   simpl; intro; auto.
 Qed.
 
@@ -681,12 +799,11 @@ Qed.
 Lemma list_forall_env_prop : forall (A:Set) (P:A->Prop) Xs Vs,
   list_forall P Vs -> env_prop P (combine Xs Vs).
 Proof.
-  induction Xs; destruct Vs; simpl; intros; intro; intros;
-    unfold binds in H0; simpl in H0; try discriminate.
-  destruct* (eq_var_dec x a).
-    inversion H. generalize H4; inversion* H0.
-  inversion H.
-  apply (IHXs Vs H3 x a1 H0).
+  intros; gen Xs.
+  induction H; destruct Xs; intro; simpl; intros; try contradiction.
+  destruct H1.
+    inversions* H1.
+  apply (IHlist_forall _ _ _ H1).
 Qed.
 
 Lemma typ_open_types : forall T Us Ks,
@@ -1029,13 +1146,6 @@ Proof.
   simpl in *.
   destruct H.
   split; auto*.
-  eapply IHn. apply H1.
-  apply (proj2 (subset_union_l L2 {{v}} (L1 \u {{v}}))).
-  split.
-  eapply subset_trans.
-    apply H0.
-    apply subset_union_weak_l.
-  apply subset_union_weak_r.
 Qed.
 
 Lemma For_all2_In: forall (A B:Set) (P:A->B->Prop) x l1 l2,
@@ -1114,7 +1224,6 @@ Lemma in_vars_dec : forall x L,
 Proof.
   intros.
   case_eq (S.mem x L); intros; auto with sets.
-  right; intro inL. rewrite (S.mem_1 inL) in H. discriminate.
 Qed.
 
 Lemma ok_cons : forall (A:Set) (E:Env.env A) x (a:A),
@@ -1131,7 +1240,7 @@ Proof.
     disjoint_solve.
   fold (E&F). rewrite dom_concat.
   inversions H0.
-  destruct* (H1 v). notin_contradiction.
+  destruct* (H1 v).
 Qed.
 
 Lemma notin_combine_fresh : forall (A:Set) Xs v (Vs:list A) n L,
@@ -1145,7 +1254,7 @@ Proof.
   split.
     intro Hv. elim H.
     rewrite* <- (proj1 (in_singleton _ _) Hv).
-  apply* IHXs. auto with sets.
+  apply* IHXs.
 Qed.
 
 Lemma ok_combine_fresh : forall (A:Set) L n Xs (Vs:list A),
@@ -1155,7 +1264,6 @@ Proof.
     try apply (ok_empty A).
   apply* ok_cons.
   apply* notin_combine_fresh.
-  destruct H; auto with sets.
 Qed.
 
 Lemma incr_subst_fresh : forall a t S Xs,
@@ -1322,7 +1430,7 @@ Proof.
     intro. split.
       destruct* (ok_concat_inv _ _ (proj1 H2)).
     intros x k B. apply (proj2 H2 x k).
-    apply* binds_concat_ok. destruct* H2.
+    unfold concat; apply* in_or_app.
   pick_fresh y. forward~ (H1 y) as G. inversions* G.
   pick_fresh y. forward~ (H2 y) as G. inversions* G.
   pick_freshes (length Ks) Xs. forward~ (H1 Xs).

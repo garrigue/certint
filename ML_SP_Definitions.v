@@ -269,6 +269,8 @@ Inductive well_kinded : kenv -> kind -> typ -> Prop :=
       entails k' k ->
       well_kinded K (Some k) (typ_fvar x).
 
+Hint Constructors well_kinded.
+
 Fixpoint For_all2(A B:Set)(P:A->B->Prop)(l1:list A)(l2:list B) {struct l1}
   : Prop :=
   match (l1, l2) with

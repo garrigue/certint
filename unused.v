@@ -55,3 +55,39 @@ Proof.
     apply* in_mkset.
   notin_contradiction.
 Qed.
+
+(* Preuves pour une autre version de fv_in *)
+
+Lemma fv_in0_subset : forall (A:Set) (fv:A->vars) E L1 L2,
+  L2 << L1 -> fv_in0 fv E L1 << fv_in0 fv E L2.
+Proof.
+  induction E; simpl; intros.
+    auto.
+  destruct a.
+  case_eq (S.mem v L1); introv R1; case_eq (S.mem v L2); introv R2.
+     auto.
+    assert (L2 \u {{v}} << L1).
+      sets_solve. auto with sets.
+    use (IHE _ _ H0).
+   elim (mem_3 R1).
+   apply H; auto with sets.
+  assert (L2 \u {{v}} << L1 \u {{v}}) by auto.
+  use (IHE _ _ H0).
+Qed.
+
+Lemma fv_in_concat : forall (A:Set) (fv:A->vars) E F,
+  fv_in fv (E & F) << fv_in fv F \u fv_in fv E.
+Proof.
+  intros.
+  unfold fv_in.
+  fold (fv_in fv E).
+  generalize {}.
+  induction F; simpl; intros.
+    unfold fv_in.
+    rewrite union_empty_l.
+    apply* fv_in0_subset.
+  destruct a. destruct* (S.mem v t).
+  sets_solve.
+  use (IHF _ _ H).
+Qed.
+
