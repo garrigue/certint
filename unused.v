@@ -1,3 +1,15 @@
+Lemma elements_mkset : forall l,
+  sort S.E.lt l -> S.elements (mkset l) = l.
+Proof.
+  intros.
+  puts (S.elements_3 (mkset l)).
+  apply* sort_lt_ext.
+  intros; split; intro.
+    use (mkset_in _ (S.elements_2 H1)).
+  apply S.elements_1. apply in_mkset.
+  clear -H1; induction H1. rewrite* H. simpl*.
+Qed.
+
 Lemma kind_subst_id : forall k, kind_subst id k = k.
 Proof.
   intros.
