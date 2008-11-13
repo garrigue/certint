@@ -61,15 +61,6 @@ Definition entails K K' :=
   Cstr.entails (kind_cstr K) (kind_cstr K') /\
   forall T:var*typ, In T (kind_rel K') -> In T (kind_rel K).
 
-(** Type schemes. *)
-
-Record sch : Set := Sch { 
-  sch_type  : typ ;
-  sch_kinds : list kind }.
-
-Notation "'sch_arity' M" :=
-  (length (sch_kinds M)) (at level 20, no associativity).
-
 (** Opening body of type schemes. *)
 
 Fixpoint typ_open (T : typ) (Vs : list typ) {struct T} : typ :=
@@ -86,22 +77,6 @@ Definition typ_fvars :=
 
 Definition typ_open_vars T Xs := 
   typ_open T (typ_fvars Xs).
-
-(** Instanciation of a type scheme *)
-
-Definition sch_open M := 
-  typ_open (sch_type M).
-
-Definition sch_open_vars M := 
-  typ_open_vars (sch_type M).
-  
-Notation "M ^^ Vs" := (sch_open M Vs) 
-  (at level 67, only parsing) : typ_scope.
-Notation "M ^ Xs" := 
-  (sch_open_vars M Xs) (only parsing) : typ_scope.
-
-Bind Scope typ_scope with typ.
-Open Scope typ_scope.
 
 (** Locally closed types *)
 
@@ -174,10 +149,46 @@ Definition typ_body T Ks :=
     type (typ_open_vars T Xs) /\
     list_forall (All_kind_types (fun T' => type (typ_open_vars T' Xs))) Ks.
 
-(** Definition of a well-formed scheme *)
+(** Type schemes. *)
 
-Definition scheme M :=
-   typ_body (sch_type M) (sch_kinds M).
+Record sch : Set := Sch { 
+  sch_type  : typ ;
+  sch_kinds : list kind;
+  sch_ok    : typ_body sch_type sch_kinds }.
+
+Definition sch_arity M := length (sch_kinds M).
+
+(** Instanciation of a type scheme *)
+
+Definition sch_open M := 
+  typ_open (sch_type M).
+
+Definition sch_open_vars M := 
+  typ_open_vars (sch_type M).
+  
+Notation "M ^^ Vs" := (sch_open M Vs) 
+  (at level 67, only parsing) : typ_scope.
+Notation "M ^ Xs" := 
+  (sch_open_vars M Xs) (only parsing) : typ_scope.
+
+Bind Scope typ_scope with typ.
+Open Scope typ_scope.
+
+(** Open on a type is the identity. *)
+
+Lemma typ_open_type : forall T Us,
+  type T -> typ_open T Us = T.
+Proof.
+  introv W. induction T; simpls; inversions W; f_equal*.
+Qed.
+
+Definition Sch_nil T (HT : type T) : sch.
+  intros.
+  apply (@Sch T nil).
+  intro; intros.
+  unfold typ_open_vars; simpl.
+  rewrite* typ_open_type.
+Defined.
 
 (* ********************************************************************** *)
 (** ** Description of terms *)
@@ -258,7 +269,7 @@ Definition trm_inst t tl := trm_inst_rec 0 tl t.
 Definition kenv := env kind.
 
 Definition kenv_ok K :=
-  ok K /\ env_prop (All_kind_types type) K.
+  ok K /\ env_prop (fun o => All_kind_types type o) K.
 
 (** Proper instanciation *)
 
@@ -283,9 +294,9 @@ Fixpoint For_all2(A B:Set)(P:A->B->Prop)(l1:list A)(l2:list B) {struct l1}
 Definition kinds_open Ks Us :=
   List.map (fun k:kind => kind_open k Us) Ks.
 
-Definition proper_instance K Ks Us :=
-  types (length Ks) Us /\
-  For_all2 (well_kinded K) (kinds_open Ks Us) Us.
+Definition proper_instance K M Us :=
+  types (sch_arity M) Us /\
+  For_all2 (well_kinded K) (kinds_open (sch_kinds M) Us) Us.
 
 Definition kinds_open_vars Ks Xs :=
   List.combine Xs (kinds_open Ks (typ_fvars Xs)).
@@ -293,8 +304,6 @@ Definition kinds_open_vars Ks Xs :=
 (** Definition of typing environments *)
 
 Definition env := env sch.
-
-Definition env_ok (E:env) := ok E /\ env_prop scheme E.
 
 (** Computing free variables of a type. *)
 
@@ -333,7 +342,6 @@ Definition env_fv :=
 Module Type DeltaIntf.
   Parameter type : Const.const -> sch.
   Parameter closed : forall c, sch_fv (type c) = {}.
-  Parameter scheme : forall c, scheme (type c).
   Parameter rule : nat -> trm -> trm -> Prop.
   Parameter term : forall n t1 t2 tl,
     rule n t1 t2 ->
@@ -364,14 +372,13 @@ Fixpoint gc_lower (gc:gc_info) : gc_info :=
 Inductive typing(gc:gc_info) : kenv -> env -> trm -> typ -> Prop :=
   | typing_var : forall K E x M Us,
       kenv_ok K ->
-      env_ok E -> 
+      ok E -> 
       binds x M E -> 
-      proper_instance K (sch_kinds M) Us ->
+      proper_instance K M Us ->
       K ; E | gc |= (trm_fvar x) ~: (M ^^ Us)
-  | typing_abs : forall L K E U T t1, 
-      type U ->
+  | typing_abs : forall L K E U T t1 (HU : type U),
       (forall x, x \notin L -> 
-        K ; (E & x ~ Sch U nil) | gc_raise gc |= (t1 ^ x) ~: T) -> 
+        K ; (E & x ~ Sch_nil HU) | gc_raise gc |= (t1 ^ x) ~: T) -> 
       K ; E | gc |= (trm_abs t1) ~: (typ_arrow U T)
   | typing_let : forall M L1 L2 K E T2 t1 t2,
       (forall Xs, fresh L1 (sch_arity M) Xs ->
@@ -386,8 +393,8 @@ Inductive typing(gc:gc_info) : kenv -> env -> trm -> typ -> Prop :=
       K ; E | gc |= (trm_app t1 t2) ~: T
   | typing_cst : forall K E Us c,
       kenv_ok K ->
-      env_ok E ->
-      proper_instance K (sch_kinds (Delta.type c)) Us ->
+      ok E ->
+      proper_instance K (Delta.type c) Us ->
       K ; E | gc |= (trm_cst c) ~: (Delta.type c ^^ Us)
   | typing_gc : forall Ks L K E t T,
       gc_ok gc ->
