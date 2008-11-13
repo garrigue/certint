@@ -26,6 +26,94 @@ Qed.
 
 Hint Immediate binds_in.
 
+Definition list_snd (A B:Set) := List.map (@snd A B).
+
+Definition in_concat_or (A:Set) (E F:env A) p (H:In p (E & F)) :=
+  in_app_or F E p H.
+
+Definition in_or_concat (A:Set) (E F:env A) p H : In p (E & F) :=
+  in_or_app F E p H.
+
+Hint Resolve in_or_concat.
+
+Lemma in_ok_binds : forall (A:Set) x (a:A) E,
+  In (x,a) E -> ok E -> binds x a E.
+Proof.
+  intros.
+  unfold binds.
+  induction H0. elim H.
+  simpl.
+  simpl in H; destruct H.
+    inversions H.
+    destruct* (x == x).
+  destruct* (x == x0).
+  subst.
+  elim (binds_fresh (IHok H) H1).
+Qed.
+
+Hint Resolve in_ok_binds.
+
+Lemma in_map_inv : forall (A:Set) (f:A->A) x a E,
+  In (x,a) (map f E) -> exists b, f b = a /\ In (x,b) E.
+Proof.
+  induction E; simpl; intros. elim H.
+  destruct a0.
+  simpl in H; destruct H.
+    inversions H.
+    exists* a0.
+  destruct (IHE H).
+  exists* x0.
+Qed.
+
+Lemma map_snd_env_map : forall (A:Set) (f:A->A) l,
+  List.map (fun X:var*A => (fst X, f (snd X))) l = Env.map f l.
+Proof.
+  induction l; simpl*.
+  destruct a. rewrite* IHl.
+Qed.
+
+Section EnvProp.
+  Variables (A:Set) (P:A->Prop).
+
+  Lemma env_prop_single : forall x a, P a -> env_prop P (x ~ a).
+  Proof.
+    intros; intro; intros.
+    destruct* H0.
+    inversions* H0.
+  Qed.
+
+  Lemma env_prop_concat : forall l1 l2,
+    env_prop P l1 -> env_prop P l2 -> env_prop P (l1 & l2).
+  Proof.
+    intros; intro; intros.
+    destruct* (in_app_or _ _ _ H1).
+  Qed.
+
+  Lemma env_prop_concat_inv1 : forall l1 l2,
+    env_prop P (l1 & l2) -> env_prop P l1.
+  Proof.
+    intros; intro; intros. apply* (H x).
+  Qed.
+
+  Lemma env_prop_concat_inv2 : forall l1 l2,
+    env_prop P (l1 & l2) -> env_prop P l2.
+  Proof.
+    intros; intro; intros. apply* (H x).
+  Qed.
+
+  Lemma env_prop_map : forall (f:A->A) E,
+    env_prop P (map f E) -> env_prop (fun x => P (f x)) E.
+  Proof.
+    intros; intro; intros.
+    apply (H x).
+    rewrite <- map_snd_env_map.
+    use (in_map (fun X : var * A => (fst X, f (snd X))) _ _ H0).
+  Qed.
+End EnvProp.
+
+Hint Resolve env_prop_single env_prop_concat env_prop_concat_inv1
+  env_prop_concat_inv2.
+
 Lemma mem_3 : forall v L, S.mem v L = false -> v \notin L.
 Proof.
   intros. intro.
@@ -1390,7 +1478,7 @@ Hint Resolve sch_subst_type.
 Lemma sch_subst_arity : forall S M, 
   sch_arity (sch_subst S M) = sch_arity M.
 Proof.
-  intros; unfold sch_arity. simpl; rewrite* map_length.
+  intros. simpl; rewrite* map_length.
 Qed.
 
 (** ** Opening a scheme with a list of types gives a type *)
@@ -1406,6 +1494,35 @@ Qed.
 
 Hint Resolve sch_open_types.
 
+Lemma env_ok_concat_inv : forall E1 E2,
+  env_ok (E1 & E2) -> env_ok E1 /\ env_ok E2.
+Proof.
+  intros.
+  split; split; destruct H; destruct* (ok_concat_inv _ _ H);
+    intro; intros; apply* (H0 x a).
+Qed.
+
+Lemma kenv_ok_concat_inv : forall K1 K2,
+  kenv_ok (K1 & K2) -> kenv_ok K1 /\ kenv_ok K2.
+Proof.
+  intros.
+  split; split; destruct H; destruct* (ok_concat_inv _ _ H);
+    intro; intros; apply* (H0 x a).
+Qed.
+
+Definition kenv_ok_is_ok K (H:kenv_ok K) := proj1 H.
+Definition env_ok_is_ok E (H:env_ok E) := proj1 H.
+Definition kenv_ok_env_prop K (H:kenv_ok K) := proj2 H.
+Definition env_ok_env_prop E (H:env_ok E) := proj2 H.
+
+Hint Resolve kenv_ok_is_ok env_ok_is_ok kenv_ok_env_prop env_ok_env_prop.
+
+Lemma env_prop_binds : forall (A:Set) (P:A->Prop) x (a:A) E,
+  binds x a E -> env_prop P E -> P a.
+Proof.
+  intros. apply* (H0 x).
+Qed.
+
 (* ====================================================================== *)
 (** * Properties of judgments *)
 
@@ -1420,19 +1537,18 @@ Hint Constructors typing valu red.
 (** A typing relation is restricted to well-formed objects. *)
 
 Lemma typing_regular : forall gc K E e T,
-  typing gc K E e T -> kenv_ok K /\ ok E /\ term e /\ type T.
+  typing gc K E e T -> kenv_ok K /\ env_ok E /\ term e /\ type T.
 Proof.
   split4; induction* H.
   (* ok *)
   pick_fresh y. apply* (H1 y).
   pick_fresh y. apply* (H2 y).
-  pick_freshes (length Ks) Xs. forward~ (H1 Xs).
-    intro. split.
-      destruct* (ok_concat_inv _ _ (proj1 H2)).
-    intros x k B. apply (proj2 H2 x k).
-    unfold concat; apply* in_or_app.
-  pick_fresh y. forward~ (H1 y) as G. inversions* G.
-  pick_fresh y. forward~ (H2 y) as G. inversions* G.
+  pick_freshes (length Ks) Xs. forward~ (H1 Xs) as G.
+    destruct * (kenv_ok_concat_inv _ _ G).
+  pick_fresh y. forward~ (H1 y) as G.
+    destruct * (env_ok_concat_inv _ _ G).
+  pick_fresh y. forward~ (H2 y) as G.
+    destruct * (env_ok_concat_inv _ _ G).
   pick_freshes (length Ks) Xs. forward~ (H1 Xs).
   (* term *) 
   apply_fresh* term_let as y.
@@ -1440,24 +1556,16 @@ Proof.
     forward~ (H0 Xs) as G.
   pick_freshes (length Ks) Xs. forward~ (H1 Xs).
   (* type *)
-  pick_fresh y. unfold proper_instance in H2. auto*.
+  assert (scheme M) by apply* env_prop_binds.
+  pick_fresh y. destruct* H2.
   pick_fresh y. forward~ (H1 y).
   pick_fresh y. forward~ (H2 y).
   inversion* IHtyping1.
   (* const *)
-  destruct (Delta.type c) as [ct ck].
-  destruct H1 as [[Hlen HT] [Hc _]].
-  unfold scheme in Hc; unfold sch_open; simpl in *.
-  apply* typ_open_types.
+  puts (Delta.scheme c).
+  destruct H1. auto*.
   pick_freshes (length Ks) Xs. forward~ (H1 Xs).
 Qed.
-
-Lemma kenv_ok_is_ok : forall K, kenv_ok K -> ok K.
-Proof.
-  unfold kenv_ok. tauto.
-Qed.
-
-Hint Resolve kenv_ok_is_ok.
 
 (** The value predicate only holds on locally-closed terms. *)
 

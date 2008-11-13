@@ -67,7 +67,8 @@ Record sch : Set := Sch {
   sch_type  : typ ;
   sch_kinds : list kind }.
 
-Definition sch_arity M := length (sch_kinds M).
+Notation "'sch_arity' M" :=
+  (length (sch_kinds M)) (at level 20, no associativity).
 
 (** Opening body of type schemes. *)
 
@@ -257,7 +258,7 @@ Definition trm_inst t tl := trm_inst_rec 0 tl t.
 Definition kenv := env kind.
 
 Definition kenv_ok K :=
-  ok K /\ env_prop (fun o => All_kind_types type o) K.
+  ok K /\ env_prop (All_kind_types type) K.
 
 (** Proper instanciation *)
 
@@ -282,10 +283,9 @@ Fixpoint For_all2(A B:Set)(P:A->B->Prop)(l1:list A)(l2:list B) {struct l1}
 Definition kinds_open Ks Us :=
   List.map (fun k:kind => kind_open k Us) Ks.
 
-Definition proper_instance K M Us :=
-  types (sch_arity M) Us /\
-  scheme M /\
-  For_all2 (well_kinded K) (kinds_open (sch_kinds M) Us) Us.
+Definition proper_instance K Ks Us :=
+  types (length Ks) Us /\
+  For_all2 (well_kinded K) (kinds_open Ks Us) Us.
 
 Definition kinds_open_vars Ks Xs :=
   List.combine Xs (kinds_open Ks (typ_fvars Xs)).
@@ -293,6 +293,8 @@ Definition kinds_open_vars Ks Xs :=
 (** Definition of typing environments *)
 
 Definition env := env sch.
+
+Definition env_ok (E:env) := ok E /\ env_prop scheme E.
 
 (** Computing free variables of a type. *)
 
@@ -362,9 +364,9 @@ Fixpoint gc_lower (gc:gc_info) : gc_info :=
 Inductive typing(gc:gc_info) : kenv -> env -> trm -> typ -> Prop :=
   | typing_var : forall K E x M Us,
       kenv_ok K ->
-      ok E -> 
+      env_ok E -> 
       binds x M E -> 
-      proper_instance K M Us ->
+      proper_instance K (sch_kinds M) Us ->
       K ; E | gc |= (trm_fvar x) ~: (M ^^ Us)
   | typing_abs : forall L K E U T t1, 
       type U ->
@@ -384,8 +386,8 @@ Inductive typing(gc:gc_info) : kenv -> env -> trm -> typ -> Prop :=
       K ; E | gc |= (trm_app t1 t2) ~: T
   | typing_cst : forall K E Us c,
       kenv_ok K ->
-      ok E ->
-      proper_instance K (Delta.type c) Us ->
+      env_ok E ->
+      proper_instance K (sch_kinds (Delta.type c)) Us ->
       K ; E | gc |= (trm_cst c) ~: (Delta.type c ^^ Us)
   | typing_gc : forall Ks L K E t T,
       gc_ok gc ->

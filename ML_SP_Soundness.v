@@ -10,61 +10,6 @@ Require Import Arith List Metatheory
   ML_SP_Definitions
   ML_SP_Infrastructure.
 
-Definition list_snd (A B:Set) := List.map (@snd A B).
-
-Lemma in_or_concat : forall (A:Set) p (E F : Env.env A),
-  In p E \/ In p F -> In p (E & F).
-Proof.
-  intros. unfold concat. apply in_or_app. tauto.
-Qed.
-
-Hint Resolve in_or_concat.
-
-Lemma in_ok_binds : forall (A:Set) x (a:A) E,
-  In (x,a) E -> ok E -> binds x a E.
-Proof.
-  intros.
-  unfold binds.
-  induction H0. elim H.
-  simpl.
-  simpl in H; destruct H.
-    inversions H.
-    destruct* (x == x).
-  destruct* (x == x0).
-  subst.
-  elim (binds_fresh (IHok H) H1).
-Qed.
-
-Hint Resolve in_ok_binds.
-
-Lemma in_map_inv : forall (A:Set) (f:A->A) x a E,
-  In (x,a) (map f E) -> exists b, f b = a /\ In (x,b) E.
-Proof.
-  induction E; simpl; intros. elim H.
-  destruct a0.
-  simpl in H; destruct H.
-    inversions H.
-    exists* a0.
-  destruct (IHE H).
-  exists* x0.
-Qed.
-
-Lemma map_snd_env_map : forall (A:Set) (f:A->A) l,
-  List.map (fun X:var*A => (fst X, f (snd X))) l = Env.map f l.
-Proof.
-  induction l; simpl*.
-  destruct a. rewrite* IHl.
-Qed.
-
-Lemma env_prop_map : forall (A:Set) (P:A->Prop) (f:A->A) E,
-  env_prop P (map f E) -> env_prop (fun x => P (f x)) E.
-Proof.
-  intros; intro; intros.
-  apply (H x).
-  rewrite <- map_snd_env_map.
-  use (in_map (fun X : var * A => (fst X, f (snd X))) _ _ H0).
-Qed.
-
 Module MkSound(Cstr:CstrIntf)(Const:CstIntf).
 
 Module Infra := MkInfra(Cstr)(Const).
@@ -76,33 +21,86 @@ Module JudgInfra := MkJudgInfra(Delta).
 Import JudgInfra.
 Import Judge.
 
+Hint Immediate disjoint_ok.
+
+Lemma kenv_ok_concat : forall K1 K2,
+  kenv_ok K1 -> kenv_ok K2 -> disjoint (dom K1) (dom K2) -> kenv_ok (K1 & K2).
+Proof.
+  intros.
+  destruct H; destruct H0.
+  split*.
+Qed.
+
+Lemma env_ok_concat : forall E1 E2,
+  env_ok E1 -> env_ok E2 -> disjoint (dom E1) (dom E2) -> env_ok (E1 & E2).
+Proof.
+  intros.
+  destruct H; destruct H0.
+  split*.
+Qed.
+
+Definition kenv_ok_def K H1 H2 : kenv_ok K := conj H1 H2.
+Definition env_ok_def E H1 H2 : env_ok E := conj H1 H2.
+
+Lemma kenv_ok_merge : forall (K K1 K2 : kenv),
+  kenv_ok (K & K1) ->
+  kenv_ok (K & K2) ->
+  disjoint (dom K1) (dom K2) -> kenv_ok (K & K1 & K2).
+Proof.
+  intros.
+  destruct (kenv_ok_concat_inv _ _ H0).
+  apply* kenv_ok_concat.
+  rewrite* dom_concat.
+  disjoint_solve.
+Qed.
+
+Lemma ok_kinds_open_vars : forall K Ks Xs,
+  ok K -> fresh (dom K) (length Ks) Xs ->
+  ok (K & kinds_open_vars Ks Xs).
+Proof.
+  intros.
+  unfold kinds_open_vars.
+  apply* disjoint_ok.
+    apply* ok_combine_fresh.
+  rewrite dom_combine.
+    apply* fresh_disjoint.
+  unfold kinds_open. rewrite map_length.
+  symmetry; auto*.
+Qed.
+
+Hint Resolve ok_kinds_open_vars.
+
 (* ********************************************************************** *)
 (** Typing is preserved by weakening *)
 
 Lemma typing_weaken : forall gc G E F K t T,
    K ; (E & G) |gc|= t ~: T -> 
-   ok (E & F & G) ->
+   env_ok (E & F & G) ->
    K ; (E & F & G) |gc|= t ~: T.
 Proof.
   introv Typ. gen_eq (E & G) as H. gen G.
   induction Typ; introv EQ Ok; subst.
   apply* typing_var. apply* binds_weaken.
   apply_fresh* (@typing_abs gc) as y. apply_ih_bind* H1.
+    forward~ (H0 y) as Q.
+    destruct (env_ok_concat_inv _ _ (proj42 (typing_regular Q))). split*.
   apply_fresh* (@typing_let gc M L1) as y. apply_ih_bind* H2.
+    forward~ (H1 y) as Q.
+    destruct (env_ok_concat_inv _ _ (proj42 (typing_regular Q))). split*.
   auto*.
   auto.
   apply_fresh* (@typing_gc gc Ks) as y.
 Qed.
 
-Lemma proper_instance_weaken : forall K K' K'' M Us,
+Lemma proper_instance_weaken : forall K K' K'' Ks Us,
   ok (K & K' & K'') ->
-  proper_instance (K & K'') M Us ->
-  proper_instance (K & K' & K'') M Us.
+  proper_instance (K & K'') Ks Us ->
+  proper_instance (K & K' & K'') Ks Us.
 Proof.
   intros.
-  destruct* H0 as [TM [SM FM]]; split3*.
+  destruct* H0 as [TM FM]; split*.
   rewrite <- list_map_id.
-  rewrite <- (list_map_id (kinds_open (sch_kinds M) Us)).
+  rewrite <- (list_map_id (kinds_open Ks Us)).
   apply (For_all2_map _ (well_kinded (K&K'&K'')) _ _ _ _
                         (well_kinded_weaken K K' K'' H) FM).
 Qed.
@@ -121,18 +119,9 @@ Proof.
     rewrite concat_assoc.
     apply* H0; clear H0. rewrite* concat_assoc.
     rewrite <- concat_assoc.
-    split. apply* disjoint_ok.
-      unfold kinds_open_vars.
-      apply* ok_combine_fresh.
-      rewrite* dom_kinds_open_vars. disjoint_solve.
-    intro; intros.
-    destruct Ok as [_ Ok].
-    rewrite concat_assoc in H0.
-    destruct (in_app_or _ _ _ H0).
-      use (typing_regular (H Xs (proj1 (fresh_union_r _ _ _ _ H3)))).
-      apply* (proj2 (proj41 H2) x).
-      rewrite* concat_assoc.
-    apply* (Ok x).
+    split*.
+    apply* env_prop_concat.
+    use (typing_regular (H Xs (proj1 (fresh_union_r _ _ _ _ H3)))).
   auto*.
   apply* typing_cst. apply* proper_instance_weaken.
   apply_fresh* (@typing_gc gc Ks) as y.
@@ -142,17 +131,9 @@ Proof.
     rewrite* concat_assoc.
   rewrite* <- concat_assoc.
   forward~ (H0 Xs) as Typ; clear H0.
-  split.
-    apply* disjoint_ok. destruct* (typing_regular Typ). destruct* H0.
-      destruct* (ok_concat_inv _ _ H0).
-    rewrite* dom_kinds_open_vars. disjoint_solve; auto.
-  intros x a B.
-  destruct Ok as [_ Ok].
-  rewrite concat_assoc in B.
-  destruct* (in_app_or _ _ _ B).
-  use (typing_regular Typ).
-  apply* (proj2 (proj41 H1) x).
-  rewrite* concat_assoc.
+  split. apply* ok_kinds_open_vars. repeat rewrite dom_concat. auto.
+  apply* env_prop_concat.
+  destruct* (kenv_ok_concat_inv _ _ (proj41 (typing_regular Typ))).
 Qed.
 
 Lemma typing_weaken_kinds' : forall gc K K' E t T,
@@ -164,21 +145,18 @@ Proof.
   apply* typing_weaken_kinds.
 Qed.
 
-Lemma proper_instance_subst : forall K K' K'' M Us S,
+Lemma proper_instance_subst : forall K K' K'' Ks Us S,
   env_prop type S ->
-  proper_instance (K & K' & K'') M Us ->
+  proper_instance (K & K' & K'') Ks Us ->
   well_subst (K & K' & K'') (K & map (kind_subst S) K'') S ->
-  proper_instance (K & map (kind_subst S) K'') (sch_subst S M)
+  proper_instance (K & map (kind_subst S) K'') (List.map (kind_subst S) Ks)
     (List.map (typ_subst S) Us).
 Proof.
   introv TS PI WS.
   destruct* PI.
-  split. rewrite sch_subst_arity. apply* typ_subst_type_list.
-  split*.
-  destruct H0.
-  destruct M as [Ma Mt Mk]; simpl in *.
+  split. rewrite map_length. apply* typ_subst_type_list.
   rewrite* <- kinds_subst_open.
-  apply* (For_all2_map (well_kinded (K&K'&K''))); intros.
+  apply* For_all2_map. intros.
   apply* well_kinded_subst.
 Qed.
 
@@ -209,6 +187,16 @@ Proof.
   destruct* (H0 x).
 Qed.
 
+Lemma All_kind_types_subst : forall k S,
+  All_kind_types type k ->
+  env_prop type S -> All_kind_types type (kind_subst S k).
+Proof.
+  intros; unfold kind_subst; apply All_kind_types_map.
+  apply* All_kind_types_imp.
+Qed.
+
+Hint Resolve All_kind_types_subst.
+
 Lemma kenv_ok_subst : forall K K' K'' S,
   env_prop type S ->
   kenv_ok (K & K' & K'') -> kenv_ok (K & map (kind_subst S) K'').
@@ -217,11 +205,23 @@ Proof.
   intro; intros. destruct H.
   destruct (in_app_or _ _ _ H0).
     destruct (in_map_inv _ _ _ _ H2) as [b [Hb B]].
-    subst.
-    unfold kind_subst; apply All_kind_types_map.
-    apply* All_kind_types_imp.
+    subst*.
   apply* (H1 x).
 Qed.
+
+Lemma env_ok_subst : forall E E' S,
+  env_prop type S ->
+  env_ok (E & E') -> env_ok (E & map (sch_subst S) E').
+Proof.
+  introv HS H. split*.
+  intro; intros. destruct H.
+  destruct (in_app_or _ _ _ H0).
+    destruct (in_map_inv _ _ _ _ H2) as [b [Hb B]].
+    subst*.
+  apply* (H1 x).
+Qed.
+
+Hint Resolve env_ok_subst.
 
 (* ********************************************************************** *)
 (** Type substitution preserves typing *)
@@ -246,6 +246,7 @@ Proof.
        intro v. destruct* (Dis v).
        destruct* (proj1 (notin_union _ _ _) H3).
       auto*.
+    destruct M as [T Ks]. simpl.
     apply* proper_instance_subst.
   (* Abs *)
   apply_fresh* (@typing_abs gc) as y.
@@ -259,7 +260,7 @@ Proof.
    rewrite* <- sch_subst_open_vars.
    rewrite* <- kinds_subst_open_vars.
    rewrite concat_assoc. rewrite <- map_concat.
-   unfold sch_arity in Fr; simpl in Fr; rewrite map_length in Fr.
+   rewrite map_length in Fr.
    apply* H0; clear H0.
      apply* well_subst_fresh.
    rewrite* concat_assoc.
@@ -274,6 +275,7 @@ Proof.
   apply* typing_cst.
     apply* kenv_ok_subst.
   rewrite* <- (sch_subst_fresh S H2).
+  destruct (Delta.type c) as [T Ks]; simpl.
   apply* proper_instance_subst.
   (* GC *)
   apply* (@typing_gc gc (List.map (kind_subst S) Ks)
@@ -386,7 +388,6 @@ Proof.
   intros gc L K E t [T Ks] H Vs TV. unfold sch_open. simpls.
   fold kind in K. fold kenv in K.
   pick_freshes (length Ks) Xs.
-  unfold sch_arity in TV; simpl in TV.
   rewrite (fresh_length _ _ _ Fr) in TV.
   rewrite~ (@typ_subst_intro Xs Vs T).
   unfolds has_scheme_vars sch_open_vars. simpls.
@@ -410,6 +411,7 @@ Proof.
   gen_eq (E & z ~ M & F) as G. gen_eq (gc, GcAny) as gc0. gen F.
   induction Typt; introv EQ1 EQ2; subst; simpl trm_subst;
     destruct Typu as [Lu Typu].
+  assert (env_ok (E & F)) by (split*; apply* env_prop_concat).
   case_var.
     binds_get H1. apply_empty* (@typing_weaken (gc,GcAny)).
       destruct H2; apply* (has_scheme_from_vars Typu).
@@ -424,23 +426,15 @@ Proof.
      generalize (Typu Ys H4); intro; clear H4.
      apply* typing_weaken_kinds.
      clear H0 H1 H2 L2 t2 T2 Wu Typu.
-     split.
-       apply* disjoint_ok.
-         destruct* (typing_regular (H Xs H3)).
-         unfold kinds_open_vars.
-         apply* ok_combine_fresh.
-       rewrite dom_concat.
-       repeat rewrite* dom_kinds_open_vars.
-       use (ok_disjoint _ _ (proj1 (proj41 (typing_regular H5)))).
-       rewrite dom_kinds_open_vars in H0; auto. disjoint_solve.
-     intro; intros.
-     destruct (in_app_or _ _ _ H0) as [B|B]; clear H0.
-       apply* (proj2 (proj41 (typing_regular H5))).
-     apply* (proj2 (proj41 (typing_regular (H Xs H3))) x).
+     puts (proj41 (typing_regular (H Xs H3))).
+     apply* kenv_ok_merge.
+     repeat rewrite* dom_kinds_open_vars.
+     disjoint_solve.
    rewrite* trm_subst_open_var. 
    apply_ih_bind* H2.
   assert (exists L : vars, has_scheme_vars (gc,GcAny) L K E u M). exists* Lu.
   auto*.
+  assert (env_ok (E & F)) by (split*; apply* env_prop_concat).
   auto.
   apply_fresh* (@typing_gc (gc,GcAny) Ks) as y.
    intros Xs Fr.
@@ -452,13 +446,8 @@ Proof.
    forward~ (H0 Xs) as Typx.
    use (proj1 (typing_regular Typx)).
    clear Typu Typu' Typx H0.
-   split*. apply* disjoint_ok.
-     unfold kinds_open_vars. apply* ok_combine_fresh.
-     rewrite dom_concat; repeat rewrite* dom_kinds_open_vars. disjoint_solve.
-   intros x a B.
-   destruct (in_app_or _ _ _ B); clear B.
-     apply* (proj2 H1 x).
-   apply* (proj2 H2 x).
+   apply* kenv_ok_merge.
+   repeat rewrite* dom_kinds_open_vars. disjoint_solve.
 Qed.
 
 (* ********************************************************************** *)
@@ -495,14 +484,6 @@ Proof.
   gen_eq (true,GcLet) as gc.
   induction H1; intros; subst; try solve [apply* H].
   apply* H0.
-Qed.
-
-Lemma kenv_ok_concat_inv : forall K1 K2,
-  kenv_ok (K1 & K2) -> kenv_ok K1 /\ kenv_ok K2.
-Proof.
-  intros.
-  split; split; destruct H; destruct* (ok_concat_inv _ _ H);
-    intro; intros; apply* (H0 x a).
 Qed.
 
 Lemma typing_canonize : forall gc K E t T,
@@ -595,18 +576,19 @@ Proof.
   intro. elim H0. apply* (H x).
 Qed.
 
-Lemma ok_rename : forall (A:Set) E x y (M:A) E',
-  ok (E & x ~ M & E') ->
+Lemma ok_rename : forall E x y M E',
+  env_ok (E & x ~ M & E') ->
   y \notin dom E \u dom E' ->
-  ok (E & y ~ M & E').
+  env_ok (E & y ~ M & E').
 Proof.
   intros.
-  destruct (ok_concat_inv _ _ H).
-  apply* disjoint_ok.
-    apply* ok_push.
-    destruct* (ok_concat_inv _ _ H1).
+  destruct (env_ok_concat_inv _ _ H).
+  apply* env_ok_concat.
+    destruct (env_ok_concat_inv _ _ H1).
+    split. apply* ok_push.
+    destruct H3; destruct H4. apply* env_prop_concat.
   intro.
-  destruct* (ok_disjoint _ _ H x0).
+  destruct* (ok_disjoint _ _ (proj1 H) x0).
   destruct (x0 == y).
     subst. right*.
   left. rewrite dom_concat.
@@ -622,10 +604,10 @@ Proof.
   gen_eq (E & x ~ M & E') as E0. gen E'.
   induction Typ; intros; subst; simpl trm_subst.
   (* Var *)
-  assert (ok (E & y ~ M & E')) by apply* ok_rename.
+  assert (env_ok (E & y ~ M & E')) by apply* ok_rename.
   destruct (x0 == x).
     subst.
-    use (binds_mid _ _ _ _ H0).
+    use (binds_mid _ _ _ _ (proj1 H0)).
     use (binds_func H1 H5).
     subst; clear H5.
     apply* typing_var.
@@ -771,32 +753,6 @@ Proof.
   disjoint_solve.
 Qed.
 
-Lemma kenv_ok_open_fresh : forall K Ks Xs,
-  kenv_ok K ->
-  kenv_ok (kinds_open_vars Ks Xs) -> 
-  fresh (dom K) (length Ks) Xs ->
-  kenv_ok (K & kinds_open_vars Ks Xs).
-Proof.
-  intros.
-  split*.
-    apply* disjoint_ok.
-    rewrite* dom_kinds_open_vars. disjoint_solve.
-  intros x a B.
-  destruct (in_app_or _ _ _ B).
-    apply* (proj2 H0 x).
-  apply* (proj2 H x).
-Qed.
-
-Lemma kenv_ok_concat : forall K1 K2,
-  kenv_ok K1 -> kenv_ok K2 -> disjoint (dom K1) (dom K2) -> kenv_ok (K1 & K2).
-Proof.
-  intros.
-  split. apply* disjoint_ok.
-  intro; intros.
-  destruct (in_app_or _ _ _ H2). apply* (proj2 H0 x).
-  apply* (proj2 H x).
-Qed.
-
 Lemma For_all2_imp : forall (A B:Set) (P P':A->B->Prop) l1 l2,
   For_all2 P l1 l2 ->
   (forall x y, P x y -> P' x y) ->
@@ -811,34 +767,35 @@ Lemma typing_kenv_incl : forall gc K E t T,
     incl K K' -> kenv_ok K' -> K'; E |gc|= t ~:T.
 Proof.
   induction 1; intros; auto*.
+  (* Var *)
   apply* typing_var.
   destruct H2; split*.
-  destruct H5; split*.
-  apply (For_all2_imp _ (well_kinded K') _ _ H6).
+  apply (For_all2_imp _ (well_kinded K') _ _ H5).
   intros.
-  inversions* H7.
+  inversions* H6.
+  (* Let *)
   apply* (@typing_let gc M (L1 \u dom K')).
   intros.
   assert (kenv_ok (K' & kinds_open_vars (sch_kinds M) Xs)).
-    apply* kenv_ok_concat.
+    split*.
     assert (fresh L1 (sch_arity M) Xs) by auto.
     destruct* (kenv_ok_concat_inv _ _ (proj1 (typing_regular (H Xs H6)))).
-    rewrite* dom_kinds_open_vars. disjoint_solve.
   apply* H0.
   intro; intros.
   destruct* (in_app_or _ _ _ H7).
+  (* Cst *)
   apply* typing_cst.
   destruct H1; split; intuition.
-  apply (For_all2_imp _ (well_kinded K') _ _ H6).
+  apply (For_all2_imp _ (well_kinded K') _ _ H4).
   intros.
-  inversions* H4.
+  inversions* H5.
+  (* Gc *)
   apply* (@typing_gc gc Ks (L \u dom K')).
   intros.
   assert (kenv_ok (K' & kinds_open_vars Ks Xs)).
-    apply* kenv_ok_concat.
+    split*.
     assert (fresh L (length Ks) Xs) by auto.
     destruct* (kenv_ok_concat_inv _ _ (proj1 (typing_regular (H0 Xs H5)))).
-    rewrite* dom_kinds_open_vars. disjoint_solve.
   apply* (H1 Xs).
   intro; intros.
   destruct* (in_app_or _ _ _ H6).
@@ -919,7 +876,6 @@ Proof.
         rewrite dom_combine in H3. elim (H2 H3).
         symmetry; unfold kinds_open, typ_fvars.
         repeat rewrite map_length.
-        unfold sch_arity in H.
         rewrite (fresh_length _ _ _ H). apply* fresh_length.
        simpl*.
       apply* typing_weaken_kinds'.
@@ -958,18 +914,6 @@ Proof.
   unfold types.
   split. unfold typ_fvars; rewrite map_length; apply* fresh_length.
   clear. induction Ys; simpl; intuition.
-Qed.
-
-Lemma kenv_ok_merge : forall (K K1 K2 : kenv),
-  kenv_ok (K & K1) ->
-  kenv_ok (K & K2) ->
-  disjoint (dom K1) (dom K2) -> kenv_ok (K & K1 & K2).
-Proof.
-  intros.
-  destruct (kenv_ok_concat_inv _ _ H0).
-  apply* kenv_ok_concat.
-  rewrite* dom_concat.
-  disjoint_solve.
 Qed.
 
 Lemma kenv_ok_swap : forall (K K1 K2 : kenv),
@@ -1032,8 +976,8 @@ Qed.
 
 Definition env_weaker E F :=
   forall x T Ks,
-    binds x (Sch T Ks) E -> scheme (Sch T Ks) ->
-    exists Ks', scheme (Sch T (Ks++Ks')) /\ binds x (Sch T (Ks++Ks')) F.
+    binds x (Sch T Ks) E ->
+    exists Ks', binds x (Sch T (Ks++Ks')) F.
 
 Lemma in_list_forall : forall (A:Set) (P:A->Prop) x l,
   list_forall P l -> In x l -> P x.
@@ -1168,16 +1112,17 @@ Proof.
 Qed.
 
 Lemma well_kinded_combine2 : forall K U Ks Us Ks' Xs,
-  proper_instance K (Sch U Ks) Us ->
-  scheme (Sch U (Ks ++ Ks')) ->
+  proper_instance K Ks Us ->
+  typ_body U Ks ->
+  typ_body U (Ks ++ Ks') ->
   fresh (dom K) (length Ks') Xs ->
   For_all2
     (well_kinded (K & combine Xs (kinds_open Ks' (Us ++ typ_fvars Xs))))
-    (kinds_open (sch_kinds (Sch U (Ks ++ Ks'))) (Us ++ typ_fvars Xs))
+    (kinds_open (Ks ++ Ks') (Us ++ typ_fvars Xs))
     (Us ++ typ_fvars Xs).
 Proof.
-  introv PI HS Fr.
-  destruct PI as [HT [HS0 HW]].
+  introv PI HS0 HS Fr.
+  destruct PI as [HT HW].
   simpl in *.
   unfold kinds_open. rewrite map_app.
   apply For_all2_app.
@@ -1185,8 +1130,6 @@ Proof.
     (* destruct HS0 as [L' HF]. *)
     destruct (var_freshes {} (length Ks)) as [Xs' Fr'].
     use (proj2 (HS0 Xs' (fresh_length _ _ _ Fr'))).
-    unfold sch_arity in HT.
-    simpl in *.
     clear -HT Fr Fr' HW H.
     remember Us as Vs.
     destruct HT.
@@ -1242,14 +1185,13 @@ Qed.
 
 Lemma env_weaker_push : forall E F x U Ks Ks',
   env_weaker E F -> x # F ->
-  (scheme (Sch U Ks) -> scheme (Sch U (Ks++Ks'))) ->
   env_weaker (E & x ~ Sch U Ks) (F & x ~ Sch U (Ks++Ks')).
 Proof.
   intros; intro; intros.
-  binds_cases H2.
-    destruct (H _ _ _ B H3) as [Ks1 [HS HB]].
+  binds_cases H1.
+    destruct (H _ _ _ B) as [Ks1 HB].
     exists* Ks1.
-  inversions H4.
+  inversions H2.
   exists* Ks'.
 Qed.
 
@@ -1361,7 +1303,7 @@ Proof.
         intro; intros.
         apply (H1 x).
         apply in_or_concat.
-        right; unfold kinds_open_vars; apply H2.
+        left; unfold kinds_open_vars; apply H2.
         destruct (ok_concat_inv _ _ H0). apply H3.
         unfold kinds_open. rewrite* map_length.
       clear -H2.
@@ -1382,7 +1324,7 @@ Proof.
         intro; intros.
         rewrite <- (combine_fst_snd K1) in H1.
         apply (H1 x).
-        apply in_or_concat; left.
+        apply in_or_concat; right.
         apply H2. rewrite* combine_fst_snd.
        destruct* (ok_concat_inv _ _ H0).
       unfold list_fst, list_snd; repeat rewrite* map_length.
@@ -1553,56 +1495,57 @@ Qed.
 
 Lemma typing_remove_gc_var : forall K E x M Us F LK,
   kenv_ok K ->
-  ok E ->
+  env_ok E ->
   binds x M E ->
-  proper_instance K M Us ->
+  proper_instance K (sch_kinds M) Us ->
   env_weaker E F ->
-  ok F ->
+  env_ok F ->
   exists K',
     disjoint (dom K') LK /\
     K & K'; F | (false, GcAny) |= trm_fvar x ~: sch_open M Us.
 Proof.
   intros.
   destruct M as [U Ks].
-  destruct (H3 x _ _ H1) as [Ks' [HS HB]]. destruct* H2.
+  destruct (H3 x _ _ H1) as [Ks' HB]. destruct* H2.
   destruct (var_freshes (LK \u dom K) (length Ks')) as [Xs Fr].
   exists (combine Xs (kinds_open Ks' (Us ++ typ_fvars Xs))).
   assert (dom (combine Xs (kinds_open Ks' (Us ++ typ_fvars Xs))) = mkset Xs).
     rewrite* dom_combine. unfold kinds_open.
     rewrite map_length. rewrite* (fresh_length _ _ _ Fr).
   split.
-    rewrite H5. disjoint_solve.
+    rewrite H6. disjoint_solve.
+  assert (HS: scheme (Sch U (Ks ++ Ks'))) by apply* (proj2 H4 x).
+  assert (HS0: scheme (Sch U Ks)) by apply* env_prop_binds.
   replace (sch_open (Sch U Ks) Us)
     with (sch_open (Sch U (Ks++Ks')) (Us ++ typ_fvars Xs)).
     apply* typing_var.
       destruct H.
       split.
         apply* disjoint_ok. apply* ok_combine_fresh.
-        rewrite H5; disjoint_solve.
+        rewrite H6; disjoint_solve.
       intro; intros.
-      destruct (in_app_or _ _ _ H7).
+      destruct (in_app_or _ _ _ H8).
         eapply env_weaker_ok.
-              destruct H2. unfold sch_arity in H2; simpl in H2.
               apply H2.
             apply (fresh_length _ _ _ Fr).
-          apply HS.
-        apply (in_combine_r _ _ _ _ H8).
-      apply* (H6 x0).
+          apply (proj2 H4 _ _ (binds_in HB)).
+        apply (in_combine_r _ _ _ _ H9).
+      apply* (H7 x0).
     split.
-      destruct (proj1 H2).
+      destruct H2.
       split.
-        rewrite app_length; rewrite <- H6.
-        unfold sch_arity; simpl. rewrite app_length.
-        rewrite (fresh_length _ _ _ Fr).
+        simpl; repeat rewrite app_length; rewrite <- H2.
+        rewrite (fresh_length _ _ _ Fr). simpl.
         unfold typ_fvars; rewrite* map_length.
       clear -H7; induction Us; simpl; inversion* H7.
       induction Xs; simpl*.
-    split*.
-    apply* well_kinded_combine2.
+    simpl; apply* well_kinded_combine2. simpl in *. split*.
+    apply HS0. apply HS.
   unfold sch_open. simpl.
-  assert (K; E |(false,GcAny)|= trm_fvar x ~: (Sch U Ks) ^^ Us) by auto.
-  assert (type ((Sch U Ks) ^^ Us)) by auto. auto.
-  unfold sch_open in H7. simpl in H7.
+  assert (K; E |(false,GcAny)|= trm_fvar x ~: (Sch U Ks) ^^ Us).
+    apply* typing_var. split*.
+  assert (type ((Sch U Ks) ^^ Us)) by auto.
+  unfold sch_open in H8. simpl in H8.
   rewrite* (typ_open_extra Us (typ_fvars Xs)).
 Qed.
 
@@ -1738,14 +1681,21 @@ Proof.
   destruct H; split*.
 Qed.
 
+Lemma ok_single : forall (A:Set) x (a:A), ok (x ~ a).
+  intros. unfold single; apply ok_cons. apply (@ok_empty A).
+  simpl*.
+Qed.
+
+Hint Resolve ok_single.
+
 Lemma typing_remove_gc_let : forall L1 L2 LK E M F K K1 Xs t1 t2 T2,
   (forall x,
     x \notin L2 ->
     forall LK F,
-      env_weaker (E & x ~ M) F -> ok F ->
+      env_weaker (E & x ~ M) F -> env_ok F ->
       exists K',
         disjoint (dom K') LK /\ K & K'; F | (false, GcAny) |= t2 ^ x ~: T2) ->
-  env_weaker E F -> ok F ->
+  env_weaker E F -> env_ok F -> scheme M ->
   fresh (L1 \u env_fv F \u sch_fv M \u dom K \u fv_in kind_fv K)
     (sch_arity M) Xs ->
   disjoint (dom K1)
@@ -1755,29 +1705,32 @@ Lemma typing_remove_gc_let : forall L1 L2 LK E M F K K1 Xs t1 t2 T2,
     disjoint (dom K') LK /\
     K & K'; F | (false, GcAny) |= trm_let t1 t2 ~: T2.
 Proof.
-  intros until T2. intros H2 H3 H4 HXs HD1 Typ1.
+  intros until T2. intros H2 H3 H4 HM HXs HD1 Typ1.
   use (kenv_ok_swap K (kinds_open_vars (sch_kinds M) Xs) K1
           (proj41 (typing_regular Typ1))).
   poses Typ1a (typing_kenv_incl Typ1 (incl_swap _ _ _ (proj1 H)) H).
   clear Typ1 H.
   pose (S := bvar_subst 0 (K1 & kinds_open_vars (sch_kinds M) Xs)).
   pose (Ks' := List.map (kind_subst S) (list_snd K1)).
-  destruct M as [U Ks].
+  destruct M as [U Ks]; simpl in *.
   destruct (var_fresh (L2 \u trm_fv t2 \u dom F)) as [x Hx].
   rewrite concat_assoc in Typ1a.
   destruct* (kenv_ok_concat_inv _ _ (proj41 (typing_regular Typ1a))).
   assert (env_weaker (E & x ~ Sch U Ks) (F & x ~ Sch U (Ks++Ks'))).
     apply* env_weaker_push.
-    intros. unfold Ks', S; apply* scheme_weaker_let.
-      unfold sch_arity, sch_fv in HXs; simpl in *; auto.
   assert (Hx': x \notin L2) by auto.
   destruct* (H2 x Hx' LK (F & x ~ Sch U (Ks ++ Ks'))) as [K2 [HD2 Typ2]];
     clear H2 Hx'.
+    apply* env_ok_concat.
+      split*. apply env_prop_single.
+      unfold Ks', S; apply* scheme_weaker_let.
+      unfold sch_fv in HXs; simpl in *. auto.
+    simpl. intro y; destruct* (y == x). subst*.
   exists K2; split. disjoint_solve.
   assert (LenS: length (Ks ++ Ks') = length (Xs ++ list_fst K1)).
     repeat rewrite app_length; unfold list_fst; rewrite map_length.
     unfold Ks', list_snd; repeat rewrite map_length.
-    unfold sch_arity in HXs; simpl in HXs; rewrite* (fresh_length _ _ _ HXs).
+    rewrite* (fresh_length _ _ _ HXs).
   apply* (@typing_let (false,GcAny) (Sch U (Ks++Ks'))
              (L1 \u dom K \u dom K2 \u mkset (Xs ++ list_fst K1))
              (L2 \u dom F \u {{x}} \u trm_fv t2)).
@@ -1787,11 +1740,10 @@ Proof.
       fold S in HR; fold Ks' in HR. simpl in HR.
       simpl in Typ1a; rewrite <- HR in Typ1a.
       apply (@typing_rename_typ F (Sch U (Ks++Ks')) K (Xs ++ list_fst K1)).
-        unfold sch_arity in *; simpl length in *.
         apply* disjoint_fresh.
-          simpl in H0; rewrite <- HR in H0.
+          rewrite <- HR in H0.
           unfold kinds_open_vars, kind_open in H0.
-          rewrite LenS.
+          simpl; rewrite LenS.
           apply (ok_fresh _ _ (L:={}) (proj1 H0)).
           unfold kinds_open; rewrite map_length. rewrite* LenS.
           disjoint_solve.
@@ -1826,7 +1778,6 @@ Proof.
       unfold kinds_open_vars in H0, H5.
       forward~ (env_prop_list_forall _ _ H5 H0).
         unfold kinds_open; rewrite* map_length.
-      unfold sch_arity in *; simpl length in *.
       clear -HXs HD1 Typ1a H0 LenS H2; intros.
       assert (disjoint (dom S) (kind_fv_list Ks'))
         by (unfold Ks'; unfold S; apply* disjoint_S_Ks').
@@ -1867,7 +1818,7 @@ Qed.
 Lemma typing_remove_gc : forall gc K E t T,
   K ; E |gc|= t ~: T ->
   forall LK F,
-    env_weaker E F -> ok F ->
+    env_weaker E F -> env_ok F ->
     exists K',
       disjoint (dom K') LK /\ K & K' ; F |(false,GcAny)|= t ~: T.
 Proof.
@@ -1881,12 +1832,15 @@ Proof.
   assert (HF : env_weaker (E & x ~ Sch U nil) (F & x ~ Sch U nil)).
     intro; intros.
     binds_cases H0.
-      destruct (H2 x0 T0 Ks B H4) as [Ks' [HS HB]].
-      exists Ks'; split*.
+      destruct (H2 x0 T0 Ks B) as [Ks' HB].
+      exists* Ks'.
     exists (nil(A:=kind)). 
     rewrite <- app_nil_end. auto.
   destruct (H1 x Hx' LK _ HF) as [K' [HD Typ]]; clear H1 Hx'.
-    auto.
+    split*. destruct H3; apply* env_prop_concat.
+    intro; intros. destruct* H3. inversions H3.
+    intro; intros. simpl. split*. unfold typ_open_vars.
+    clear -H; induction H; simpl*.
   exists K'; split*.
   apply* (@typing_abs (false,GcAny) (L \u dom F \u trm_fv t1 \u {{x}})).
   intros.
@@ -1906,6 +1860,9 @@ Proof.
   destruct* (H0 Xs HXs' (LK \u mkset Xs \u env_fv F \u sch_fv M
                          \u dom K \u fv_in kind_fv K) _ H3)
     as [K1 [HD1 Typ1]].
+  assert (scheme M).
+    destruct (var_fresh L2). puts (proj42 (typing_regular (H1 _ n))).
+    apply* (proj2 H6 x).
   clear H H0 H1 H5 HXs'.
   apply* typing_remove_gc_let.
   (* App *)
@@ -1992,7 +1949,7 @@ Proof.
     pick_fresh x. 
     rewrite* (@trm_subst_intro x). 
     apply_empty* (@typing_trm_subst gc).
-    exists {}. intro. unfold sch_arity, kinds_open_vars, sch_open_vars; simpl.
+    exists {}. intro. unfold kinds_open_vars, sch_open_vars; simpl.
     destruct* Xs. simpl. rewrite* typ_open_vars_nil.
     simpl. intuition.
   apply* (@typing_gc (gc,GcAny) Ks L).
