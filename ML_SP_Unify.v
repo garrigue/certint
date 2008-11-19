@@ -388,7 +388,7 @@ Lemma dom_remove_env : forall (A:Set) v (K:Env.env A),
 Proof.
   induction K; simpl; intros.
     apply eq_ext; intros; split; intro. elim (in_empty H0).
-    apply* S.remove_3.
+    use (S.remove_3 H0).
   destruct a.
   inversions H.
   destruct (v == v0).

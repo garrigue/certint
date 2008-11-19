@@ -111,8 +111,8 @@ Section EnvProp.
   Qed.
 End EnvProp.
 
-Hint Resolve env_prop_single env_prop_concat env_prop_concat_inv1
-  env_prop_concat_inv2.
+Hint Resolve env_prop_single env_prop_concat.
+Hint Immediate env_prop_concat_inv1 env_prop_concat_inv2.
 
 Lemma mem_3 : forall v L, S.mem v L = false -> v \notin L.
 Proof.
@@ -132,20 +132,24 @@ Qed.
 Ltac sets_simpl_hyps x :=
   match goal with
   | H: _ \in {} |- _ => elim (in_empty H)
-  | H: _ \in {{?y}} |- _ =>
-    puts (proj1 (in_singleton _ _) H); clear H; subst y; try sets_simpl_hyps
+  | H: x \in {{?y}} |- _ =>
+    puts (proj1 (in_singleton _ _) H); clear H;
+    subst y; try sets_simpl_hyps x
   | H: x \in S.diff _ _ |- _ =>
     let H1 := fresh "Hin" in let H2 := fresh "Hn" in
-    poses H1 (S.diff_1 H); poses H2 (S.diff_2 H); clear H; try sets_simpl_hyps
+    poses H1 (S.diff_1 H); poses H2 (S.diff_2 H); clear H;
+    try sets_simpl_hyps x
   | H: x \in S.inter _ _ |- _ =>
     let H1 := fresh "Hin" in let H2 := fresh "Hin" in
-    poses H1 (S.inter_1 H); poses H2 (S.inter_2 H); clear H; try sets_simpl_hyps
+    poses H1 (S.inter_1 H); poses H2 (S.inter_2 H); clear H;
+    try sets_simpl_hyps x
   | H: S.mem x _ = false |- _ =>
     let H1 := fresh "Hn" in
-    poses H1 (mem_3 H); clear H; try sets_simpl_hyps
+    poses H1 (mem_3 H); clear H; try sets_simpl_hyps x
   | H: x \in S.remove _ _ |- _ =>
     let H1 := fresh "Hin" in let H2 := fresh "Hn" in
-    poses H1 (S.remove_3 H); poses H2 (remove_4 H); clear H; try sets_simpl_hyps
+    poses H1 (S.remove_3 H); poses H2 (remove_4 H); clear H;
+    try sets_simpl_hyps x
   end.
 
 Ltac sets_simpl :=
@@ -1594,7 +1598,7 @@ Hint Extern 1 (kenv_ok ?K) =>
   | H: typing _ K _ _ _ |- _ => apply (proj41 (typing_regular H))
   end.
 
-Hint Extern 1 (ok ?E) =>
+Hint Extern 1 (env_ok ?E) =>
   match goal with
   | H: typing _ _ E _ _ |- _ => apply (proj42 (typing_regular H))
   end.

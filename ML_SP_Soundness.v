@@ -54,6 +54,26 @@ Proof.
   disjoint_solve.
 Qed.
 
+Hint Resolve kenv_ok_merge.
+
+Lemma env_ok_remove : forall F E G,
+  env_ok (E & F & G) -> env_ok (E & G).
+Proof.
+  split*.
+  destruct (env_ok_concat_inv _ _ H).
+  destruct* (env_ok_concat_inv _ _ H0).
+Qed.
+
+Lemma kenv_ok_remove : forall F E G,
+  kenv_ok (E & F & G) -> kenv_ok (E & G).
+Proof.
+  split*.
+  destruct (kenv_ok_concat_inv _ _ H).
+  destruct* (kenv_ok_concat_inv _ _ H0).
+Qed.
+
+Hint Immediate env_ok_remove kenv_ok_remove.
+
 Lemma ok_kinds_open_vars : forall K Ks Xs,
   ok K -> fresh (dom K) (length Ks) Xs ->
   ok (K & kinds_open_vars Ks Xs).
@@ -121,8 +141,9 @@ Proof.
     rewrite <- concat_assoc.
     split*.
     apply* env_prop_concat.
-    use (typing_regular (H Xs (proj1 (fresh_union_r _ _ _ _ H3)))).
-  auto*.
+    puts (typing_regular (H Xs (proj1 (fresh_union_r _ _ _ _ H3)))).
+    use (proj2 (proj41 H0)).
+  apply* typing_app.
   apply* typing_cst. apply* proper_instance_weaken.
   apply_fresh* (@typing_gc gc Ks) as y.
   intros.
@@ -411,7 +432,6 @@ Proof.
   gen_eq (E & z ~ M & F) as G. gen_eq (gc, GcAny) as gc0. gen F.
   induction Typt; introv EQ1 EQ2; subst; simpl trm_subst;
     destruct Typu as [Lu Typu].
-  assert (env_ok (E & F)) by (split*; apply* env_prop_concat).
   case_var.
     binds_get H1. apply_empty* (@typing_weaken (gc,GcAny)).
       destruct H2; apply* (has_scheme_from_vars Typu).
@@ -434,8 +454,7 @@ Proof.
    apply_ih_bind* H2.
   assert (exists L : vars, has_scheme_vars (gc,GcAny) L K E u M). exists* Lu.
   auto*.
-  assert (env_ok (E & F)) by (split*; apply* env_prop_concat).
-  auto.
+  auto*.
   apply_fresh* (@typing_gc (gc,GcAny) Ks) as y.
    intros Xs Fr.
    apply* H1; clear H1.
