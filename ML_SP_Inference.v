@@ -3847,11 +3847,24 @@ Proof.
        split. unfold binds. simpl. destruct* (x0 == x0).
        unfold M0, l0', Bs, ftve, K1, T1, E1, MXs; apply* moregen_let.
      repeat rewrite dom_concat in *. unfold fvs in *. simpl in *.
+Lemma fv_in_sch_subst : forall S E,
+  env_fv (map (sch_subst S) E) << env_fv E \u fv_in typ_fv S.
+Proof.
+  induction E; simpl; intros y Hy. auto.
+  destruct a. simpl in Hy.
+  use (@sch_fv_subst S s).
+Qed.
      intuition. sets_solve.
         unfold ftve in Hin.
         puts (close_fvk_inv _ _ Hin); clear Hin.
         sets_solve. unfold K1 in H21. use (fv_in_kind_subst _ _ H21).
         unfold E1 in H21. use (fv_in_sch_subst _ _ H21).
+       puts (incl_fv_in_subset kind_fv H17). rewrite fv_in_concat in H19.
+       unfold K1 in H19. sets_solve. use (fv_in_kind_subst _ _ Hin).
+      unfold M0, l0' in H21. unfold sch_fv in H21. simpl in H21.
+      sets_solve. use (typ_fv_generalize _ _ H19).
+        unfold T1 in H21. fold (typ_subst S' (typ_fvar x1)) in H21.
+        use (typ_fv_subst _ _ H21). simpl in H22; auto.
      intros y Hys.
    destruct (S.union_1 Hys); clear Hys. auto.
 Qed.
