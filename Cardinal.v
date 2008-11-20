@@ -28,7 +28,7 @@ Qed.
 Definition sort_lt_all :=
   InfA_alt S.E.eq_refl S.E.eq_sym S.E.lt_trans
      Var_as_OT_Facts.lt_eq Var_as_OT_Facts.eq_lt.
-Check sort_lt_all.
+(* Check sort_lt_all. *)
 
 Lemma sort_lt_notin : forall a l0,
   sort S.E.lt l0 ->
@@ -44,7 +44,7 @@ Qed.
 Definition sort_lt_nodup :=
   SortA_NoDupA S.E.eq_refl S.E.eq_sym S.E.lt_trans S.E.lt_not_eq
     Var_as_OT_Facts.lt_eq Var_as_OT_Facts.eq_lt.
-Check sort_lt_nodup.
+(* Check sort_lt_nodup. *)
 
 Lemma sort_lt_ext : forall l1 l2,
   sort S.E.lt l1 -> sort S.E.lt l2 ->

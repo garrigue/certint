@@ -4,8 +4,8 @@
 ***************************************************************************)
 
 Set Implicit Arguments.
-Require Import Lib_FinSet Metatheory List Arith
-  ML_SP_Soundness.
+Require Import Lib_FinSet Metatheory List Arith.
+Require Import ML_SP_Infrastructure ML_SP_Soundness ML_SP_Unify ML_SP_Inference.
 
 Module Cstr.
   Record cstr_impl : Set := C {
@@ -31,7 +31,7 @@ Module Cstr.
   Proof.
     intros.
     split. apply subset_refl.
-    destruct* (cstr_high c). apply subset_refl.
+    destruct* (cstr_high c).
   Qed.
     
   Lemma entails_trans : forall c1 c2 c3,
@@ -43,7 +43,6 @@ Module Cstr.
     destruct* (cstr_high c3).
     destruct* (cstr_high c2).
     destruct* (cstr_high c1).
-    apply* subset_trans.
   Qed.
   Definition unique c v := v \in cstr_low c.
   Hint Resolve entails_refl.
@@ -86,9 +85,9 @@ Module Const.
     end.
 End Const.
 
-Module Soundness := MkSound(Cstr)(Const).
-Import Soundness.
-Import Infra.
+Module Infer := MkInfer(Cstr)(Const).
+Import Infer.
+Import Unify.Sound.Infra.
 Import Defs.
 
 Inductive closed_n : nat -> trm -> Prop :=
@@ -153,7 +152,6 @@ Module Delta.
         (Some (Kind (valid_matches l) (coherent_matches ND)) ::
          map (fun _ => None) (seq 0 (S (length l))))
     end.
-  Print type.
   Definition matches_lhs l (ND:NoDup l) k :=
     trm_app
       (const_app (Const.matches ND) (map trm_bvar (seq 1 (length l))))
@@ -266,7 +264,7 @@ Module Delta.
   Qed.
 End Delta.
 
-Module Sound2 := Mk2(Delta).
+Module Sound2 := Unify.Sound.Mk2(Delta).
 Import Sound2.
 Import JudgInfra.
 Import Judge.
@@ -370,14 +368,13 @@ Module SndHyp.
 
   Lemma get_kind_for_matches : forall k l (ND:NoDup l) t K E Us,
     k < length l ->
-    proper_instance K (Delta.type (Const.matches ND)) Us ->
+    proper_instance K (sch_kinds (Delta.type (Const.matches ND))) Us ->
     K; E |(false,GcLet)|= trm_app (trm_cst (Const.tag (nth k l var_default)))
                     t ~: nth 0 Us typ_def ->
     K; E |(false,GcLet)|= t ~: nth (S (S k)) Us typ_def.
   Proof.
     introv Hk PI Typ.
-    destruct PI as [[Arity _] [_ WK]].
-    unfold sch_arity in Arity.
+    destruct PI as [[Arity _] WK].
     simpl in Arity. autorewrite with list in Arity.
     simpl in WK.
     destruct* Us. destruct* Us. simpl in *.
@@ -387,7 +384,7 @@ Module SndHyp.
     destruct H2 as [_ HE]. simpl in *.
     inversions Typ; try discriminate. clear Typ.
     inversions H4; try discriminate. clear H4 H8.
-    destruct H9 as [_ [_ WK']].
+    destruct H9 as [_ WK'].
     destruct* Us0. discriminate.
     simpl in WK'. destruct WK' as [_ WK].
     destruct* Us0.
@@ -531,7 +528,7 @@ Module SndHyp.
     unfold sch_open in H0.
     simpl in H0.
     inversions H0. clear H0.
-    destruct H5 as [_ [_ WK]]. simpl in WK.
+    destruct H5 as [_ WK]. simpl in WK.
     destruct* Us. destruct* Us. destruct* Us.
     destruct WK as [_ [WK _]].
     inversions WK.
@@ -615,7 +612,7 @@ Module SndHyp.
     unfold const_app in Typv.
     destruct* (fold_app_inv _ _ Typv) as [TL [Typc Typa]]; clear Typv.
     inversions Typc; try discriminate. clear Typc H1 H4.
-    destruct H5 as [_ [_ WK]].
+    destruct H5 as [_ WK].
     unfold sch_open in H0; simpl in H0.
     destruct TL as [|T TL]. discriminate.
     destruct tl. elim Typa.
@@ -646,7 +643,7 @@ Module SndHyp.
     K ; empty |(false,GcLet)|= const_app c vl ~: T ->
     exists l, exists ND : NoDup l, exists Us, exists v, exists vl',
       vl = rev (v :: vl') /\ c = Const.matches ND /\ length l = length vl' /\
-      proper_instance K (Delta.type (Const.matches ND)) Us /\
+      proper_instance K (sch_kinds (Delta.type (Const.matches ND))) Us /\
       K; empty |(false,GcLet)|= v ~: nth 0 Us typ_def.
   Proof.
     intros.
@@ -694,7 +691,7 @@ Module SndHyp.
       [l [ND [Us [v [vl' [Evl [Ec [Hvl' [PI Typv]]]]]]]]]; clear H0.
     subst.
     exists (S (length l)).
-    destruct PI as [_ [_ WK]].
+    destruct PI as [_ WK].
     destruct Us; simpl in Typv.
       assert (type typ_def). auto.
       inversion H0.
@@ -768,3 +765,58 @@ End SndHyp.
 
 Module Sound3 := Mk3(SndHyp).
 
+Ltac case_rewrite t H :=
+  case_eq t; introv H; rewrite H in *; try discriminate.
+
+Module Cstr2.
+  Definition unique c := S.elements (Cstr.cstr_low c).
+  Lemma unique_ok : forall c l, In l (unique c) <-> Cstr.unique c l.
+  Proof.
+    unfold unique, Cstr.unique.
+    split; intros. apply S.elements_2. auto.
+    use (S.elements_1 H). clear -H0; induction H0; auto.
+  Qed.
+  Definition lub c1 c2 :=
+    Cstr.C (S.union (Cstr.cstr_low c1) (Cstr.cstr_low c2))
+    (match Cstr.cstr_high c1, Cstr.cstr_high c2 with
+     | None, h => h
+     | h, None => h
+     | Some s1, Some s2 => Some (S.inter s1 s2)
+     end).
+  Lemma lub_ok : forall c1 c2 c,
+    (Cstr.entails c c1 /\ Cstr.entails c c2) <-> Cstr.entails c (lub c1 c2).
+  Proof.
+    unfold Cstr.entails, lub; simpl; split; intros;
+      case_rewrite (Cstr.cstr_high c1) R1;
+      case_rewrite (Cstr.cstr_high c2) R2;
+      try case_rewrite (Cstr.cstr_high c) R3; intuition.
+    sets_solve. apply* S.inter_3.
+  Qed.
+  Definition valid : forall c, sumbool (Cstr.valid c) (~Cstr.valid c).
+    intros.
+    unfold Cstr.valid.
+    case_eq (Cstr.cstr_high c); intros.
+      case_eq (S.subset (Cstr.cstr_low c) v); intros.
+        use (S.subset_2 H0).
+      right; intro. rewrite (S.subset_1 H1) in H0. discriminate.
+    auto.
+  Defined.
+  Lemma entails_unique : forall c1 c2 v,
+    Cstr.entails c1 c2 -> Cstr.unique c2 v -> Cstr.unique c1 v.
+  Proof.
+    unfold Cstr.entails, Cstr.unique.
+    intros. auto*.
+  Qed.
+  Lemma entails_valid : forall c1 c2,
+    Cstr.entails c1 c2 -> Cstr.valid c1 -> Cstr.valid c2.
+  Proof.
+    unfold Cstr.entails, Cstr.valid.
+    intros. destruct H.
+    case_rewrite (Cstr.cstr_high c1) R1; case_rewrite (Cstr.cstr_high c2) R2;
+    auto; try contradiction.
+  Qed.
+End Cstr2.
+
+Module Infer2 := Mk2(Delta)(Cstr2).
+
+(* Extraction "typinf" Infer2.typinf. *)
