@@ -38,6 +38,11 @@ Parameter var_generate : vars -> var.
 Parameter var_generate_spec : forall E, (var_generate E) \notin E.
 Parameter var_fresh : forall (L : vars), { x : var | x \notin L }.
 
+(** Variables can be enumerated *)
+
+Parameter var_of_nat : nat -> var.
+Parameter nat_of_var : var -> nat.
+
 End VARIABLES.
 
 
@@ -49,6 +54,9 @@ Module Variables : VARIABLES.
 Definition var := nat.
 
 Definition var_default : var := O.
+
+Definition var_of_nat x : var := x.
+Definition nat_of_var x : nat := x.
 
 Module Var_as_OT := Nat_as_OT.
 
