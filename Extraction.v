@@ -1,17 +1,15 @@
-Require Import Metatheory ML_SP_Domain.
+Require Import List Metatheory ML_SP_Domain.
 Import Infer2.
 Import Infer.Unify.Sound.Infra.
 Import Defs.
 
-Definition v  :=  Variables.var_default.
-Definition min_vars := S.add v S.empty.
-Definition typinf' trm :=
-  match
-    typinf Env.empty Env.empty trm (typ_fvar v)
-      min_vars Env.empty (S (trm_depth trm))
-  with (None, _) => None
-  | (Some (kenv, subs), _) =>
-    Some (Env.map (kind_subst subs) kenv, Env.get v subs)
-  end.
+Definition t :=
+  trm_app
+    (trm_cst (Const.matches (NoDup_nodup (Variables.var_of_nat 5 :: nil))))
+    (trm_abs (trm_bvar O)).
 
+(* This doesn't seem to work inside Coq (some things don't get evaluated) *)
+(* Eval compute in typinf' t. *)
+
+(* Export and try to do this in ocaml *)
 Extraction "typinf" typinf'.

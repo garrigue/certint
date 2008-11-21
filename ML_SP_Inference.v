@@ -227,6 +227,17 @@ Fixpoint trm_depth (t : trm) : nat :=
   | trm_cst _ => 0
   end.
 
+Definition typinf' trm :=
+  let v  :=  Variables.var_default in
+  let min_vars := S.singleton v in
+  let V := typ_fvar v in
+  match
+    typinf empty empty trm V min_vars empty (S (trm_depth trm))
+  with (None, _) => None
+  | (Some (k, s), _) =>
+    Some (map (kind_subst s) k, typ_subst s V)
+  end.
+
 Lemma env_prop_type_compose : forall S1 S2,
   env_prop type S1 -> env_prop type S2 -> env_prop type (compose S1 S2).
 Proof.
@@ -1918,6 +1929,24 @@ Proof.
   apply* (@soundness_let h).
   apply* (@soundness_app h).
   apply* (@soundness_cst h).
+Qed.
+
+Corollary typinf_sound' : forall t K T,
+  typinf' t = Some (K, T) -> K; empty |Gc|= t ~: T.
+Proof.
+  unfold typinf'.
+  intros.
+  case_rewrite (typinf empty empty t (typ_fvar var_default) 
+             (S.singleton var_default) empty (S (trm_depth t))) R1.
+  destruct o; try discriminate.
+  destruct p. inversions H; clear H.
+  destruct* (typinf_sound _ _ R1).
+       intro; intros. elim H.
+      intro; intros. elim H.
+     split*. intro; intros. elim H.
+    intro; auto.
+   unfold fvs; simpl; sets_solve.
+  split*. intro; intros. elim H.
 Qed.
 
 Lemma typ_subst_concat_fresh : forall S1 S2 T,
@@ -3685,6 +3714,40 @@ Proof.
   apply* (@principal_app h L S0 K0 E0 S K E).
   apply* (@principal_cst h L S0 K0 E0 S K E).
   simpl in H. discriminate.
+Qed.
+
+Corollary typinf_principal' : forall K t T,
+  K; empty |(false,GcAny)|= t ~: T ->
+  exists K', exists T', typinf' t = Some (K', T') /\
+    exists S, well_subst K' K S /\ T = typ_subst S T'.
+Proof.
+  intros.
+  destruct*
+    (@typinf_principal (S (trm_depth t)) (S.singleton var_default)
+      empty empty empty (var_default ~ T) K empty t (typ_fvar var_default))
+    as [K' [S' [L' H']]];
+    try solve [try split*; intro; auto; intros; elim H0].
+       simpl. split*. intros. elim (binds_empty H0).
+      unfold fvs; simpl*.
+     intro; intros. replace (@empty typ) with id by reflexivity.
+     rewrite* typ_subst_id.
+    intro; intros. elim (binds_empty H0).
+   simpl. destruct* (var_default == var_default).
+  intuition.
+  unfold typinf'. rewrite H0.
+  esplit; esplit; split*.
+  destruct H3 as [S''].
+  intuition.
+  exists (var_default ~ T & S'').
+  split.
+    apply* well_subst_extends.
+  rewrite H4.
+  rewrite typ_subst_concat_fresh.
+    simpl. destruct* (var_default == var_default).
+  simpl.
+  intro.
+  destruct* (x == var_default).
+  subst. left; intro. elim (S.diff_2 (H3 _ H5)). auto.
 Qed.
 
 End Mk2.

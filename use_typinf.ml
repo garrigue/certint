@@ -25,7 +25,7 @@ let rec list_of_coqlist = function
 
 let typinf1 trm =
   match typinf' trm with
-    Some (Pair (kenv, Some typ)) ->
+    Some (Pair (kenv, typ)) ->
       List.map (fun (Pair(a,b)) -> a,b) (list_of_coqlist kenv), typ
   | _ -> failwith "Type Error";;
 
