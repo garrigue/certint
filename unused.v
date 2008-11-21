@@ -1,3 +1,62 @@
+Theorem unify_monotone : forall h pairs K1 S1 K1' S1' K0 S0,
+  unify h pairs K1 S1 = Some (K1', S1') ->
+  extends S1 S0 -> well_subst K0 (map (kind_subst S1) K1) S1 ->
+  is_subst S1 -> ok K1 -> disjoint (dom S1) (dom K1) ->
+  is_subst S0 -> ok K0 ->
+  exists h', exists K0', exists S0',
+    unify h' pairs K0 S0 = Some (K0', S0') /\
+    extends S1' S0' /\ well_subst K0' (map (kind_subst S1') K1') S1'.
+Proof.
+  intros until S0; intros HU Hext WS HS1 HK1 Dis1 HS0 HK0.
+  poses Hext1 (typ_subst_extend _ _ _ HS1 HU).
+  assert (Hext': extends S1' S0) by apply* extends_trans.
+  destruct* (unify_kinds_ok _ _ HU) as [HK1' [Dis1' WS1']].
+  assert (WS': well_subst K0 (map (kind_subst S1') K1') S1').
+    intro; intros.
+    use (WS _ _ H).
+    rewrite <- Hext1.
+    rewrite <- (kind_subst_combine _ _ _ k Hext1).
+    inversions H0.  auto.
+    destruct (binds_map_inv _ _ H4) as [k1 [Hk1 Bk1]].
+    use (WS1' _ _ Bk1).
+    simpl. rewrite <- H2.
+    rewrite <- (kind_subst_combine _ _ _ k1 Hext1) in H3.
+    rewrite Hk1 in H3.
+    inversions H3.
+    simpl; rewrite <- H7. clear H2 H7.
+    eapply wk_kind. apply H9.
+    apply* entails_trans. apply* kind_subst_entails.
+  exists (1 + size_pairs S0 K0 pairs).
+  assert (Hunif: unifies S1' pairs) by apply* (unify_types _ _ _ HU).
+  assert (unify (1 + size_pairs S0 K0 pairs) pairs K0 S0 <> None).
+    apply* (unify_complete0 (K:=map (kind_subst S1') K1') (S:=S1')).
+  case_rewrite (unify (1 + size_pairs S0 K0 pairs) pairs K0 S0) R1;
+    try (elim H; reflexivity).
+  destruct p as [K0' S0']. clear H.
+  esplit; esplit; split*.
+  destruct* (unify_mgu0 _ R1 (K':=map (kind_subst S1') K1') (S':=S1')).
+Qed.
+
+Lemma fv_in0_strengthen : forall (A:Set) (fv:A->vars) x E L,
+  x # E -> fv_in0 fv E (L \u {{x}}) = fv_in0 fv E L.
+Proof.
+  induction E; intros.
+    reflexivity.
+  simpl. destruct a; simpl.
+  simpl in H.
+  case_eq (S.mem v L); introv R1.
+    assert (S.mem v (L \u {{x}}) = true) by auto with sets.
+    rewrite H0.
+    apply* IHE.
+  puts (mem_3 R1).
+  case_eq (S.mem v (L \u {{x}})); introv R2.
+    use (S.mem_2 R2).
+    elim H0. sets_solve.
+    elim H; auto.
+  rewrite <- union_assoc. rewrite (union_comm {{x}}). rewrite union_assoc.
+  rewrite* IHE.
+Qed.
+
 Lemma concat_empty_l : forall (A:Set) (E:env A),
   empty & E = E.
 Proof.

@@ -818,5 +818,3 @@ Module Cstr2.
 End Cstr2.
 
 Module Infer2 := Mk2(Delta)(Cstr2).
-
-(* Extraction "typinf" Infer2.typinf. *)

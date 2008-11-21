@@ -7,6 +7,12 @@ Set Implicit Arguments.
 
 Require Import List Metatheory.
 
+Lemma split_combine : forall (A B:Set) (l:list (A*B)) l1 l2,
+  split l = (l1, l2) -> combine l1 l2 = l.
+Proof.
+  intros. puts (split_combine l). rewrite H in H0. auto.
+Qed.
+
 Section Index.
   Variable A : Set.
   Hypothesis eq_dec : forall x y : A, {x = y}+{x <> y}.
@@ -318,6 +324,8 @@ Lemma unify_type : forall K' S' h pairs K S,
   kenv_ok K' /\ env_prop type S' /\ is_subst S'.
 Proof.
   induction h; simpl; intros. discriminate.
+  set (h0 := pairs_size S pairs + 1) in *.
+  clearbody h0; gen pairs; induction h0; simpl; intros. discriminate.
   destruct pairs. inversions* H.
   destruct p.
   assert (type t /\ type t0). apply* H3.
@@ -329,7 +337,8 @@ Proof.
       try (unfold unify_nv in H;
            case_rewrite (S.mem v (typ_fv (typ_arrow t1 t2))) R3;
            case_rewrite (get_kind v K) R4; apply* IHh).
-    destruct (v == v0). apply* IHh.
+    destruct (v == v0). apply* (IHh0 pairs).
+    simpl in H.
     unfold unify_vars in H.
     assert (Hok: forall k, ok (remove_env (remove_env K v) v0 & v0 ~ k)).
       intro; constructor.
@@ -362,7 +371,7 @@ Proof.
       apply* IHh. split*.
     cbv iota beta in H. simpl app in H.
     apply* IHh. split*.
-  apply* IHh; clear IHh H.
+  apply* IHh0; clear IHh IHh0 H.
   simpl; intros.
   inversions H6.
   inversions H7.
@@ -890,7 +899,7 @@ Proof.
         use (fv_in_compose (v ~ T) S0 H0).
         simpl in H.
         use (typ_fv_subst S0 t0). rewrite R2 in H1. auto.
-       use (fv_in_remove_env _ _ HK0 H0).
+       use (fv_in_remove_env _ _ K0 H0).
       intros until K1.
       unfold K1, S1, fvs; clear K1 S1.
       intros Uk _ R1 R2 HS0 HS1 n IH HK0 y Hy.
@@ -916,9 +925,8 @@ Proof.
          simpl in H6. auto.
         puts (fv_in_compose _ _ H6). simpl in H. auto.
        auto.
-      assert (ok (remove_env K0 v)) by auto.
-      puts (fv_in_remove_env _ _ H6 H).
-      use (fv_in_remove_env _ _ HK0 H7).
+      puts (fv_in_remove_env _ _ (remove_env K0 v) H).
+      use (fv_in_remove_env _ _ K0 H6).
      unfold all_fv; simpl; intros. use (H3 H4).
     unfold all_fv; simpl; intros. use (H3 H4).
    unfold all_fv; simpl; intros.
@@ -1426,7 +1434,7 @@ Proof.
   intros until M. intros R4 Ok Ok' HK' Inc2 Inc4 Dise Se0.
   simpl length. rewrite map_length. rewrite app_length.
   rewrite <- (split_length _ R4).
-  use (split_combine e2). rewrite R4 in H.
+  puts (split_combine _ R4).
   apply fresh_app.
   apply* (ok_fresh l l0).
     rewrite* H.
@@ -1488,7 +1496,7 @@ Proof.
   simpl length.
   unfold Ks; rewrite map_length.
   rewrite <- (split_length _ R5).
-  poses He1 (split_combine e1). rewrite R5 in He1.
+  poses He1 (split_combine _ R5).
   apply* (ok_fresh l1 l2).
     rewrite* He1.
   rewrite* <- (dom_combine l1 l2).
@@ -1667,7 +1675,7 @@ Proof.
   destruct* (split_env_ok _ R2) as [Ok [Dise [Se0 [Inc1 Inc2]]]].
   destruct* (split_env_ok _ R3) as [Ok' [Dise' [Se2 [Inc3 Inc4]]]].
   destruct* (split_env_ok _ R5) as [Ok'' [Dise3 [Se4 [Inc5 Inc6]]]].
-  poses He2 (split_combine e2). rewrite R4 in He2.
+  poses He2 (split_combine _ R4).
   assert (HK': kenv_ok K') by auto.
   assert (Hkt: list_forall (All_kind_types type) (l0 ++ l0')).
     apply list_forall_app.
@@ -1716,8 +1724,7 @@ Proof.
       puts (incl_fv_in_subset kind_fv Inc4).
       repeat rewrite fv_in_concat in *.
       rewrite <- (fv_in_kind_fv_list l l0 (split_length _ R4)) in H.
-      puts (split_combine e2). rewrite R4 in H2. rewrite H2 in H.
-      auto.
+      rewrite (split_combine _ R4) in H. auto.
     clear -H; induction Bs. elim (in_empty H).
     apply IHBs. simpl in H; sets_solve. elim (in_empty H0).
   intros.
@@ -1744,7 +1751,8 @@ Proof.
   puts (typing_let_kenv_ok T1 _ _ R4 HK' Ok Ok' Se0 Inc2 Inc4 He2).
   apply* typing_weaken_kinds; clear H0.
   rewrite He2.
-  poses He1 (split_combine e1). case_rewrite (split e1) R6.
+  case_eq (split e1); introv R6.
+  poses He1 (split_combine _ R6).
   pose (Ks := List.map (kind_map (typ_generalize l1)) l2).
   apply* (@typing_gc (true,GcLet) Ks). simpl*.
   poses Typ' (typing_gc_raise Typ). clear Typ. simpl in Typ'.
@@ -3054,7 +3062,7 @@ Proof.
     unfold M0; intros x Hx.
     destruct (split_env_ok _ R2).
       destruct* (ok_concat_inv _ _ (proj1 Oke0)).
-    use (split_combine e2). rewrite R3 in H5.
+    puts (split_combine _ R3).
     case_eq (S.mem x ftve); intros; auto with sets.
     puts (mem_3 H6); clear H6; elimtype False.
     destruct* (sch_generalize_disjoint (l++Bs) T1 (l0 ++ l0') x).
@@ -3071,7 +3079,7 @@ Proof.
       rewrite kind_fv_list_app in H6.
       sets_solve.
         rewrite <- (fv_in_kind_fv_list _ _ (split_length _ R3)) in H3.
-        use (split_combine e2). rewrite R3 in H6. rewrite H6 in H3.
+        rewrite H5 in H3.
         destruct (fv_in_binds _ _ H3) as [y [b [Hx' Hy]]].
         assert (In (y,b) K1).
           apply (proj44 H9).
@@ -3151,11 +3159,8 @@ Proof.
         apply (proj44 H10). auto.
       clear -WS R3 H6 Hext Ok1 H Fr DXYs HXYs.
       rename H into HYs.
-      puts (split_combine e2).
-      rewrite R3 in H.
-      puts (split_length _ R3).
-      clear R3.
-      rewrite <- H in H6; clear H e2.
+      poses H0 (split_length _ R3).
+      rewrite <- (split_combine _ R3)in H6; clear R3 e2.
       gen l0. fold kind.
       induction l; destruct l0; simpl; intros; auto;
         try discriminate.
@@ -3223,8 +3228,7 @@ Proof.
      induction Bs; simpl. auto.
      split*.
      apply list_forall_app.
-       puts (split_combine e2).
-       rewrite R3 in H6.
+       puts (split_combine _ R3).
        apply* env_prop_list_forall.
          fold kind; rewrite H6. destruct* (kenv_ok_concat_inv _ _ Oke2).
        fold kind; rewrite* H6. destruct* Oke2.
@@ -3257,10 +3261,6 @@ Proof.
    rewrite DXYs. apply disjoint_comm. apply* (fresh_disjoint (sch_arity M)).
   apply* env_prop_type_compose.
 Qed.
-
-Lemma split_combine : forall (A B:Set) (l:list (A*B)) l1 l2,
-  split l = (l1, l2) -> combine l1 l2 = l.
-Proof. intros. puts (split_combine l). rewrite H in H0. auto. Qed.
 
 Lemma fv_in_sch_subst : forall S E,
   env_fv (map (sch_subst S) E) << env_fv E \u fv_in typ_fv S.

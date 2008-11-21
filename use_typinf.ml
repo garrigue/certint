@@ -40,6 +40,4 @@ let trm =
                  (Const.Coq_matches
                     (Cons (Variables.var_of_nat (nat_of_int 5), Nil))),
                Coq_trm_abs (Coq_trm_bvar O));;
-(* You need to remove the call to size_pairs in typinf.ml before
-   evaluating this one: pow2exp grows too fast! *)
 typinf1 trm;;
