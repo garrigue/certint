@@ -152,8 +152,7 @@ Definition unify_nv (unify : kenv -> subs -> option (kenv * subs)) K S x T :=
     | None => unify (remove_env K x) (compose (x ~ T) S)
     end.
 
-Fixpoint unify0 (unify : list (typ*typ) -> kenv -> subs -> option (kenv * subs))
-  (h:nat) (pairs:list (typ*typ)) (K:kenv) (S:subs) {struct h}
+Fixpoint unify0 unify (h:nat) (pairs:list(typ*typ)) (K:kenv) (S:subs) {struct h}
   : option (kenv * subs) :=
   match h with 0 => None
   | S h' =>

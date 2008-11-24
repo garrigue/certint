@@ -554,7 +554,7 @@ Qed.
 (* ********************************************************************** *)
 (** Removing Gc through inversion *)
 
-(* About 1500 lines... *)
+(* About 1350 lines... *)
 (* Note: this part of the development is not needed, as we rather use
    the above canonization lemma, which is sufficient for our needs.
    This just demonstrates how difficult it is to remove _all_ uses
@@ -1406,6 +1406,17 @@ Proof.
   auto.
 Qed.
 
+Lemma All_kind_types_inv: forall P f a,
+  All_kind_types P (kind_map f a) ->
+  All_kind_types (fun x => P (f x)) a.
+Proof.
+  intros.
+  destruct a as [[kc kv kr kh]|]; simpl*.
+  unfold All_kind_types in *; simpl in *.
+  clear kv kh; induction kr. simpl*.
+  simpl in *. split*.
+Qed.
+
 Lemma scheme_weaker_let : forall K1 Ks Xs U,
   let S := bvar_subst 0 (K1 & kinds_open_vars Ks Xs) in
   let Ks' := List.map (kind_subst S) (list_snd K1) in
@@ -1437,16 +1448,6 @@ Proof.
       unfold kinds_open in H2.
       rewrite <- map_combine in H2.
       puts (env_prop_map _ _ H2 x _ H3). simpl in H4.
-Lemma All_kind_types_inv: forall P f a,
-  All_kind_types P (kind_map f a) ->
-  All_kind_types (fun x => P (f x)) a.
-Proof.
-  intros.
-  destruct a as [[kc kv kr kh]|]; simpl*.
-  unfold All_kind_types in *; simpl in *.
-  clear kv kh; induction kr. simpl*.
-  simpl in *. split*.
-Qed.
       unfold kind_open in H4.
       puts (All_kind_types_inv _ _ _ H4).
       apply* All_kind_types_imp.
