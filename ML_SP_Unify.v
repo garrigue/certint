@@ -225,33 +225,6 @@ Fixpoint unify (h:nat) (pairs:list (typ*typ)) (K:kenv) (S:subs) {struct h} :=
   | S h' => unify0 (unify h') (pairs_size S pairs + 1) pairs K S
   end.
 
-Lemma notin_disjoint : forall x L, x \notin L -> disjoint {{x}} L.
-Proof.
-  intros; intro v. destruct (x == v); try subst; auto.
-Qed.
-
-Hint Resolve notin_disjoint.
-
-Lemma notin_disjoint_r : forall x L, x \notin L -> disjoint L {{x}}.
-Proof.
-  intros; apply* disjoint_comm.
-Qed.
-
-Hint Resolve notin_disjoint_r.
-
-Lemma binds_map_inv : forall (A:Set) (f:A->A) S x y,
-  binds x y (map f S) -> exists z, f z = y /\ binds x z S.
-Proof.
-  unfold binds.
-  induction S; simpl; intros. discriminate.
-  destruct a.
-  simpl in H.
-  destruct (x == v).
-  inversions H.
-    exists* a.
-  apply* IHS.
-Qed.
-
 Lemma typ_subst_compose : forall S1 S2 T,
   typ_subst (compose S1 S2) T = typ_subst S1 (typ_subst S2 T).
 Proof.

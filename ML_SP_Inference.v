@@ -1421,9 +1421,8 @@ Qed.
 Lemma diff_disjoint : forall L1 L2, disjoint (S.diff L1 L2) L2.
 Proof.
   intros. intro y.
-  case_eq (S.mem y (S.diff L1 L2)); intros.
-    use (S.diff_2 (S.mem_2 H)).
-  use (mem_3 H).
+  destruct* (in_vars_dec y (S.diff L1 L2)).
+  use (S.diff_2 H).
 Qed.
 
 Definition ok_concat_inv1 A (E1 E2:env A) H := proj1 (ok_concat_inv E1 E2 H).
@@ -3092,20 +3091,20 @@ Proof.
     destruct (split_env_ok _ R2).
       destruct* (ok_concat_inv _ _ (proj1 Oke0)).
     puts (split_combine _ R3).
-    case_eq (S.mem x ftve); intros; auto with sets.
-    puts (mem_3 H6); clear H6; elimtype False.
+    destruct* (in_vars_dec x ftve).
+    elimtype False.
     destruct* (sch_generalize_disjoint (l++Bs) T1 (l0 ++ l0') x).
-    elim H6; clear H6.
+    elim H7; clear H7.
     rewrite mkset_app.
     unfold Bs; rewrite mkset_elements.
     rewrite <- H5. rewrite dom_combine; [|apply* split_length].
-    case_eq (S.mem x (mkset l)); intros; auto with sets.
+    destruct* (in_vars_dec x (mkset l)).
     assert (x \in close_fvk K1 (typ_fv T1)).
       destruct* (split_env_ok _ R1). clear H3 H8.
       puts (sch_fv_generalize Hx).
       unfold sch_fv in H3; simpl in H3.
       sets_solve. apply* close_fvk_subset.
-      rewrite kind_fv_list_app in H6.
+      rewrite kind_fv_list_app in H8.
       sets_solve.
         rewrite <- (fv_in_kind_fv_list _ _ (split_length _ R3)) in H3.
         rewrite H5 in H3.
@@ -3119,7 +3118,7 @@ Proof.
       unfold l0' in H3.
       elimtype False; clear -H3; induction Bs. elim (in_empty H3).
       simpl in *. elim IHBs. sets_solve. elim (in_empty H).
-    use (mem_3 H6).
+    auto.
   assert(sch_fv (sch_subst S1 M0) << env_fv E \u fv_in kind_fv K).
     intros x Hx.
     rewrite sch_fv_after_subst in Hx.
@@ -3410,10 +3409,8 @@ Proof.
                   typ_subst (S & S'') t = typ_subst S t).
     intros; apply typ_subst_concat_fresh.
     clear -H'' H6; intro v.
-    case_eq (S.mem v (typ_fv t)); intros.
-      use (H6 _ (S.mem_2 H)).
-      left; intro Hv; use (S.diff_2 ((proj31 H'') _ Hv)).
-    use (mem_3 H).
+    destruct* (in_vars_dec v (typ_fv t)).
+    left; intro Hv; use (S.diff_2 ((proj31 H'') _ Hv)).
   assert (Inc04: incl (e0 & e4) K1).
     intro; intros. apply (proj44 H7).
     destruct* (in_concat_or _ _ _ H6).
@@ -3588,10 +3585,8 @@ Proof.
                   typ_subst (S & S'') t = typ_subst S t).
     intros; apply typ_subst_concat_fresh.
     clear -H H12; intro v.
-    case_eq (S.mem v (typ_fv t)); intros.
-      use (H12 _ (S.mem_2 H0)).
-      left; intro Hv; use (S.diff_2 (H _ Hv)).
-    use (mem_3 H0).
+    destruct* (in_vars_dec v (typ_fv t)).
+    left; intro Hv; use (S.diff_2 (H _ Hv)).
   destruct* (IHh L' S' K' E0 (S & x1 ~ S1 & S'') K E t2 (typ_fvar x1))
     as [K'' [S1' [L'' [HI' [Hext'' [S1'' H''']]]]]].
       split. rewrite <- (proj1 MGE). repeat rewrite dom_map. auto.

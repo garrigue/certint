@@ -347,14 +347,13 @@ Proof.
   introv Fr. intros.
   destruct H.
   rewrite* kind_subst_open.
-    rewrite* kind_subst_fresh.
-      rewrite* (fresh_subst {}).
-      rewrite* <- H.
-    rewrite* dom_combine.
-    apply disjoint_comm.
-    apply (fresh_disjoint (length Xs)).
-    apply* (kind_fv_fresh k Ks).
-  apply* list_forall_env_prop.
+  rewrite* kind_subst_fresh.
+    rewrite* (fresh_subst {}).
+    rewrite* <- H.
+  rewrite* dom_combine.
+  apply disjoint_comm.
+  apply (fresh_disjoint (length Xs)).
+  apply* (kind_fv_fresh k Ks).
 Qed.
 
 Lemma well_subst_open_vars : forall (K:kenv) Vs (Ks:list kind) Xs,
@@ -369,37 +368,28 @@ Proof.
   destruct* (binds_concat_inv H) as [[N B]|B]; clear H.
     unfold kinds_open_vars in N.
     rewrite* kind_subst_fresh.
-     simpl.
-     rewrite* get_notin_dom.
-      destruct k; try constructor.
-      eapply wk_kind. apply B.
-      apply entails_refl.
-     rewrite dom_combine in N.
-      rewrite* dom_combine.
-     unfold kinds_open, typ_fvars. rewrite* map_length.
-     rewrite* (fresh_length _ _ _ Fr).
+      simpl.
+      rewrite* get_notin_dom.
+        destruct* k.
+        eapply wk_kind. apply B.
+        apply entails_refl.
+      rewrite dom_combine in N.
+        rewrite* dom_combine.
+      unfold kinds_open, typ_fvars. rewrite* map_length.
     rewrite* dom_combine.
     apply disjoint_comm.
     apply* (fresh_disjoint (length Ks)).
     apply (fresh_sub (length Ks) Xs Fr (fv_in_spec kind_fv _ _ _ (binds_in B))).
-   unfold kinds_open_vars, kinds_open in *.
-   case_eq (get x (combine Xs Vs)); intros.
-    case_eq (get x (combine Xs Ks)); intros.
-     fold (binds x k (combine Xs Ks)) in H0.
-     generalize (binds_map (fun k : kind => kind_open k (typ_fvars Xs)) H0);
-       simpl; rewrite map_combine; intro.
-     generalize (binds_func B H1); intro. subst k.
-     apply* (For_all2_get (well_kinded K) Xs).
-      use (binds_map (kind_subst (combine Xs Vs)) B).
-      clear Fr WK H H0 H1 B.
-      simpl in H2; rewrite map_combine in H2.
-      rewrite list_map_comp in H2.
-      rewrite*
-        (list_map_ext Ks _ _ (kind_subst_open_combine Xs Ks (Vs:=Vs) Fr' TV)).
-     rewrite* H.
-    elim (get_contradicts _ _ _ _ H H0); auto.
-    rewrite* <- (fresh_length _ _ _ Fr).
-  elim (get_contradicts _ _ _ _ B H); auto.
+  unfold kinds_open_vars, kinds_open in *.
+  rewrite <- map_combine in B.
+  destruct (binds_map_inv _ _ B) as [k0 [Hk0 Bk0]]. subst.
+  puts (binds_map (kind_subst (combine Xs Vs)) B).
+  simpl in H; do 2 rewrite map_combine in H.
+  rewrite list_map_comp in H.
+  apply* (For_all2_get (well_kinded K) Xs).
+    rewrite* (list_map_ext Ks _ _ (kind_subst_open_combine _ _ Fr' TV)).
+  simpl; case_eq (get x (combine Xs Vs)); intros. auto.
+  elim (get_contradicts _ _ _ _ Bk0 H0); auto.
 Qed.
 
 Lemma has_scheme_from_vars : forall gc L K E t M,
@@ -1583,17 +1573,14 @@ Proof.
       destruct* (IHkr v).
       assert (disjoint (dom S) (typ_fv (typ_subst S (snd a)))).
         clear; induction (snd a); simpl; intro. auto.
-        case_eq (S.mem x (dom S)); intros.
+          destruct* (in_vars_dec x (dom S)).
           right.
           case_eq (get v S); intros.
             destruct (bvar_subst_bvar _ _ _ _ (binds_in H0)).
             subst. simpl*.
           simpl; intro.
-          rewrite (proj1 (in_singleton _ _) H1) in H.
-          destruct (dom_binds _ (S.mem_2 H)).
-          rewrite H2 in H0. discriminate.
-         left; intro.
-         rewrite (S.mem_1 H0) in H; discriminate.
+          rewrite (S.singleton_1 H1) in H0.
+          elim (get_none_notin _ H0 H).
         destruct* (IHt1 x); destruct* (IHt2 x).
       destruct* (H0 v).
     unfold kind_fv; intro; simpl*.

@@ -16,16 +16,6 @@ Require Import ProofIrrelevance.
 
 Hint Resolve in_or_app.
 
-Lemma binds_in : forall (A:Set) x (a:A) E,
-  binds x a E -> In (x, a) E.
-Proof.
-  unfold binds; induction E; intros. elim (binds_empty H).
-  destruct a0; simpl in *.
-  destruct* (x == v). inversions* H.
-Qed.
-
-Hint Immediate binds_in.
-
 Definition list_snd (A B:Set) := List.map (@snd A B).
 
 Definition in_concat_or (A:Set) (E F:env A) p (H:In p (E & F)) :=
@@ -36,35 +26,6 @@ Definition in_or_concat (A:Set) (E F:env A) p H : In p (E & F) :=
 
 Hint Resolve in_or_concat.
 
-Lemma in_ok_binds : forall (A:Set) x (a:A) E,
-  In (x,a) E -> ok E -> binds x a E.
-Proof.
-  intros.
-  unfold binds.
-  induction H0. elim H.
-  simpl.
-  simpl in H; destruct H.
-    inversions H.
-    destruct* (x == x).
-  destruct* (x == x0).
-  subst.
-  elim (binds_fresh (IHok H) H1).
-Qed.
-
-Hint Resolve in_ok_binds.
-
-Lemma in_map_inv : forall (A:Set) (f:A->A) x a E,
-  In (x,a) (map f E) -> exists b, f b = a /\ In (x,b) E.
-Proof.
-  induction E; simpl; intros. elim H.
-  destruct a0.
-  simpl in H; destruct H.
-    inversions H.
-    exists* a0.
-  destruct (IHE H).
-  exists* x0.
-Qed.
-
 Lemma map_snd_env_map : forall (A:Set) (f:A->A) l,
   List.map (fun X:var*A => (fst X, f (snd X))) l = Env.map f l.
 Proof.
@@ -72,8 +33,62 @@ Proof.
   destruct a. rewrite* IHl.
 Qed.
 
-Section EnvProp.
-  Variables (A:Set) (P:A->Prop).
+Section Env.
+  Variable A : Set.
+
+  Lemma binds_in : forall x (a:A) E,
+    binds x a E -> In (x, a) E.
+  Proof.
+    unfold binds; induction E; intros. elim (binds_empty H).
+    destruct a0; simpl in *.
+    destruct* (x == v). inversions* H.
+  Qed.
+
+  Lemma in_ok_binds : forall x (a:A) E,
+    In (x,a) E -> ok E -> binds x a E.
+  Proof.
+    intros.
+    unfold binds.
+    induction H0. elim H.
+    simpl.
+    simpl in H; destruct H.
+      inversions H.
+      destruct* (x == x).
+    destruct* (x == x0).
+    subst.
+    elim (binds_fresh (IHok H) H1).
+  Qed.
+
+  Section MapInv.
+    Variable f : A -> A.
+
+    Lemma in_map_inv : forall (A:Set) (f:A->A) x a E,
+      In (x,a) (map f E) -> exists b, f b = a /\ In (x,b) E.
+    Proof.
+      induction E; simpl; intros. elim H.
+      destruct a0.
+      simpl in H; destruct H.
+        inversions H.
+        exists* a0.
+      destruct (IHE H).
+      exists* x0.
+    Qed.
+
+    Lemma binds_map_inv : forall (A:Set) (f:A->A) S x y,
+      binds x y (map f S) -> exists z, f z = y /\ binds x z S.
+    Proof.
+      unfold binds.
+      induction S; simpl; intros. discriminate.
+      destruct a.
+      simpl in H.
+      destruct (x == v).
+      inversions H.
+        exists* a.
+      apply* IHS.
+    Qed.
+  End MapInv.
+
+  Variable P : A -> Prop.
 
   Lemma env_prop_single : forall x a, P a -> env_prop P (x ~ a).
   Proof.
@@ -109,10 +124,10 @@ Section EnvProp.
     rewrite <- map_snd_env_map.
     use (in_map (fun X : var * A => (fst X, f (snd X))) _ _ H0).
   Qed.
-End EnvProp.
+End Env.
 
-Hint Resolve env_prop_single env_prop_concat.
-Hint Immediate env_prop_concat_inv1 env_prop_concat_inv2.
+Hint Resolve in_ok_binds env_prop_single env_prop_concat.
+Hint Immediate binds_in env_prop_concat_inv1 env_prop_concat_inv2.
 
 Lemma mem_3 : forall v L, S.mem v L = false -> v \notin L.
 Proof.
@@ -122,6 +137,12 @@ Proof.
 Qed.
 
 Hint Resolve mem_3.
+
+Lemma in_vars_dec : forall v S, {v \in S}+{v \notin S}.
+Proof.
+  intros.
+  case_eq (S.mem v S); intros; auto with sets.
+Qed.
 
 Lemma remove_4 : forall y x L, y \in S.remove x L -> ~ E.eq x y.
 Proof.
@@ -187,7 +208,7 @@ Ltac union_solve x :=
     destruct (S.union_1 H); clear H; union_solve x
   | H: ?L1 << ?L2 |- _ =>
     match goal with
-    | H': x \in ?L1 |- _ =>
+    | H': x \in L1 |- _ =>
       let H1 := fresh "Hin" in poses H1 (H _ H'); clear H; union_solve x
     | H': x \in ?L3 |- _ =>
       match L1 with context[L3] =>
@@ -274,6 +295,20 @@ Proof.
   destruct* (eq_var_dec x v).
 Qed.
 
+Lemma notin_disjoint : forall x L, x \notin L -> disjoint {{x}} L.
+Proof.
+  intros; intro v. destruct (x == v); try subst; auto.
+Qed.
+
+Hint Resolve notin_disjoint.
+
+Lemma notin_disjoint_r : forall x L, x \notin L -> disjoint L {{x}}.
+Proof.
+  intros; apply* disjoint_comm.
+Qed.
+
+Hint Resolve notin_disjoint_r.
+
 Lemma disjoint_notin : forall s v,
   disjoint s {{v}} -> v \notin s.
 Proof.
@@ -281,7 +316,7 @@ Proof.
   destruct* (H v).
 Qed.
 
-Hint Resolve disjoint_notin.
+Hint Immediate disjoint_notin.
 
 (* ====================================================================== *)
 (** * The infrastructure needs to be parameterized over definitions *)
@@ -327,15 +362,13 @@ Qed.
 Hint Extern 1 (?n = length ?Xs) =>
   match goal with
   | H : fresh _ n Xs |- _ => apply (fresh_length _ _ _ H)
-  | H : fresh _ (sch_arity ?Ks) Xs |- _ =>
-    match n with length (sch_kinds Ks) => apply (fresh_length _ _ _ H) end
+  | H : types n Xs |- _ => apply (proj1 H)
   end.
 
 Hint Extern 1 (length ?Xs = ?n) =>
   match goal with
-  | H : fresh _ n Xs |- _ => apply (fresh_length _ _ _ H)
-  | H : fresh _ (sch_arity ?Ks) Xs |- _ =>
-    match n with length (sch_kinds Ks) => apply (fresh_length _ _ _ H) end
+  | H : fresh _ n Xs |- _ => symmetry; apply (fresh_length _ _ _ H)
+  | H : types n Xs |- _ => symmetry; apply (proj1 H)
   end.
 
 (* ====================================================================== *)
@@ -836,13 +869,11 @@ Proof.
         apply* (H1 v).
       rewrite* dom_combine.
       destruct* (fresh_disjoint _ _ _ H v).
-      rewrite* (proj1 H0).
     rewrite* get_notin_dom.
     rewrite dom_concat.
     rewrite* dom_combine.
-      destruct* (fresh_disjoint _ _ _ H v).
-      use (get_none_notin _ H2).
-    rewrite* (proj1 H0).
+    destruct* (fresh_disjoint _ _ _ H v).
+    use (get_none_notin _ H2).
   rewrite* IHT1. rewrite* IHT2.
 Qed.
 
@@ -898,6 +929,8 @@ Proof.
   apply (IHlist_forall _ _ _ H1).
 Qed.
 
+Hint Resolve list_forall_env_prop.
+
 Lemma typ_open_types : forall T Us Ks,
   typ_body T Ks ->
   types (length Ks) Us -> 
@@ -905,8 +938,7 @@ Lemma typ_open_types : forall T Us Ks,
 Proof. 
   introv K WT. pick_freshes (length Ks) Xs.
   rewrite* (@typ_subst_intro Xs).
-    apply* typ_subst_type.
-      apply list_forall_env_prop. destruct* WT.
+    apply* typ_subst_type. destruct* WT.
     destruct* (K Xs).
   rewrite* <- (fresh_length _ _ _ Fr).
 Qed.
