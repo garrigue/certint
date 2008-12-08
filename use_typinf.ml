@@ -42,12 +42,22 @@ let rec nat_of_int n = if n <= 0 then O else S (nat_of_int (n-1));;
    which takes n functions and a polymorphic variant as argument, and
    (fi v) if the argument was (Ai v). *)
 (* This example is equivalent to [function `A20 x -> x | `A21 x -> x] *)
-let trm =
+let mtch f1 f2 =
   Coq_trm_app (Coq_trm_app (
     Coq_trm_cst
       (Const.Coq_matches
          (Cons (Variables.var_of_nat (nat_of_int 20),
                 Cons (Variables.var_of_nat (nat_of_int 21), Nil)))),
-    Coq_trm_abs (Coq_trm_bvar O)),
- Coq_trm_abs (Coq_trm_bvar O));;
+               f1),
+               f2);;
+let trm = mtch (Coq_trm_abs (Coq_trm_bvar O)) (Coq_trm_abs (Coq_trm_bvar O));;
 typinf1 trm;;
+
+(* Another example, producing a recursive type *)
+(* OCaml equivalent: [fun x -> match x with `A20 y -> y | `A21 y -> x] *)
+let trm2 =
+  Coq_trm_abs
+    (Coq_trm_app
+       (mtch (Coq_trm_abs (Coq_trm_bvar O)) (Coq_trm_abs (Coq_trm_bvar (S O))),
+        Coq_trm_bvar O));;
+typinf1 trm2;;
