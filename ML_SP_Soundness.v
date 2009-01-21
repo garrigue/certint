@@ -828,7 +828,7 @@ Proof.
   set (S := combine Xs (typ_fvars Ys)).
   assert (DS: dom S = mkset Xs).
     unfold S; rewrite dom_combine. auto.
-    unfold typ_fvars; rewrite map_length. apply* fresh_length.
+    unfold typ_fvars; rewrite* map_length.
   assert (TS: env_prop type S).
     unfold S; apply list_forall_env_prop.
     clear; induction Ys; simpl; auto.
@@ -839,28 +839,24 @@ Proof.
     replace (kinds_open_vars (sch_kinds M) Ys) with
       (map(kind_subst S)(combine Ys (kinds_open (sch_kinds M) (typ_fvars Xs)))).
       apply* typing_typ_subst.
-        rewrite DS. disjoint_solve.
-      instantiate (1 := kinds_open_vars (sch_kinds M) Xs).
-      intro; intros.
-      destruct k as [[kc kv kr kh]|].
+          rewrite DS. disjoint_solve.
+        instantiate (1 := kinds_open_vars (sch_kinds M) Xs).
+        intro; intros.
+        destruct k as [[kc kv kr kh]|]; auto.
         binds_cases H2.
-          rewrite typ_subst_fresh.
-            rewrite kind_subst_fresh.
-              apply* wk_kind. apply entails_refl.
+            rewrite typ_subst_fresh.
+              rewrite kind_subst_fresh.
+                apply* wk_kind. apply entails_refl.
+              apply disjoint_comm.
+              rewrite DS; apply (fresh_disjoint (length Xs)).
+              apply* (@fresh_sub (length Xs) Xs (fv_in kind_fv K)).
+              refine (fv_in_spec _ _ _ _ (binds_in B0)).
+            rewrite DS; simpl.
             apply disjoint_comm.
-            rewrite DS; apply (fresh_disjoint (length Xs)).
-            apply* (@fresh_sub (length Xs) Xs (fv_in kind_fv K)).
-            fold (kind_fv (Some (Kind kv kh))).
-            puts (binds_in B0).
-            refine (fv_in_spec _ _ _ _ H2).
-          rewrite DS; simpl.
-          apply disjoint_comm.
-          apply (fresh_disjoint (length Xs)).
-          apply* (@fresh_sub (length Xs) Xs (dom K)).
-          intro; intros.
-          apply* binds_dom.
-          rewrite* <- (S.singleton_1 H2).
-        unfold kinds_open_vars in B1.
+            apply (fresh_disjoint (length Xs)).
+            apply* (@fresh_sub (length Xs) Xs (dom K)).
+            use (binds_dom B0).
+          unfold kinds_open_vars in B1.
           assert (length (kinds_open (sch_kinds M) (typ_fvars Xs)) = length Xs).
             unfold kinds_open; rewrite map_length.
             apply* fresh_length.
@@ -886,7 +882,6 @@ Proof.
         symmetry; unfold kinds_open, typ_fvars.
         repeat rewrite map_length.
         rewrite (fresh_length _ _ _ H). apply* fresh_length.
-       simpl*.
       apply* typing_weaken_kinds'.
       apply* kenv_ok_concat.
         split. apply* ok_combine_fresh.
