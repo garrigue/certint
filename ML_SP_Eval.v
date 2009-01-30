@@ -27,13 +27,20 @@ Fixpoint close2trm (c:clos) : trm :=
   match c with
   | clos_nil t => t
   | clos_list t l =>
-    fold_left (fun t' c' => trm_let (close2trm c') t')
-  
+    fold_left (fun t' c' => trm_let (close2trm c') t') l t
+  end.
+
+Section Adec.
+Variables (A:Set)(P Q:A->Prop)(R:A->A->Prop).
+Definition all_perm := (forall a b:A, R a b) -> forall a b:A, R b a.
+Print all_perm.
+Print eq.
+Check (forall a:nat, (le a:Type)).
 
 Fixpoint eval (h:nat) (benv:list clos) (fenv:env clos) (app:list clos) (t:trm)
   {struct h} : clos :=
   match h with
-  | 0 => (fold_left trm_app app trm,
+  | 0 => (fold_left (fun (t':trm) (_:clos) => trm_abs trm_app app trm,
   | S h =>
     match t with
     | trm_bvar n => eval bennth n benv trm_def
