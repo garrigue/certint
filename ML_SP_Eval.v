@@ -5,7 +5,7 @@
 
 Set Implicit Arguments.
 
-Require Import List Metatheory.
+Require Import Arith List Metatheory.
 Require Import ML_SP_Definitions ML_SP_Infrastructure.
 Require Import ML_SP_Soundness.
 
@@ -20,38 +20,129 @@ Import Metatheory_Env.Env.
 Module Mk2(Delta:DeltaIntf).
 
 Inductive clos : Set :=
-  | clos_nil : trm -> clos
-  | clos_list : trm -> list clos -> clos.
+  | clos_abs : trm -> list clos -> clos
+  | clos_const : Const.const -> list clos -> clos.
 
-Fixpoint close2trm (c:clos) : trm :=
+Fixpoint clos2trm (c:clos) : trm :=
   match c with
-  | clos_nil t => t
-  | clos_list t l =>
-    fold_left (fun t' c' => trm_let (close2trm c') t') l t
+  | clos_abs t l     => trm_inst (trm_abs t) (List.map clos2trm l)
+  | clos_const cst l => const_app cst (List.map clos2trm l)
   end.
 
-Section Adec.
-Variables (A:Set)(P Q:A->Prop)(R:A->A->Prop).
-Definition all_perm := (forall a b:A, R a b) -> forall a b:A, R b a.
-Print all_perm.
-Print eq.
-Check (forall a:nat, (le a:Type)).
+Section Cut.
+Variable A:Set.
+Fixpoint cut (n:nat) (l:list A) {struct n} : list A * list A :=
+  match n with
+  | 0 => (nil, l)
+  | S n =>
+    match l with
+    | nil => (nil, nil)
+    | a :: l => let (l1, l2) := cut n l in (a :: l1, l2)
+    end
+  end.
+End Cut.
 
-Fixpoint eval (h:nat) (benv:list clos) (fenv:env clos) (app:list clos) (t:trm)
-  {struct h} : clos :=
+Parameter delta_red : Const.const -> list clos -> option clos.
+
+Section Eval.
+
+Variable fenv : env clos.
+
+Record frame : Set := Frame
+  { frm_benv : list clos; frm_app : list clos; frm_trm : trm }.
+
+Inductive eval_res : Set :=
+  | Result : clos -> eval_res
+  | Error  : list frame -> eval_res
+  | Inter  : list frame -> eval_res.
+
+Definition clos_def := clos_abs trm_def nil.
+
+Definition trm2clos (benv : list clos) (fenv : env clos) t :=
+  match t with
+  | trm_bvar n => nth n benv clos_def
+  | trm_fvar v =>
+    match get v fenv with
+    | None => clos_def
+    | Some c => c
+    end
+  | trm_cst c => clos_const c nil
+  | trm_abs t1 => clos_abs t1 benv
+  | trm_let _ _ | trm_app _ _ => clos_def
+  end.
+
+Fixpoint eval (h:nat) (benv:list clos) (app:list clos) (t:trm)
+  (stack : list frame) {struct h} : eval_res :=
   match h with
-  | 0 => (fold_left (fun (t':trm) (_:clos) => trm_abs trm_app app trm,
+  | 0 => Inter (Frame benv app t :: stack)
   | S h =>
+    let result c :=
+      match stack with
+      | nil => Result c
+      | Frame benv' app' t :: rem => eval h benv' (c::app') t rem
+      end
+    in
     match t with
-    | trm_bvar n => eval bennth n benv trm_def
-    | trm_fvar v =>
-    match get v 
-    
+    | trm_let t1 t2 =>
+      eval h benv nil t1 (Frame benv app (trm_abs t2) :: stack)
+    | trm_app t1 t2 =>
+      eval h benv nil t2 (Frame benv app t1 :: stack)
+    | _ =>
+    let c := trm2clos benv fenv t in
+    match app with
+    | nil => result c
+    | c1 :: rem =>
+    match c with
+    | clos_abs t1 benv =>
+      eval h (c1::benv) rem t1 stack
+    | clos_const cst l =>
+      let nargs := length l +  length app in
+        let nred := S(Const.arity cst) in
+        if le_lt_dec nred nargs then
+        let (args, app') := cut nred (List.app l app) in
+        match delta_red cst args with
+        | Some (clos_const cst' app'') =>
+          eval h nil (List.app app'' app') (trm_cst cst') stack
+        | Some (clos_abs t1 benv) =>
+          eval h benv app' (trm_abs t1) stack
+        | None => Error (Frame benv app t :: stack)
+        end
+      else result c
+    end end end
+  end.
+End Eval.
+Check eval.
+
+Definition trm_S :=
+  trm_abs (trm_abs (trm_abs
+    (trm_app (trm_app (trm_bvar 2) (trm_bvar 0))
+      (trm_app (trm_bvar 1) (trm_bvar 0))))).
+Definition trm_K :=
+  trm_abs (trm_abs (trm_bvar 1)).
+
+Eval compute in eval nil 100 nil nil
+  (trm_app (trm_abs (trm_bvar 0)) (trm_abs (trm_bvar 0))) nil.
+
+Definition skk := eval nil 100 nil nil
+  (trm_app (trm_app (trm_app trm_S trm_K) (trm_K)) (trm_abs (trm_bvar 13))) nil.
+
+Eval compute in skk.
+Eval compute in
+  match skk with Result c => clos2trm c | _ => trm_def end.
 
 Module Sound2 := Sound.Mk2(Delta).
 Import Sound2.
 Import JudgInfra.
 Import Judge.
+
+Parameter delta_red_sound : forall c cls K T,
+  length cls = (S(Const.arity c)) ->
+  K ; empty |(false,GcLet)|= const_app c (List.map clos2trm cls) ~: T ->
+  exists cl, delta_red c cls = Some cl /\
+    exists t1:trm, exists t2:trm, exists tl:list trm,
+      Delta.rule (length tl) t1 t2 /\ list_forall term tl /\
+      const_app c (List.map clos2trm cls) = trm_inst t1 tl.
+
 
 Module Mk3(SH:SndHypIntf).
 
