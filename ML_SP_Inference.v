@@ -6,61 +6,13 @@
 Set Implicit Arguments.
 
 Require Import List Metatheory.
-
-Lemma split_combine : forall (A B:Set) (l:list (A*B)) l1 l2,
-  split l = (l1, l2) -> combine l1 l2 = l.
-Proof.
-  intros. puts (split_combine l). rewrite H in H0. auto.
-Qed.
-
-Section Index.
-  Variable A : Set.
-  Hypothesis eq_dec : forall x y : A, {x = y}+{x <> y}.
-
-  Fixpoint index (i:nat) (x:A) (l : list A) {struct l} : option nat :=
-    match l with
-    | nil   => None
-    | y::l' => if eq_dec x y then Some i else index (S i) x l'
-    end.
-
-  Lemma index_none_notin : forall x l n,
-    index n x l = None -> ~In x l.
-  Proof.
-    induction l; simpl; intros. auto.
-    destruct* (eq_dec x a). discriminate.
-  Qed.
-
-  Lemma index_ok : forall (B:Set) (f:A->B) (def:B) a l n,
-    index 0 a l = Some n ->
-    nth n (List.map f l) def = f a.
-  Proof.
-    intros.
-    replace n with (n-0) by omega.
-    apply (proj2 (A:= 0 <= n)).
-    gen n; generalize 0.
-    induction l; simpl; intros. discriminate.
-    destruct (eq_dec a a0).
-      subst.
-      inversions H.
-      split*.
-      replace (n0 - n0) with 0 by omega.
-      auto.
-    destruct (IHl _ _ H).
-    split. omega.
-    case_eq (n0 - n); intros.
-      elimtype False; omega.
-    replace n2 with (n0 - S n) by omega.
-    auto.
-  Qed.
-End Index.
-
 Require Import ML_SP_Definitions ML_SP_Infrastructure.
-Require Import ML_SP_Soundness ML_SP_Unify.
+Require Import ML_SP_Soundness ML_SP_Unify ML_SP_Rename.
 
 Module MkInfer(Cstr:CstrIntf)(Const:CstIntf).
 
-Module Unify := MkUnify(Cstr)(Const).
-Import Unify.
+Module Rename := MkRename(Cstr)(Const).
+Import Rename.Unify.
 Import Sound.
 Import Infra.
 Import Defs.
@@ -68,32 +20,14 @@ Import Metatheory_Env.Env.
 
 Module Mk2(Delta:DeltaIntf)(Cstr2:Cstr2I).
 
-Module Sound := Sound.Mk2(Delta).
+Module Rename2 := Rename.Mk2(Delta).
+Import Rename2.
 Import Sound.
 Import JudgInfra.
 Import Judge.
 
-Module Body := Unify.Mk2(Cstr2).
+Module Body := Rename.Unify.Mk2(Cstr2).
 Import Body.
-
-Definition moregen S0 S :=
-  exists S1, forall T, typ_subst S T = typ_subst S1 (typ_subst S0 T).
-
-Lemma extends_moregen : forall S S0,
-  extends S S0 -> moregen S0 S.
-Proof.
-  intros.
-  exists* S.
-Qed.
-
-Lemma moregen_extends : forall S S0,
-  moregen S0 S -> is_subst S0 -> extends S S0.
-Proof.
-  intros; intro.
-  destruct H as [S1 Heq].
-  rewrite Heq.
-  rewrite* typ_subst_idem.
-Qed.
 
 Definition unify K T1 T2 S :=
   unify (1 + size_pairs S K ((T1,T2)::nil)) ((T1,T2)::nil) K S.
@@ -121,22 +55,6 @@ Fixpoint close_fvars (n:nat)(K:kenv)(VK:vars)(Vs:vars) {struct n} : vars :=
   end.
     
 Definition close_fvk K := close_fvars (length K) K (dom K).
-
-Fixpoint typ_generalize (Bs:list var) (T:typ) {struct T} : typ :=
-  match T with
-  | typ_bvar n =>
-    typ_bvar (length Bs + n)
-  | typ_fvar x =>
-    match index eq_var_dec 0 x Bs with
-    | None   => T
-    | Some n => typ_bvar n
-    end
-  | typ_arrow T1 T2 =>
-    typ_arrow (typ_generalize Bs T1) (typ_generalize Bs T2)
-  end.
-
-Definition sch_generalize Bs T Ks :=
-  Sch (typ_generalize Bs T) (List.map (kind_map (typ_generalize Bs)) Ks).
 
 Fixpoint split_env (A:Set) (B:vars) (E:env A) {struct E} : env A * env A :=
   match E with
@@ -1054,24 +972,6 @@ Proof.
   apply* fresh_sub.
 Qed.
 
-Lemma typing_abs_rename : forall x1 gc K E x2 M t T,
-  x1 \notin trm_fv t ->
-  x2 \notin dom E \u {{x1}} \u trm_fv t ->
-  K; E & x1 ~ M |gc|= t ^ x1 ~: T -> K; E & x2 ~ M |gc|= t ^ x2 ~: T.
-Proof.
-  intros. replace (E & x2 ~ M) with (E & x2 ~ M & empty) by simpl*.
-  replace (t ^ x2) with ([x1~>trm_fvar x2]t^x1).
-  apply typing_rename. simpl*.
-    assert (x2 \notin trm_fv (t ^ x1)).
-      unfold trm_open.
-      use (trm_fv_open (trm_fvar x1) t 0). apply (notin_subset H2).
-      simpl*.
-    simpl*.
-  rewrite* trm_subst_open.
-  rewrite* trm_subst_fresh.
-  simpl. destruct* (x1 == x1).
-Qed.
-
 Lemma soundness_abs : forall h L0 t K0 E T S0 S K L,
   (forall t K0 E T L0 S0, soundness_spec h t K0 E T L0 S0 K S L) ->
   soundness_spec (Datatypes.S h) (trm_abs t) K0 E T L0 S0 K S L.
@@ -1122,6 +1022,16 @@ Proof.
   apply* (@typing_abs_rename x1).
 Qed.
 
+Lemma in_dom : forall (A:Set) x (a:A) E,
+  In (x,a) E -> x \in dom E.
+Proof.
+  induction E; simpl; intros. elim H.
+  destruct H.
+    subst. auto.
+  destruct a0.
+  use (IHE H).
+Qed.
+
 Lemma incl_subset_dom : forall (A:Set) (E1 E2:env A),
   incl E1 E2 -> dom E1 << dom E2.
 Proof.
@@ -1130,68 +1040,6 @@ Proof.
     use (H _ (binds_in H0)).
     apply* in_dom.
   use (get_none_notin _ H0).
-Qed.
-
-Lemma typ_generalize_reopen : forall Xs T,
-  type T -> typ_open (typ_generalize Xs T) (typ_fvars Xs) = T.
-Proof.
-  induction 1; simpl.
-    case_eq (index eq_var_dec 0 X Xs); simpl; intros.
-      unfold typ_fvars.
-      apply* index_ok.
-    auto.
-  congruence.
-Qed.
-
-Lemma kind_generalize_reopen : forall Xs k,
-  All_kind_types type k ->
-  kind_open (kind_map (typ_generalize Xs) k) (typ_fvars Xs) = k.
-Proof.
-  unfold All_kind_types.
-  intros; destruct k as [[kc kv kr kh]|]; simpl in *; auto.
-  apply kind_pi; simpl*.
-  clear kh; induction kr; simpl*.
-  destruct a. simpl in *.
-  rewrite* typ_generalize_reopen. rewrite* IHkr.
-Qed.
-
-Lemma kinds_generalize_reopen : forall Xs Ks,
-  list_forall (All_kind_types type) Ks ->
-  kinds_open_vars (List.map (kind_map (typ_generalize Xs)) Ks) Xs =
-  combine Xs Ks.
-Proof.
-  unfold kinds_open_vars, kinds_open; intros.
-  apply (f_equal (combine (B:=kind) Xs)).
-  induction H; simpl. auto.
-  rewrite* kind_generalize_reopen.
-  congruence.
-Qed.
-
-Lemma type_generalize : forall Bs Xs T,
-  length Bs = length Xs ->
-  type T ->
-  type (typ_open_vars (typ_generalize Bs T) Xs).
-Proof.
-  intros.
-  apply* (typ_open_vars_type Bs).
-  unfold typ_open_vars.
-  rewrite* typ_generalize_reopen.
-Qed.
-
-Lemma scheme_generalize : forall Bs Ks T,
-  length Bs = length Ks ->
-  type T -> list_forall (All_kind_types type) Ks ->
-  scheme (sch_generalize Bs T Ks).
-Proof.
-  intros.
-  intro; simpl; intros.
-  rewrite map_length in H2.
-  rewrite H2 in H.
-  split. apply* type_generalize.
-  apply* list_forall_map; intros.
-  apply All_kind_types_map.
-  apply* All_kind_types_imp; intros.
-  apply* type_generalize.
 Qed.
 
 Lemma close_fvars_subset : forall K n DK L,
@@ -1309,49 +1157,6 @@ Lemma disjoint_subset : forall L1 L2 L3,
   L1 << L2 -> disjoint L2 L3 -> disjoint L1 L3.
 Proof.
   intros. disjoint_solve. auto.
-Qed.
-
-Lemma mkset_notin : forall x l, ~In x l -> x \notin mkset l.
-Proof.
-  induction l; simpl; intros. auto.
-  intuition.
-  destruct* (S.union_1 H0).
-  elim H1; rewrite* (S.singleton_1 H3).
-Qed.
-Hint Resolve mkset_notin.
-
-Lemma typ_generalize_disjoint : forall Bs T,
-  disjoint (typ_fv (typ_generalize Bs T)) (mkset Bs).
-Proof.
-  induction T; simpl. intro; auto.
-    case_eq (index eq_var_dec 0 v Bs); simpl; intros.
-      intro; auto.
-    use (index_none_notin _ _ _ _ H).
-  disjoint_solve.
-Qed.
-
-Lemma kinds_generalize_disjoint : forall Bs Ks,
-  disjoint (kind_fv_list (List.map (kind_map (typ_generalize Bs)) Ks))
-    (mkset Bs).
-Proof.
-  intros. unfold kind_fv_list.
-  induction Ks; simpl. intro; auto.
-  apply* disjoint_union.
-  unfold kind_fv.
-  clear IHKs Ks; destruct a as [[kc kv kr kh]|]; simpl.
-    clear kh; induction kr; simpl. intro; auto.
-    apply* disjoint_union.
-    apply typ_generalize_disjoint.
-  intro; auto.
-Qed.
-
-Lemma sch_generalize_disjoint : forall Bs T Ks,
-  disjoint (sch_fv (sch_generalize Bs T Ks)) (mkset Bs).
-Proof.
-  intros.
-  unfold sch_generalize, sch_fv; simpl.
-  apply disjoint_union. apply typ_generalize_disjoint.
-  apply kinds_generalize_disjoint.
 Qed.
 
 Lemma typing_let_disjoint : forall EK0 L e e0 K',

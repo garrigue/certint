@@ -1,7 +1,7 @@
 #load"typinf.cmo";;
 open Typinf;;
 open Infer2;;
-open Infer.Unify.Sound.Infra.Defs;;
+open Infer.Rename.Unify.Sound.Infra.Defs;;
 open Variables.VarSet;;
 
 let rec int_of_nat = function O -> 0 | S x -> succ (int_of_nat x);;

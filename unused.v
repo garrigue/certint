@@ -629,3 +629,65 @@ Proof.
     subst*.
   apply H4.
 Qed.
+
+(* ML_SP_Rename *)
+
+Lemma in_list_forall : forall (A:Set) (P:A->Prop) x l,
+  list_forall P l -> In x l -> P x.
+Proof.
+  induction 1; simpl; intros. elim H.
+  destruct* H1. subst*.
+Qed.
+
+Lemma nth_fresh : forall v L n Xs,
+  nth n (List.map typ_fvar Xs) typ_def = typ_fvar v ->
+  fresh L (length Xs) Xs -> v \notin L.
+Proof.
+  induction n; destruct Xs; simpl; intros; try discriminate.
+    inversions H. intuition.
+  apply* (IHn Xs).
+Qed.         
+
+Lemma nth_typ_fvars_not_arrow : forall n Xs T U,
+  nth n (typ_fvars Xs) typ_def <> typ_arrow T U.
+Proof.
+  induction n; destruct Xs; simpl; intros; try discriminate.
+  apply IHn.
+Qed.
+
+Lemma typ_open_eq_inv : forall Xs T U,
+  typ_open T (typ_fvars Xs) = typ_open U (typ_fvars Xs) ->
+  type (typ_open T (typ_fvars Xs)) ->
+  type (typ_open U (typ_fvars Xs)) ->
+  fresh (typ_fv T \u typ_fv U) (length Xs) Xs ->
+  T = U.
+Proof.
+  induction T; destruct U; simpl; intros; try discriminate.
+        gen n0 Xs.
+        generalize ({} \u {}).
+        unfold typ_fvars.
+        induction n; destruct n0; destruct Xs; simpl; intros;
+          try discriminate; auto.
+             inversion H0.
+            destruct H2.
+            elim (@nth_fresh v (t \u {{v}}) n0 Xs); auto*.
+            auto with sets.
+           inversion H0.
+          elim (@nth_fresh v (t \u {{v}}) n Xs); auto*.
+          auto with sets.
+         inversion H0.
+        destruct H2.
+        use (IHn _ _ _ H H0 H1 H3).
+        inversion* H4.
+       elim (@nth_fresh v ({} \u {{v}}) n Xs); auto*.
+       auto with sets.
+      elim (nth_typ_fvars_not_arrow _ _ H).
+     elim (@nth_fresh v ({{v}} \u {}) n Xs); auto*.
+     auto with sets.
+    inversion* H.
+   elim (nth_typ_fvars_not_arrow _ _ (sym_equal H)).
+  inversions H; inversions H0; inversion H1; clear H H0 H1.
+  rewrite* (IHT1 U1).
+  rewrite* (IHT2 U2).
+Qed.
+

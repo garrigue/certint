@@ -31,16 +31,59 @@ End Cstr2I.
 
 Module Mk2(Cstr2:Cstr2I).
 
+(* Composition of substitutions *)
 Definition compose S1 S2 : subs := S1 & map (typ_subst S1) S2.
 
+(* Inclusion of substitutions. Very handy to use in proofs *)
 Definition extends S S0 :=
   forall T, typ_subst S (typ_subst S0 T) = typ_subst S T.
 
+(* Unifiers *)
 Definition unifies S pairs :=
   forall T1 T2, In (T1, T2) pairs -> typ_subst S T1 = typ_subst S T2.
 
+(* Subsititions should be in normal form *)
 Definition is_subst (S : subs) :=
   env_prop (fun T => disjoint (dom S) (typ_fv T)) S.
+
+Section Moregen.
+  (* Here we relate extends with the more usual notional of generality *)
+
+  Definition moregen S0 S :=
+    exists S1, forall T, typ_subst S T = typ_subst S1 (typ_subst S0 T).
+
+  (* Extends implies more general *)
+  Lemma extends_moregen : forall S S0,
+    extends S S0 -> moregen S0 S.
+  Proof.
+    intros.
+    exists* S.
+  Qed.
+
+  Lemma typ_subst_idem : forall S T,
+    is_subst S -> typ_subst S (typ_subst S T) = typ_subst S T.
+  Proof.
+    intros.
+    induction T; simpl. auto.
+      case_eq (get v S); intros.
+        rewrite* typ_subst_fresh.
+        apply (H _ _ (binds_in H0)).
+      simpl.
+      rewrite* H0.
+    simpl; congruence.
+  Qed.
+
+  (* For substitutions in normal form, moregeneral implies extends *)
+  Lemma moregen_extends : forall S S0,
+    moregen S0 S -> is_subst S0 -> extends S S0.
+  Proof.
+    intros; intro.
+    destruct H as [S1 Heq].
+    rewrite Heq.
+    rewrite* typ_subst_idem.
+  Qed.
+
+End Moregen.
 
 Fixpoint unify_kind_rel (kr kr':list(var*typ)) (un:list var)
   (pairs:list(typ*typ)) {struct kr} :=
@@ -609,19 +652,6 @@ Proof.
   intros.
   intuition.
   apply H8; unfold S1. apply* binds_add_binding.
-Qed.
-
-Lemma typ_subst_idem : forall S T,
-  is_subst S -> typ_subst S (typ_subst S T) = typ_subst S T.
-Proof.
-  intros.
-  induction T; simpl. auto.
-    case_eq (get v S); intros.
-      rewrite* typ_subst_fresh.
-      apply (H _ _ (binds_in H0)).
-    simpl.
-    rewrite* H0.
-  simpl; congruence.
 Qed.
 
 Lemma binds_subst_idem : forall x T S,
