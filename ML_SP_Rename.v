@@ -673,6 +673,61 @@ Proof.
   destruct H; split*.
 Qed.
 
+Lemma mkset_app : forall Xs Ys,
+  mkset (Xs ++ Ys) = mkset Xs \u mkset Ys.
+Proof.
+  induction Xs; simpl; intros. rewrite* union_empty_l.
+  rewrite IHXs.
+  rewrite* union_assoc.
+Qed.
+
+Lemma kind_fv_list_app : forall K2 K1,
+  kind_fv_list (K1 ++ K2) = kind_fv_list K1 \u kind_fv_list K2.
+Proof.
+  unfold kind_fv_list; induction K1; simpl. rewrite* union_empty_l.
+  rewrite* IHK1. rewrite* union_assoc.
+Qed.
+
+Lemma list_forall_app : forall (A:Set) (P:A->Prop) l1 l2,
+  list_forall P l1 -> list_forall P l2 -> list_forall P (l1 ++ l2).
+Proof.
+  induction 1; intros; simpl; auto.
+Qed.
+
+Lemma combine_app : forall (A B:Set) (l1 l2:list A) (l1' l2':list B),
+  length l1 = length l1' ->
+  combine (l1 ++ l2) (l1' ++ l2') = combine l1 l1' ++ combine l2 l2'.
+Proof.
+  induction l1; destruct l1'; simpl; intros; try discriminate. auto.
+  rewrite* IHl1.
+Qed.
+
+Lemma dom_binds : forall (A:Set) x E,
+  x \in dom E -> exists y:A, binds x y E.
+Proof.
+  induction E; simpl; intros. elim (in_empty H).
+  destruct a.
+  destruct (x == v); subst.
+    exists a. apply (binds_head v a E).
+  destruct* (S.union_1 H).
+    elim n; rewrite* (proj1 (in_singleton x v) H0).
+  destruct* IHE.
+  exists x0.
+  apply* (@binds_tail A x v x0 a E).
+Qed.
+
+Lemma env_prop_list_forall : forall (A : Set) (P : A -> Prop) Xs Vs,
+  env_prop P (combine Xs Vs) ->
+  ok (combine Xs Vs) -> length Xs = length Vs -> list_forall P Vs.
+Proof.
+  induction Xs; destruct Vs; simpl; intros; try discriminate; auto.
+  inversion H1; inversions H0.
+  constructor.
+    apply* (IHXs Vs).
+    intro; intros. apply* (H x).
+  apply* (H a).
+Qed.
+
 (* ********************************************************************** *)
 (** Removing Gc through inversion *)
 
@@ -741,18 +796,16 @@ Lemma env_weaker_ok : forall Us U Ks Ks' k Xs',
   All_kind_types type k.
 Proof.
   intros.
-  destruct H.
   destruct (var_freshes {} (length Ks)) as [Xs Fr].
   destruct (H1 (Xs ++ Xs')) as [_ HA]; clear H1.
     simpl. repeat rewrite app_length.
     rewrite H0. rewrite* (fresh_length _ _ _ Fr).
   clear H0.
   use (list_forall_app_inv _ _ HA); clear HA.
-  induction Ks'; simpl in *. elim H2.
-  inversions H0; clear H0.
+  induction H0; simpl in *. elim H2.
   destruct H2; subst.
     unfold kind_open.
-    clear H5 IHKs'.
+    clear -H Fr H1.
     apply All_kind_types_map.
     apply* All_kind_types_imp.
     simpl; intros.
@@ -762,9 +815,10 @@ Proof.
     split.
       repeat rewrite app_length; rewrite map_length.
       rewrite* <- (fresh_length _ _ _ Fr).
-    clear -H3. induction H3; simpl*.
+    destruct H.
+    clear -H2. induction H2; simpl*.
     induction Xs'; simpl*.
-  apply* IHKs'.
+  apply* IHlist_forall.
 Qed.
 
 Lemma well_kinded_combine : forall K Ks' Xs Us,
@@ -827,7 +881,7 @@ Proof.
     eapply wk_kind.
       apply* binds_concat_fresh.
       apply* notin_combine_fresh.
-      use (binds_dom H4). auto with sets.
+      use (binds_dom H4).
     destruct c as [kc kv kr kh]; simpl in *.
     destruct H5; split*. clear H.
     intros.
@@ -867,12 +921,6 @@ Proof.
   exists* Ks'.
 Qed.
 
-Lemma list_forall_app : forall (A:Set) (P:A->Prop) l1 l2,
-  list_forall P l1 -> list_forall P l2 -> list_forall P (l1 ++ l2).
-Proof.
-  induction 1; intros; simpl; auto.
-Qed.
-
 Definition list_fst (A B:Set) := List.map (@fst A B).
 
 Lemma combine_fst_snd : forall (A B:Set) (l:list(A*B)),
@@ -880,30 +928,6 @@ Lemma combine_fst_snd : forall (A B:Set) (l:list(A*B)),
 Proof.
   induction l; simpl. auto.
   destruct a; simpl; rewrite* IHl.
-Qed.
-
-Lemma combine_app : forall (A B:Set) (l1 l2:list A) (l1' l2':list B),
-  length l1 = length l1' ->
-  combine (l1 ++ l2) (l1' ++ l2') = combine l1 l1' ++ combine l2 l2'.
-Proof.
-  induction l1; destruct l1'; simpl; intros; try discriminate. auto.
-  rewrite* IHl1.
-Qed.
-
-Lemma app_eq : forall (A:Set) (l1 l2 l1' l2':list A),
-  l1 = l1' -> l2 = l2' -> l1 ++ l2 = l1' ++ l2'.
-Proof. congruence. Qed.
-
-Lemma env_prop_list_forall : forall (A : Set) (P : A -> Prop) Xs Vs,
-  env_prop P (combine Xs Vs) ->
-  ok (combine Xs Vs) -> length Xs = length Vs -> list_forall P Vs.
-Proof.
-  induction Xs; destruct Vs; simpl; intros; try discriminate; auto.
-  inversion H1; inversions H0.
-  constructor.
-    apply* (IHXs Vs).
-    intro; intros. apply* (H x).
-  apply* (H a).
 Qed.
 
 Lemma ok_combine_other : forall (A B:Set) Xs (Us:list A) (Vs:list B),
@@ -947,35 +971,6 @@ Proof.
   rewrite dom_combine in H6; auto.
   intro v; destruct* (H1 v).
   destruct* (a == v). subst*.
-Qed.
-
-Lemma mkset_app : forall Xs Ys,
-  mkset (Xs ++ Ys) = mkset Xs \u mkset Ys.
-Proof.
-  induction Xs; simpl; intros. rewrite* union_empty_l.
-  rewrite IHXs.
-  rewrite* union_assoc.
-Qed.
-
-Lemma kind_fv_list_app : forall K2 K1,
-  kind_fv_list (K1 ++ K2) = kind_fv_list K1 \u kind_fv_list K2.
-Proof.
-  unfold kind_fv_list; induction K1; simpl. rewrite* union_empty_l.
-  rewrite* IHK1. rewrite* union_assoc.
-Qed.
-
-Lemma dom_binds : forall (A:Set) x E,
-  x \in dom E -> exists y:A, binds x y E.
-Proof.
-  induction E; simpl; intros. elim (in_empty H).
-  destruct a.
-  destruct (x == v); subst.
-    exists a. apply (binds_head v a E).
-  destruct* (S.union_1 H).
-    elim n; rewrite* (proj1 (in_singleton x v) H0).
-  destruct* IHE.
-  exists x0.
-  apply* (@binds_tail A x v x0 a E).
 Qed.
 
 Lemma typing_remove_gc_var : forall K E x M Us F LK,

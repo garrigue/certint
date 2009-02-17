@@ -23,6 +23,19 @@ Inductive clos : Set :=
   | clos_abs : trm -> list clos -> clos
   | clos_const : Const.const -> list clos -> clos.
 
+Definition term_n n t :=
+  forall ts, list_for_n term n ts -> term (trm_inst t ts).
+
+Inductive clos_ok : clos -> Prop :=
+  | clos_ok_abs : forall t cls,
+      list_forall clos_ok cls ->
+      term_n (length cls) t ->
+      clos_ok (clos_abs t cls)
+  | clos_ok_const : forall c cls,
+      list_forall clos_ok cls ->
+      List.length cls <= Const.arity c ->
+      clos_ok (clos_const c cls).
+
 Fixpoint clos2trm (c:clos) : trm :=
   match c with
   | clos_abs t l     => trm_inst (trm_abs t) (List.map clos2trm l)
@@ -42,7 +55,7 @@ Fixpoint cut (n:nat) (l:list A) {struct n} : list A * list A :=
   end.
 End Cut.
 
-Parameter delta_red : Const.const -> list clos -> option clos.
+Parameter delta_red : Const.const -> list clos -> clos.
 
 Section Eval.
 
@@ -51,10 +64,32 @@ Variable fenv : env clos.
 Record frame : Set := Frame
   { frm_benv : list clos; frm_app : list clos; frm_trm : trm }.
 
+Fixpoint stack2trm t0 (l : list frame) {struct l} : trm :=
+  match l with
+  | nil => t0
+  | Frame benv args t :: rem =>
+    let t1 :=
+      match t0 with
+      | trm_bvar _ => t
+      | _ => trm_app t t0
+      end
+    in
+    let t2 :=
+      trm_inst
+        (List.fold_left trm_app (List.map clos2trm args) t1)
+        (List.map clos2trm benv)
+    in stack2trm t2 rem
+  end.
+    
 Inductive eval_res : Set :=
   | Result : clos -> eval_res
-  | Error  : list frame -> eval_res
   | Inter  : list frame -> eval_res.
+
+Definition res2trm res :=
+  match res with
+  | Result cl => clos2trm cl
+  | Inter l => stack2trm trm_def l
+  end.
 
 Definition clos_def := clos_abs trm_def nil.
 
@@ -101,16 +136,16 @@ Fixpoint eval (h:nat) (benv:list clos) (app:list clos) (t:trm)
         if le_lt_dec nred nargs then
         let (args, app') := cut nred (List.app l app) in
         match delta_red cst args with
-        | Some (clos_const cst' app'') =>
+        | clos_const cst' app'' =>
           eval h nil (List.app app'' app') (trm_cst cst') stack
-        | Some (clos_abs t1 benv) =>
+        | clos_abs t1 benv =>
           eval h benv app' (trm_abs t1) stack
-        | None => Error (Frame benv app t :: stack)
         end
       else result c
     end end end
   end.
 End Eval.
+
 Check eval.
 
 Definition trm_S :=
@@ -130,6 +165,13 @@ Eval compute in skk.
 Eval compute in
   match skk with Result c => clos2trm c | _ => trm_def end.
 
+Definition skk' := eval nil 3 nil nil
+  (trm_app (trm_app (trm_app trm_S trm_K) (trm_K))
+    (trm_abs (trm_abs (trm_abs (trm_bvar 2))))) nil.
+
+Eval compute in skk'.
+Eval compute in res2trm skk'.
+
 Module Sound2 := Sound.Mk2(Delta).
 Import Sound2.
 Import JudgInfra.
@@ -138,16 +180,27 @@ Import Judge.
 Parameter delta_red_sound : forall c cls K T,
   length cls = (S(Const.arity c)) ->
   K ; empty |(false,GcLet)|= const_app c (List.map clos2trm cls) ~: T ->
-  exists cl, delta_red c cls = Some cl /\
-    exists t1:trm, exists t2:trm, exists tl:list trm,
-      Delta.rule (length tl) t1 t2 /\ list_forall term tl /\
-      const_app c (List.map clos2trm cls) = trm_inst t1 tl.
-
+  exists t1:trm, exists t2:trm, exists tl:list trm,
+    Delta.rule (length tl) t1 t2 /\ list_forall term tl /\
+    const_app c (List.map clos2trm cls) = trm_inst t1 tl /\
+    clos2trm (delta_red c cls) = trm_inst t2 tl.
 
 Module Mk3(SH:SndHypIntf).
 
 Module Sound3 := Sound2.Mk3(SH).
 Import Sound3.
+
+Lemma clos_ok_value : forall cl,
+  clos_ok cl -> value (clos2trm cl).
+Proof.
+  unfold value.
+  induction 1; simpl.
+    exists 0. unfold trm_inst. simpl. constructor.
+    Search term.
+
+Theorem eval_sound : forall K t T h,
+  K ; empty |(true,GcAny)|= t ~: T ->
+  K ; empty |(true,GcAny)|= res2trm (eval empty h nil nil t nil) ~: T.
 
 End Mk3.
 End Mk2.

@@ -632,6 +632,10 @@ Qed.
 
 (* ML_SP_Rename *)
 
+Lemma app_eq : forall (A:Set) (l1 l2 l1' l2':list A),
+  l1 = l1' -> l2 = l2' -> l1 ++ l2 = l1' ++ l2'.
+Proof. congruence. Qed.
+
 Lemma in_list_forall : forall (A:Set) (P:A->Prop) x l,
   list_forall P l -> In x l -> P x.
 Proof.
