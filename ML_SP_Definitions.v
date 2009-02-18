@@ -240,7 +240,7 @@ Definition trm_def := trm_bvar 0.
 
 Fixpoint trm_inst_rec (k : nat) (tl : list trm) (t : trm) {struct t} : trm :=
   match t with
-  | trm_bvar i    => if le_lt_dec k i then nth (i-k) tl trm_def else trm_bvar i
+  | trm_bvar i    => if le_lt_dec k i then nth (i-k) tl t else trm_bvar i
   | trm_fvar x    => trm_fvar x 
   | trm_abs t1    => trm_abs (trm_inst_rec (S k) tl t1) 
   | trm_let t1 t2 => trm_let (trm_inst_rec k tl t1) (trm_inst_rec (S k) tl t2) 

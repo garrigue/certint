@@ -103,6 +103,7 @@ Lemma term_trm_inst_closed : forall t tl,
 Proof.
   unfold trm_inst; induction t; intros; inversions H; simpl; auto.
   rewrite <- minus_n_O.
+  generalize (trm_bvar n).
   clear H; gen tl; induction n; intros; destruct tl; try elim (lt_n_O _ H3).
     simpl. inversion* H0.
   simpl.
@@ -598,9 +599,10 @@ Module SndHyp.
     intros.
     simpl.
     rewrite <- minus_n_O.
-    destruct* x.
     destruct (seq_in _ _ _ H).
-    elim (le_Sn_O _ H0).
+    destruct x.
+      elim (le_Sn_O _ H0).
+    apply nth_indep. omega.
   Qed.
 
   Lemma typing_tag_inv : forall K l tl x,

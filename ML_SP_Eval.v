@@ -29,7 +29,7 @@ Definition term_n n t :=
 Inductive clos_ok : clos -> Prop :=
   | clos_ok_abs : forall t cls,
       list_forall clos_ok cls ->
-      term_n (length cls) t ->
+      term_n (S (length cls)) t ->
       clos_ok (clos_abs t cls)
   | clos_ok_const : forall c cls,
       list_forall clos_ok cls ->
@@ -196,6 +196,30 @@ Proof.
   unfold value.
   induction 1; simpl.
     exists 0. unfold trm_inst. simpl. constructor.
+    apply (@term_abs {}). intros.
+Lemma trm_inst_rec_more : forall tl t1 t n,
+  term_n (S n) t ->
+  trm_open_rec n t1 (trm_inst_rec (S n) tl t) = trm_inst_rec n (t1 :: tl) t.
+Proof.
+  induction t; intros.
+  unfold trm_inst_rec.
+  destruct (le_lt_dec (S n0) n).
+      destruct (le_lt_dec n0 n).
+      destruct n. elimtype False; omega.
+      replace (S n - S n0) with (n-n0) by omega.
+      rewrite <- minus_Sn_m.
+      simpl.
+      unfold term_n in H; simpl in H.
+      assert (n0 = n - (n-n0)) by omega.
+      pattern n0 at 1; rewrite H.
+      clear; induction (n-n0).
+        simpl.
+      simpl.
+      assert (n0 <= n) by omega.
+
+
+  destruct n.
+    apply (H0 (List.map clos2trm cls)).
     Search term.
 
 Theorem eval_sound : forall K t T h,
