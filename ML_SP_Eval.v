@@ -23,24 +23,148 @@ Inductive clos : Set :=
   | clos_abs : trm -> list clos -> clos
   | clos_const : Const.const -> list clos -> clos.
 
-Definition term_n n t :=
-  forall ts, list_for_n term n ts -> term (trm_inst t ts).
+Inductive closed_n : nat -> trm -> Prop :=
+  | cln_fvar : forall n x, closed_n n (trm_fvar x)
+  | cln_bvar : forall n m, m < n -> closed_n n (trm_bvar m)
+  | cln_abs  : forall n t, closed_n (S n) t -> closed_n n (trm_abs t)
+  | cln_let  : forall n t1 t2,
+      closed_n n t1 -> closed_n (S n) t2 -> closed_n n (trm_let t1 t2)
+  | cln_app  : forall n t1 t2,
+      closed_n n t1 -> closed_n n t2 -> closed_n n (trm_app t1 t2)
+  | cln_cst  : forall n c, closed_n n (trm_cst c).
+
+Lemma trm_inst_rec_more : forall tl t1 t n,
+  closed_n (S n + List.length tl) t ->
+  list_forall term tl ->
+  {n~>t1}trm_inst_rec (S n) tl t = trm_inst_rec n (t1 :: tl) t.
+Proof.
+  intros.
+  remember (S n + length tl) as z.
+  gen n; induction H; intros; subst; auto.
+    unfold trm_inst_rec.
+    destruct (le_lt_dec (S n0) m).
+      destruct (le_lt_dec n0 m); try solve [elimtype False; omega].
+      remember (m - S n0) as z.
+      replace (m - n0) with (S z) by omega.
+      assert (z < length tl) by omega.
+      simpl.
+      clear -H0 H1; gen z; induction H0; simpl; intros.
+        elimtype False; omega.
+      destruct z. rewrite* <- Infra.trm_open_rec.
+      assert (z < length L) by omega.
+      auto*.
+    destruct (le_lt_dec n0 m).
+      assert (n0 = m) by omega. subst.
+      replace (m-m) with 0 by omega. simpl.
+      destruct* (m === m).
+    simpl. destruct* (n0 === m). subst; elimtype False; omega.
+  simpl. rewrite* (IHclosed_n (S n0)).
+  simpl. rewrite* (IHclosed_n1 n0). rewrite* (IHclosed_n2 (S n0)).
+  simpl. rewrite* (IHclosed_n1 n0). rewrite* (IHclosed_n2 n0).
+Qed.
+
+Lemma term_trm_inst_closed : forall t tl,
+  closed_n (length tl) t -> list_forall term tl -> term (trm_inst t tl).
+Proof.
+  unfold trm_inst; induction t; intros; inversions H; simpl; auto.
+  rewrite <- minus_n_O.
+  generalize (trm_bvar n).
+  clear H; gen tl; induction n; intros; destruct tl; try elim (lt_n_O _ H3).
+    simpl. inversion* H0.
+  simpl.
+  apply IHn. inversion* H0.
+  apply* lt_S_n.
+  apply (@term_abs {}); intros.
+  unfold trm_open. rewrite* trm_inst_rec_more.
+  apply* (@term_let {}); intros.
+  unfold trm_open. rewrite* trm_inst_rec_more.
+Qed.
 
 Inductive clos_ok : clos -> Prop :=
   | clos_ok_abs : forall t cls,
       list_forall clos_ok cls ->
-      term_n (S (length cls)) t ->
+      closed_n (S (length cls)) t ->
       clos_ok (clos_abs t cls)
   | clos_ok_const : forall c cls,
       list_forall clos_ok cls ->
       List.length cls <= Const.arity c ->
       clos_ok (clos_const c cls).
+Check clos_ok_ind.
+Reset clos_ok_ind.
+
+Fixpoint clos_depth (c:clos) : nat :=
+  match c with
+  | clos_abs _ cls => S (fold_right (fun c => Max.max (clos_depth c)) 0 cls)
+  | clos_const _ cls => S (fold_right (fun c => Max.max (clos_depth c)) 0 cls)
+  end.
+
+Lemma clos_ok_ind : forall P : clos -> Prop,
+       (forall (t : trm) (cls : list clos),
+        list_forall clos_ok cls ->
+        closed_n (S (length cls)) t ->
+        list_forall P cls -> P (clos_abs t cls)) ->
+       (forall (c : Const.const) (cls : list clos),
+        list_forall clos_ok cls ->
+        length cls <= Const.arity c ->
+        list_forall P cls -> P (clos_const c cls)) ->
+       forall c : clos, clos_ok c -> P c.
+Proof.
+  intros.
+  assert (clos_depth c < S (clos_depth c)) by auto with arith.
+  set (n:=S(clos_depth c)) in *. clearbody n.
+  generalize dependent c.
+  induction n; intros.
+    elim (lt_n_O _ H2).
+  inversions H1.
+    apply (H _ _ H3 H4).
+    simpl in H2.
+    clear -IHn H2 H3.
+    induction H3. auto. simpl in H2.
+    constructor. apply IHlist_forall.
+      puts (Max.le_max_r (clos_depth x)
+              (fold_right (fun c : clos => Max.max (clos_depth c)) 0 L)).
+      omega.
+    apply* IHn.
+    puts (Max.le_max_l (clos_depth x)
+            (fold_right (fun c : clos => Max.max (clos_depth c)) 0 L)).
+    omega.
+  apply (H0 _ _ H3 H4).
+  simpl in H2.
+  clear -IHn H2 H3.
+  induction H3. auto. simpl in H2.
+  constructor. apply IHlist_forall.
+  puts (Max.le_max_r (clos_depth x)
+          (fold_right (fun c : clos => Max.max (clos_depth c)) 0 L)).
+  omega.
+  apply* IHn.
+  puts (Max.le_max_l (clos_depth x)
+          (fold_right (fun c : clos => Max.max (clos_depth c)) 0 L)).
+  omega.
+Qed.
 
 Fixpoint clos2trm (c:clos) : trm :=
   match c with
   | clos_abs t l     => trm_inst (trm_abs t) (List.map clos2trm l)
   | clos_const cst l => const_app cst (List.map clos2trm l)
   end.
+
+Lemma clos_ok_term : forall cl,
+  clos_ok cl -> term (clos2trm cl).
+Proof.
+  induction 1; simpl.
+    apply term_trm_inst_closed.
+    rewrite map_length.
+    constructor; auto.
+    clear -H H1; induction H; simpl*.
+    inversions H1.
+    constructor; auto*.
+  unfold const_app.
+  assert (term (trm_cst c)) by auto.
+  set (t:=trm_cst c) in *. clearbody t.
+  clear H0; gen t; induction H; intros; simpl*.
+  inversions H1; clear H1.
+  auto*.
+Qed.
 
 Section Cut.
 Variable A:Set.
@@ -197,30 +321,10 @@ Proof.
   induction 1; simpl.
     exists 0. unfold trm_inst. simpl. constructor.
     apply (@term_abs {}). intros.
-Lemma trm_inst_rec_more : forall tl t1 t n,
-  term_n (S n) t ->
-  trm_open_rec n t1 (trm_inst_rec (S n) tl t) = trm_inst_rec n (t1 :: tl) t.
-Proof.
-  induction t; intros.
-  unfold trm_inst_rec.
-  destruct (le_lt_dec (S n0) n).
-      destruct (le_lt_dec n0 n).
-      destruct n. elimtype False; omega.
-      replace (S n - S n0) with (n-n0) by omega.
-      rewrite <- minus_Sn_m.
-      simpl.
-      unfold term_n in H; simpl in H.
-      assert (n0 = n - (n-n0)) by omega.
-      pattern n0 at 1; rewrite H.
-      clear; induction (n-n0).
-        simpl.
-      simpl.
-      assert (n0 <= n) by omega.
-
-
-  destruct n.
-    apply (H0 (List.map clos2trm cls)).
-    Search term.
+    unfold trm_open. rewrite trm_inst_rec_more.
+    fold (trm_inst t (trm_fvar x :: List.map clos2trm cls)).
+    apply term_trm_inst_closed. simpl. rewrite* map_length.
+    
 
 Theorem eval_sound : forall K t T h,
   K ; empty |(true,GcAny)|= t ~: T ->
