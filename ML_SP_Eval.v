@@ -195,7 +195,11 @@ Fixpoint stack2trm t0 (l : list frame) {struct l} : trm :=
     let t1 :=
       match t0 with
       | trm_bvar _ => t
-      | _ => trm_app t t0
+      | _ =>
+        match t with
+        | trm_abs t1 => trm_let t0 t1
+        | _ => trm_app t t0
+        end
       end
     in
     let t2 :=
@@ -318,17 +322,62 @@ Lemma clos_ok_value : forall cl,
   clos_ok cl -> value (clos2trm cl).
 Proof.
   unfold value.
-  induction 1; simpl.
+  induction 1; simpl;
+    assert (list_forall term (List.map clos2trm cls))
+      by (clear -H; induction H; simpl; auto using clos_ok_term).
     exists 0. unfold trm_inst. simpl. constructor.
     apply (@term_abs {}). intros.
-    unfold trm_open. rewrite trm_inst_rec_more.
+    unfold trm_open. rewrite* trm_inst_rec_more.
     fold (trm_inst t (trm_fvar x :: List.map clos2trm cls)).
-    apply term_trm_inst_closed. simpl. rewrite* map_length.
-    
+    apply* term_trm_inst_closed. simpl. rewrite* map_length.
+    rewrite map_length; simpl*.
+  exists (Const.arity c - length cls). unfold const_app.
+  set (t := trm_cst c).
+  assert (valu (Const.arity c) t) by (unfold t; auto).
+  replace (Const.arity c) with (Const.arity c - length cls + length cls)
+    in H3 by omega.
+  set (n := Const.arity c - length cls) in *.
+  gen t n; clear H H0; induction H1; simpl in *; intros.
+    rewrite <- plus_n_O in H3. auto.
+  inversions H2; clear H2.
+  apply* IHlist_forall.
+  destruct H.
+  apply* value_app.
+  replace (S (n + length L)) with (n + S (length L)) by omega; auto.
+Qed.
 
-Theorem eval_sound : forall K t T h,
-  K ; empty |(true,GcAny)|= t ~: T ->
-  K ; empty |(true,GcAny)|= res2trm (eval empty h nil nil t nil) ~: T.
+Lemma trm_inst_nil : forall t, trm_inst t nil = t.
+Proof.
+  unfold trm_inst; intros.
+  generalize 0; induction t; intros; simpl*.
+     destruct* (le_lt_dec n0 n).
+     destruct* (n-n0).
+    rewrite* IHt.
+   rewrite IHt1; rewrite* IHt2.
+  rewrite IHt1; rewrite* IHt2.
+Qed.
+
+Theorem eval_sound : forall K T h fl t,
+  K ; empty |(true,GcAny)|= stack2trm t fl ~: T ->
+  K ; empty |(true,GcAny)|= res2trm (eval empty h nil nil t fl) ~: T.
+Proof.
+  induction h; intros.
+    simpl. rewrite* trm_inst_nil.
+  induction fl; simpl in *.
+  (* fl = nil *)
+  inversions H.
+  (* Var *)
+  elim (binds_empty H2).
+  (* Abs *)
+  simpl. rewrite* trm_inst_nil.
+  (* Let *)
+  apply IHh.
+  simpl.
+  destruct t1; try rewrite* trm_inst_nil.
+  pick_freshes (sch_arity M) Xs.
+  forward~ (H0 Xs) as Typ1.
+  inversions Typ1.
+  elim (binds_empty H5).
 
 End Mk3.
 End Mk2.
