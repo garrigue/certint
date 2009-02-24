@@ -357,9 +357,24 @@ Proof.
   rewrite IHt1; rewrite* IHt2.
 Qed.
 
+Lemma typing_app_abs_let : forall K E t1 t2 T,
+  K; E |(false,GcAny)|= trm_app (trm_abs t2) t1 ~: T ->
+  K; E |(false,GcAny)|= trm_let t1 t2 ~: T.
+Proof.
+  intros.
+  inversions H; try discriminate; simpl in *.
+  inversions H4; try discriminate; simpl in *.
+  apply (@typing_let (false,GcAny) (Sch S nil) {} L).
+    simpl; intros.
+    destruct Xs; try elim H0.
+    unfold kinds_open_vars, kinds_open, sch_open_vars; simpl.
+    rewrite* typ_open_vars_nil.
+  apply H8.
+Qed.
+
 Theorem eval_sound : forall K T h fl t,
-  K ; empty |(true,GcAny)|= stack2trm t fl ~: T ->
-  K ; empty |(true,GcAny)|= res2trm (eval empty h nil nil t fl) ~: T.
+  K ; empty |(false,GcAny)|= stack2trm t fl ~: T ->
+  K ; empty |(false,GcAny)|= res2trm (eval empty h nil nil t fl) ~: T.
 Proof.
   induction h; intros.
     simpl. rewrite* trm_inst_nil.
@@ -374,10 +389,19 @@ Proof.
   apply IHh.
   simpl.
   destruct t1; try rewrite* trm_inst_nil.
-  pick_freshes (sch_arity M) Xs.
-  forward~ (H0 Xs) as Typ1.
-  inversions Typ1.
-  elim (binds_empty H5).
+  puts (proj43 (typing_regular H)).
+  inversion H2. inversion H5.
+  (* App *)
+  apply IHh.
+  simpl.
+  Hint Resolve typing_app_abs_let.
+  inversions H1; inversions H0; try discriminate; try rewrite* trm_inst_nil.
+  (* Cst *)
+  auto*.
+  (* Gc *)
+  discriminate.
+  (* a :: fl *)
+Qed.
 
 End Mk3.
 End Mk2.
