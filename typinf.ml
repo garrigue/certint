@@ -1073,10 +1073,10 @@ module MkDefs =
   
   (** val trm_inst_rec : nat -> trm list -> trm -> trm **)
   
-  let rec trm_inst_rec k tl = function
+  let rec trm_inst_rec k tl t0 = match t0 with
     | Coq_trm_bvar i ->
         (match le_lt_dec k i with
-           | Left -> nth (minus i k) tl trm_def
+           | Left -> nth (minus i k) tl t0
            | Right -> Coq_trm_bvar i)
     | Coq_trm_fvar x -> Coq_trm_fvar x
     | Coq_trm_abs t1 -> Coq_trm_abs (trm_inst_rec (S k) tl t1)
