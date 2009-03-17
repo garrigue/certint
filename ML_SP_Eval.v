@@ -9,6 +9,31 @@ Require Import Arith List Metatheory.
 Require Import ML_SP_Definitions ML_SP_Infrastructure.
 Require Import ML_SP_Soundness.
 
+Section ListForall.
+Variables (A:Set) (P Q:A->Prop).
+
+Definition map_prop (f : forall c, P c) l : list_forall P l.
+induction l; auto.
+Defined.
+
+Lemma list_forall_out : forall l,
+  list_forall P l -> forall x, In x l -> P x.
+Proof.
+  induction 1; simpl; intros. elim H.
+  destruct* H1. subst*.
+Qed.
+
+Lemma list_forall_apply : forall l,
+  list_forall (fun x => P x -> Q x) l ->
+  list_forall P l -> list_forall Q l.
+Proof.
+  intros; induction* H.
+  inversion* H0.
+Qed.
+End ListForall.
+
+Hint Resolve list_forall_apply.
+
 Module MkEval(Cstr:CstrIntf)(Const:CstIntf).
 
 Module Sound := MkSound(Cstr)(Const).
@@ -22,6 +47,20 @@ Module Mk2(Delta:DeltaIntf).
 Inductive clos : Set :=
   | clos_abs : trm -> list clos -> clos
   | clos_const : Const.const -> list clos -> clos.
+
+Check clos_ind.
+
+Section ClosInd.
+Variable P : clos -> Prop.
+Hypothesis Habs : forall t l, list_forall P l -> P (clos_abs t l).
+Hypothesis Hconst : forall c l, list_forall P l -> P (clos_const c l).
+
+Fixpoint clos_ind' (c : clos) : P c :=
+  match c return P c with
+  | clos_abs t l => Habs t (map_prop P clos_ind' l)
+  | clos_const c l => Hconst c (map_prop P clos_ind' l)
+  end.
+End ClosInd.
 
 Inductive closed_n : nat -> trm -> Prop :=
   | cln_fvar : forall n x, closed_n n (trm_fvar x)
@@ -92,55 +131,23 @@ Inductive clos_ok : clos -> Prop :=
 Check clos_ok_ind.
 Reset clos_ok_ind.
 
-Fixpoint clos_depth (c:clos) : nat :=
-  match c with
-  | clos_abs _ cls => S (fold_right (fun c => Max.max (clos_depth c)) 0 cls)
-  | clos_const _ cls => S (fold_right (fun c => Max.max (clos_depth c)) 0 cls)
-  end.
+Section ClosOkInd.
+Variable  P : clos -> Prop.
+Hypothesis Habs : forall t cls,
+  list_forall clos_ok cls ->
+  closed_n (S (length cls)) t ->
+  list_forall P cls -> P (clos_abs t cls).
+Hypothesis Hconst : forall c cls,
+  list_forall clos_ok cls ->
+  length cls <= Const.arity c ->
+  list_forall P cls -> P (clos_const c cls).
 
-Lemma clos_ok_ind : forall P : clos -> Prop,
-       (forall (t : trm) (cls : list clos),
-        list_forall clos_ok cls ->
-        closed_n (S (length cls)) t ->
-        list_forall P cls -> P (clos_abs t cls)) ->
-       (forall (c : Const.const) (cls : list clos),
-        list_forall clos_ok cls ->
-        length cls <= Const.arity c ->
-        list_forall P cls -> P (clos_const c cls)) ->
-       forall c : clos, clos_ok c -> P c.
+Lemma clos_ok_ind : forall c, clos_ok c -> P c.
 Proof.
-  intros.
-  assert (clos_depth c < S (clos_depth c)) by auto with arith.
-  set (n:=S(clos_depth c)) in *. clearbody n.
-  generalize dependent c.
-  induction n; intros.
-    elim (lt_n_O _ H2).
-  inversions H1.
-    apply (H _ _ H3 H4).
-    simpl in H2.
-    clear -IHn H2 H3.
-    induction H3. auto. simpl in H2.
-    constructor. apply IHlist_forall.
-      puts (Max.le_max_r (clos_depth x)
-              (fold_right (fun c : clos => Max.max (clos_depth c)) 0 L)).
-      omega.
-    apply* IHn.
-    puts (Max.le_max_l (clos_depth x)
-            (fold_right (fun c : clos => Max.max (clos_depth c)) 0 L)).
-    omega.
-  apply (H0 _ _ H3 H4).
-  simpl in H2.
-  clear -IHn H2 H3.
-  induction H3. auto. simpl in H2.
-  constructor. apply IHlist_forall.
-  puts (Max.le_max_r (clos_depth x)
-          (fold_right (fun c : clos => Max.max (clos_depth c)) 0 L)).
-  omega.
-  apply* IHn.
-  puts (Max.le_max_l (clos_depth x)
-          (fold_right (fun c : clos => Max.max (clos_depth c)) 0 L)).
-  omega.
+  Hint Resolve Habs Hconst.
+  intros c H; induction c using clos_ind'; inversion* H.
 Qed.
+End ClosOkInd.
 
 Fixpoint clos2trm (c:clos) : trm :=
   match c with
@@ -153,17 +160,14 @@ Lemma clos_ok_term : forall cl,
 Proof.
   induction 1; simpl.
     apply term_trm_inst_closed.
-    rewrite map_length.
-    constructor; auto.
-    clear -H H1; induction H; simpl*.
-    inversions H1.
-    constructor; auto*.
+      rewrite map_length.
+      constructor; auto.
+    apply* list_forall_map. intros; auto.
   unfold const_app.
-  assert (term (trm_cst c)) by auto.
-  set (t:=trm_cst c) in *. clearbody t.
-  clear H0; gen t; induction H; intros; simpl*.
-  inversions H1; clear H1.
-  auto*.
+  cut (term (trm_cst c)); auto.
+  generalize (trm_cst c).
+  clear -H H1; induction H; intros; simpl*.
+  inversion* H1.
 Qed.
 
 Section Cut.
@@ -188,19 +192,21 @@ Variable fenv : env clos.
 Record frame : Set := Frame
   { frm_benv : list clos; frm_app : list clos; frm_trm : trm }.
 
+Definition is_bvar t :=
+  match t with trm_bvar _ => true | _ => false end.
+
+Definition app_trm t1 t2 :=
+  match t1 with
+  | trm_abs t => trm_let t2 t
+  | _ => trm_app t1 t2
+  end.
+
 Fixpoint stack2trm t0 (l : list frame) {struct l} : trm :=
   match l with
   | nil => t0
   | Frame benv args t :: rem =>
     let t1 :=
-      match t0 with
-      | trm_bvar _ => t
-      | _ =>
-        match t with
-        | trm_abs t1 => trm_let t0 t1
-        | _ => trm_app t t0
-        end
-      end
+      if is_bvar t0 then t else app_trm t t0
     in
     let t2 :=
       trm_inst
@@ -324,7 +330,7 @@ Proof.
   unfold value.
   induction 1; simpl;
     assert (list_forall term (List.map clos2trm cls))
-      by (clear -H; induction H; simpl; auto using clos_ok_term).
+      by (clear -H; apply* list_forall_map; auto using clos_ok_term).
     exists 0. unfold trm_inst. simpl. constructor.
     apply (@term_abs {}). intros.
     unfold trm_open. rewrite* trm_inst_rec_more.
@@ -372,35 +378,103 @@ Proof.
   apply H8.
 Qed.
 
-Theorem eval_sound : forall K T h fl t,
-  K ; empty |(false,GcAny)|= stack2trm t fl ~: T ->
-  K ; empty |(false,GcAny)|= res2trm (eval empty h nil nil t fl) ~: T.
+Definition gc := (false, GcAny).
+
+Section Eval.
+
+Variables (K':kenv) (T':typ) (E':Defs.env) (fenv:env clos).
+
+Hypothesis fenv_ok : forall x M,
+  binds x M E' ->
+  exists cl, binds x cl fenv /\
+    has_scheme_vars gc {} empty empty (clos2trm cl) M.
+
+Lemma concat_empty : forall (A:Set) (K:env A), empty & K = K.
+Proof. intros; symmetry; apply (app_nil_end K). Qed.
+
+Lemma has_scheme_from_vars' : forall t M,
+  has_scheme_vars gc {} empty empty t M ->
+  kenv_ok K' -> env_ok E' ->
+  has_scheme gc K' E' t M.
+Proof.
+  clear fenv_ok.
+  intros.
+  apply (@has_scheme_from_vars gc (dom K')).
+  intro; intros.
+  replace K' with (empty & K') by apply concat_empty.
+  apply typing_weaken_kinds.
+    replace E' with (empty & E' & empty) by (simpl; apply concat_empty).
+    apply typing_weaken.
+      simpl.
+      apply* H.
+    simpl. rewrite* concat_empty.
+  assert (fresh {} (sch_arity M) Xs) by auto.
+  puts (H _ H3).
+  rewrite concat_empty.
+  rewrite concat_empty in H4.
+  apply* kenv_ok_concat.
+  rewrite* dom_kinds_open_vars.
+  apply* fresh_disjoint.
+Qed.
+
+Theorem eval_sound : forall h fl xs benv K E t T,
+  fresh (dom E) (length benv) xs ->
+  (forall x cl, binds x cl (combine xs benv) ->
+    exists M, binds x M E /\ K;E' |gc|= clos2trm cl 
+  K ; E' & E |gc|= trm_inst t xs ~: T ->
+  (K ; E' & E |gc|= trm_inst t xs ~: T -> K'; E' |gc|= stack2trm t fl ~: T') ->
+  K' ; E' |gc|= res2trm (eval fenv h benv nil t fl) ~: T'.
 Proof.
   induction h; intros.
     simpl. rewrite* trm_inst_nil.
-  induction fl; simpl in *.
+  induction fl.
   (* fl = nil *)
-  inversions H.
+  poses Typ (H0 H).
+  simpl in *.
+  clear H H0; inversions Typ.
   (* Var *)
-  elim (binds_empty H2).
+  simpl.
+  destruct (fenv_ok H1) as [cl [B HS]].
+  rewrite B.
+  destruct H2.
+  apply* (has_scheme_from_vars' HS).
   (* Abs *)
   simpl. rewrite* trm_inst_nil.
   (* Let *)
-  apply IHh.
+  destruct (var_freshes L1 (sch_arity M)) as [Xs Fr].
+  poses Typ1 (H _ Fr).
+  rewrite <- (trm_inst_nil t1) in Typ1.
+  refine (IHh _ _ _ _ _ _ Typ1 _); intros.
   simpl.
-  destruct t1; try rewrite* trm_inst_nil.
-  puts (proj43 (typing_regular H)).
-  inversion H2. inversion H5.
+  rewrite trm_inst_nil in Typ1.
+  assert (is_bvar t1 = false).
+    assert (trm1: term t1) by auto;
+    inversions* trm1.
+  rewrite H2. rewrite* trm_inst_nil.
   (* App *)
-  apply IHh.
+  rewrite <- (trm_inst_nil t2) in H0.
+  refine (IHh _ _ _ _ _ _ H0 _); intros.
   simpl.
+  rewrite trm_inst_nil in H0.
+  assert (is_bvar t2 = false).
+    assert (trm2: term t2) by auto;
+    inversions* trm2.
   Hint Resolve typing_app_abs_let.
-  inversions H1; inversions H0; try discriminate; try rewrite* trm_inst_nil.
+  rewrite H2.
+  inversions H; simpl; try discriminate; try rewrite* trm_inst_nil.
   (* Cst *)
-  auto*.
+  apply Typ.
   (* Gc *)
   discriminate.
   (* a :: fl *)
+  simpl.
+  destruct a as [benv' app' t'].
+  destruct t.
+  (* Var *)
+  simpl.
+  destruct (fenv_ok H4) as [cl [B HS]].
+  apply IHfl.
+  
 Qed.
 
 End Mk3.
