@@ -405,6 +405,7 @@ Fixpoint typ_subst (S : subs) (T : typ) {struct T} : typ :=
     | Some T' => T'
     end
   | typ_arrow T1 T2 => typ_arrow (typ_subst S T1) (typ_subst S T2)
+  | typ_const c Ts  => typ_const c (List.map (typ_subst S) Ts)
   end.
 
 (** Substitution for names for schemes. *)
@@ -622,9 +623,14 @@ Hint Resolve trm_open_term.
 (** Open on a type is the identity. *)
 
 Lemma typ_open_type : forall T Us,
-  type T -> T = typ_open T Us.
+  type T -> T = typ_open Us T.
 Proof.
-  introv W. induction T; simpls; inversions W; f_equal*.
+  introv W. induction W; simpls; f_equal*.
+  destruct H as [_ Ht].
+  induction* H0.
+  simpl. rewrite <- H; clear H.
+  inversions Ht.
+  rewrite* <- IHlist_forall.
 Qed.
 
 (** Substitution for a fresh name is identity. *)
@@ -647,6 +653,8 @@ Proof.
     rewrite* get_notin_dom.
     apply IHT1. disjoint_solve.
   apply IHT2. disjoint_solve.
+  induction* H0; simpl in *.
+  rewrite* H1; [rewrite* IHlist_forall|]; disjoint_solve.
 Qed.
 
 Lemma ckind_pi : forall k k',
@@ -707,14 +715,17 @@ Qed.
 (** Substitution distributes on the open operation. *)
 
 Lemma typ_subst_open : forall S T1 T2, env_prop type S -> 
-  typ_subst S (typ_open T1 T2) = 
-   typ_open (typ_subst S T1) (List.map (typ_subst S) T2).
+  typ_subst S (typ_open T2 T1) = 
+   typ_open (List.map (typ_subst S) T2) (typ_subst S T1).
 Proof.
-  intros. induction T1; intros; simpl; f_equal*.
+  induction T1; intros; simpl; f_equal*.
   apply list_map_nth. apply* typ_subst_fresh.
     intro; auto.
-  case_eq (get v S); intros. apply* typ_open_type. apply* (H v).
+  case_eq (get x S); intros. apply* typ_open_type. apply* (H x).
   auto.
+  induction H; simpl*.
+  rewrite IHlist_forall.
+  rewrite* H1.
 Qed.
 
 (** Substitution and open_var for distinct names commute. *)
@@ -722,8 +733,8 @@ Qed.
 Lemma typ_subst_open_vars : forall S Ys T, 
   fresh (dom S) (length Ys) Ys -> 
   env_prop type S ->
-     typ_open_vars (typ_subst S T) Ys
-   = typ_subst S (typ_open_vars T Ys).
+     typ_open_vars Ys (typ_subst S T)
+   = typ_subst S (typ_open_vars Ys T).
 Proof.
   introv Fr Tu. unfold typ_open_vars.
   rewrite* typ_subst_open. f_equal.
@@ -736,15 +747,15 @@ Qed.
 Lemma kind_subst_open_vars : forall S k Xs,
   fresh (dom S) (length Xs) Xs ->
   env_prop type S ->
-  kind_subst S (kind_open k (typ_fvars Xs)) =
-  kind_open (kind_subst S k) (typ_fvars Xs).
+  kind_subst S (kind_open (typ_fvars Xs) k) =
+  kind_open (typ_fvars Xs) (kind_subst S k).
 Proof.
   intros.
   destruct* k as [[kc kv kr kh]|].
   simpl.
   apply* kind_pi; simpl.
   clear kh; induction* kr.
-  simpl. fold (typ_open_vars (snd a) Xs).
+  simpl. fold (typ_open_vars Xs (snd a)).
   rewrite* <- typ_subst_open_vars.
   rewrite* IHkr.
 Qed.
