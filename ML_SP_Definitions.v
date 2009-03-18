@@ -303,29 +303,41 @@ Definition kinds_open_vars Ks Xs :=
 
 Definition senv := env sch.
 
-Definition senv_ok (E:senv) := ok E /\ env_prop scheme E.
+Definition env_ok (E:senv) := ok E /\ env_prop scheme E.
 
 (** Computing free variables of a type. *)
 
-Fixpoint typ_fv (T : typ) {struct T} : vars :=
+Fixpoint typ_fv (T : typ) : vars :=
   match T with
   | typ_bvar i      => {}
   | typ_fvar x      => {{x}}
   | typ_arrow T1 T2 => (typ_fv T1) \u (typ_fv T2)
   end.
 
+Fixpoint type_fv (T : type) : vars :=
+  match T with
+  | type_var x       => {{x}}
+  | type_arrow T1 T2 => (type_fv T1) \u (type_fv T2)
+  end.
+
+Section Fv.
+Variable A : Set.
+Variable fv : A -> vars.
+
 (** Computing free variables of a list of terms. *)
 
-Definition typ_fv_list :=
-  List.fold_right (fun t acc => typ_fv t \u acc) {}.
+Definition fv_list :=
+  List.fold_right (fun t acc => fv t \u acc) {}.
 
 (** Computing free variables of a kind. *)
 
 Definition kind_fv k :=
-  typ_fv_list (kind_types k).
+  fv_list (kind_types k).
+End Fv.
 
-Definition kind_fv_list :=
-  List.fold_right (fun t acc => kind_fv t \u acc) {}.
+Definition typ_fv_list := fv_list typ_fv.
+Definition type_fv_list := fv_list type_fv.
+Definition kind_fv_list := fv_list (kind_fv typ_fv).
 
 (** Computing free variables of a type scheme. *)
 
@@ -336,6 +348,16 @@ Definition sch_fv M :=
 
 Definition env_fv := 
   fv_in sch_fv.
+
+(** Convert a type to typ *)
+
+Fixpoint typ_of_type (T : type) : typ :=
+  match T with
+  | type_var x => typ_fvar x
+  | type_arrow T1 T2 => typ_arrow (typ_of_type T1) (typ_of_type T2)
+  end.
+
+Coercion typ_of_type : type >-> typ.
 
 (** Another functor for delta-rules *)
 
@@ -370,18 +392,17 @@ Fixpoint gc_lower (gc:gc_info) : gc_info :=
   | _ => gc
   end.
 
-Inductive typing(gc:gc_info) : kenv -> env -> trm -> typ -> Prop :=
+Inductive typing(gc:gc_info) : kenv -> senv -> trm -> type -> Prop :=
   | typing_var : forall K E x M Us,
-      kenv_ok K ->
+      ok K ->
       env_ok E -> 
       binds x M E -> 
       proper_instance K (sch_kinds M) Us ->
       K ; E | gc |= (trm_fvar x) ~: (M ^^ Us)
-  | typing_abs : forall L K E U T t1, 
-      type U ->
+  | typing_abs : forall L K E (U T : type) t1, 
       (forall x, x \notin L -> 
         K ; (E & x ~ Sch U nil) | gc_raise gc |= (t1 ^ x) ~: T) -> 
-      K ; E | gc |= (trm_abs t1) ~: (typ_arrow U T)
+      K ; E | gc |= (trm_abs t1) ~: (type_arrow U T)
   | typing_let : forall M L1 L2 K E T2 t1 t2,
       (forall Xs, fresh L1 (sch_arity M) Xs ->
          (K & kinds_open_vars (sch_kinds M) Xs); E | gc_raise gc |=
@@ -390,11 +411,11 @@ Inductive typing(gc:gc_info) : kenv -> env -> trm -> typ -> Prop :=
          K ; (E & x ~ M) | gc_raise gc |= (t2 ^ x) ~: T2) -> 
       K ; E | gc |= (trm_let t1 t2) ~: T2
   | typing_app : forall K E S T t1 t2, 
-      K ; E | gc_lower gc |= t1 ~: (typ_arrow S T) ->
+      K ; E | gc_lower gc |= t1 ~: (type_arrow S T) ->
       K ; E | gc_lower gc |= t2 ~: S ->   
       K ; E | gc |= (trm_app t1 t2) ~: T
   | typing_cst : forall K E Us c,
-      kenv_ok K ->
+      ok K ->
       env_ok E ->
       proper_instance K (sch_kinds (Delta.type c)) Us ->
       K ; E | gc |= (trm_cst c) ~: (Delta.type c ^^ Us)
