@@ -40,139 +40,151 @@ Inductive typ : Set :=
   | typ_fvar  : var -> typ
   | typ_arrow : typ -> typ -> typ.
 
+Inductive type : Set :=
+  | type_var  : var -> type
+  | type_arrow : type -> type -> type.
+
 (** Types are inhabited, giving us a default value. *)
 
-Definition typ_def := typ_bvar 0.
+Definition type_def := type_var var_default.
 
 (** Constraint domain *)
 
-Definition coherent kc (kr:list(var*typ)) := forall x T U,
+Section Domain.
+Variable A : Set.
+
+Definition coherent kc (kr:list(var*A)) := forall x T U,
   Cstr.unique kc x -> In (x,T) kr -> In (x,U) kr -> T = U.
 
 Record ckind : Set := Kind {
   kind_cstr : Cstr.cstr;
   kind_valid : Cstr.valid kind_cstr;
-  kind_rel  : list (var*typ);
+  kind_rel  : list (var*A);
   kind_coherent : coherent kind_cstr kind_rel }.
 
 Definition kind := option ckind.
 
 Definition entails K K' :=
   Cstr.entails (kind_cstr K) (kind_cstr K') /\
-  forall T:var*typ, In T (kind_rel K') -> In T (kind_rel K).
+  forall T:var*A, In T (kind_rel K') -> In T (kind_rel K).
+
+Definition kind_types (K:kind) :=
+  match K with
+  | None => nil
+  | Some k => List.map (fun (x:var*A) => snd x) (kind_rel k)
+  end.
+
+Variable P : A -> Prop.
+
+Fixpoint For_all (l:list A) : Prop :=
+  match l with
+  | nil   => True
+  | a::l' => P a /\ For_all l'
+  end.
+
+Definition All_kind_types K :=
+  For_all (kind_types K).
+End Domain.
+
+Section KindMap.
+Variables A B : Set.
+Variable f : A -> B.
+
+Lemma in_map_snd_inv : forall (V:Set) (x:V) (T:B) kr,
+  In (x, T) (map (fun XT : V * A => (fst XT, f (snd XT))) kr) ->
+  exists T', T = f T' /\ In (x,T') kr.
+Proof.
+  intros.
+  destruct (proj1 (in_map_iff _ _ _) H) as [[x' T'] [Heq Hin]].
+  simpl in Heq; inversions* Heq.
+Qed.
+
+Lemma map_coherent : forall kc kr,
+  coherent kc kr ->
+  coherent kc (List.map (fun XT:var*A => (fst XT, f (snd XT))) kr).
+Proof.
+  intros. intro; intros.
+  puts (H x).
+  destruct (in_map_snd_inv _ _ _ H1) as [T' [Heq Hin]].
+  destruct (in_map_snd_inv _ _ _ H2) as [U' [Heq' Hin']].
+  subst. rewrite* (H3 T' U').
+Qed.
+
+Definition ckind_map_spec (k:ckind A):
+  {k' |  kind_cstr k = kind_cstr k' /\ 
+  kind_rel k' = List.map (fun XT:var*A => (fst XT, f (snd XT))) (kind_rel k)}.
+Proof.
+  intros.
+  destruct k as [kc kv kr kh].
+  exists* (Kind kv (map_coherent kh)).
+Defined.
+
+Definition ckind_map k := proj1_sig (ckind_map_spec k).
+
+Definition kind_map (K:kind A) : kind B :=
+  match K with
+  | None => None
+  | Some k => Some (ckind_map k)
+  end.
+End KindMap.
 
 (** Type schemes. *)
 
 Record sch : Set := Sch { 
   sch_type  : typ ;
-  sch_kinds : list kind }.
+  sch_kinds : list (kind typ) }.
 
 Notation "'sch_arity' M" :=
   (length (sch_kinds M)) (at level 20, no associativity).
 
 (** Opening body of type schemes. *)
 
-Fixpoint typ_open (T : typ) (Vs : list typ) {struct T} : typ :=
+Fixpoint typ_open (Vs : list type) (T : typ) {struct T} : type :=
   match T with
-  | typ_bvar i      => nth i Vs typ_def
-  | typ_fvar x      => typ_fvar x 
-  | typ_arrow T1 T2 => typ_arrow (typ_open T1 Vs) (typ_open T2 Vs)
+  | typ_bvar i      => nth i Vs type_def
+  | typ_fvar x      => type_var x 
+  | typ_arrow T1 T2 => type_arrow (typ_open Vs T1) (typ_open Vs T2)
   end.
 
 (** Opening body of type schemes with variables *)
 
-Definition typ_fvars := 
-  List.map typ_fvar.
+Definition type_vars := 
+  List.map type_var.
 
-Definition typ_open_vars T Xs := 
-  typ_open T (typ_fvars Xs).
+Definition typ_open_vars Xs := 
+  typ_open (type_vars Xs).
 
 (** Instanciation of a type scheme *)
 
-Definition sch_open M := 
-  typ_open (sch_type M).
+Definition sch_open Ts M := 
+  typ_open Ts (sch_type M).
 
-Definition sch_open_vars M := 
-  typ_open_vars (sch_type M).
+Definition sch_open_vars Xs := 
+  sch_open (type_vars Xs).
   
-Notation "M ^^ Vs" := (sch_open M Vs) 
+Notation "M ^^ Vs" := (sch_open Vs M) 
   (at level 67, only parsing) : typ_scope.
 Notation "M ^ Xs" := 
-  (sch_open_vars M Xs) (only parsing) : typ_scope.
+  (sch_open_vars Xs M) (only parsing) : typ_scope.
 
-Bind Scope typ_scope with typ.
+Bind Scope typ_scope with type.
 Open Scope typ_scope.
-
-(** Locally closed types *)
-
-Inductive type : typ -> Prop :=
-  | type_fvar : forall X, 
-      type (typ_fvar X)
-  | type_arrow : forall T1 T2,
-      type T1 -> 
-      type T2 -> 
-      type (typ_arrow T1 T2).
-
-(** List of n locally closed types *)
-
-Definition types := list_for_n type.
 
 (** Iterating and opening kinds *)
 
-Definition kind_types (K:kind) :=
-  match K with
-  | None => nil
-  | Some k => List.map (fun (x:var*typ) => snd x) (kind_rel k)
-  end.
-
-Fixpoint For_all(A:Set)(P:A->Prop)(l:list A) {struct l} : Prop :=
-  match l with
-  | nil   => True
-  | a::l' => P a /\ For_all P l'
-  end.
-
-Definition All_kind_types (P:typ->Prop) K :=
-  For_all P (kind_types K).
-
-Lemma map_coherent : forall f kc kr,
-  coherent kc kr ->
-  coherent kc (List.map (fun XT:var*typ => (fst XT, f (snd XT))) kr).
-Proof.
-  intros. intro; intros.
-  use (H x); simpl in *.
-  destruct (proj1 (in_map_iff _ _ _) H1) as [[x' T'] [Heq Hin]].
-  simpl in Heq; inversions Heq.
-  destruct (proj1 (in_map_iff _ _ _) H2) as [[x' U'] [Heq' Hin']].
-  simpl in Heq'; inversions Heq'.
-  rewrite* (H3 T' U').
-Qed.
-
-Definition ckind_map_spec (f:typ->typ) (k:ckind):
-  {k' |  kind_cstr k = kind_cstr k' /\ 
-  kind_rel k' = List.map (fun XT:var*typ => (fst XT, f (snd XT))) (kind_rel k)}.
-Proof.
-  intros.
-  destruct k as [kc kv kr kh].
-  exists (Kind kv (map_coherent f kh)).
-  simpl. auto.
-Defined.
-
-Definition ckind_map f k := proj1_sig (ckind_map_spec f k).
-
-Definition kind_map f (K:kind) : kind :=
-  match K with
-  | None => None
-  | Some k => Some (ckind_map f k)
-  end.
-
-Definition kind_open K Vs := kind_map (fun T => typ_open T Vs) K.
+Definition kind_open Vs K := kind_map (typ_open Vs) K.
 
 (** Body of a scheme *)
 
+Inductive typ_ary (n : nat) : typ -> Prop :=
+  | typa_bvar  : forall m, m < n -> typ_ary n (typ_bvar m)
+  | typa_fvar  : forall x, typ_ary n (typ_fvar x)
+  | typa_arrow : forall T1 T2,
+      typ_ary n T1 -> typ_ary n T2 -> typ_ary n (typ_arrow T1 T2).
+
 Definition typ_body T Ks :=
-  forall Xs, length Ks = length Xs ->
-    type (typ_open_vars T Xs) /\
-    list_forall (All_kind_types (fun T' => type (typ_open_vars T' Xs))) Ks.
+  typ_ary (length Ks) T /\
+  list_forall (All_kind_types (typ_ary (length Ks))) Ks.
 
 (** Definition of a well-formed scheme *)
 
@@ -255,20 +267,17 @@ Definition trm_inst t tl := trm_inst_rec 0 tl t.
 
 (** Definition of kinding environments *)
 
-Definition kenv := env kind.
-
-Definition kenv_ok K :=
-  ok K /\ env_prop (All_kind_types type) K.
+Definition kenv := env (kind type).
 
 (** Proper instanciation *)
 
-Inductive well_kinded : kenv -> kind -> typ -> Prop :=
+Inductive well_kinded : kenv -> kind type -> type -> Prop :=
   | wk_any : forall K T,
       well_kinded K None T
   | wk_kind : forall K k x k',
       binds x (Some k') K ->
       entails k' k ->
-      well_kinded K (Some k) (typ_fvar x).
+      well_kinded K (Some k) (type_var x).
 
 Hint Constructors well_kinded.
 
@@ -280,21 +289,21 @@ Fixpoint For_all2(A B:Set)(P:A->B->Prop)(l1:list A)(l2:list B) {struct l1}
   | _ => False
   end.
 
-Definition kinds_open Ks Us :=
-  List.map (fun k:kind => kind_open k Us) Ks.
+Definition kinds_open Us Ks :=
+  List.map (kind_open Us) Ks.
 
 Definition proper_instance K Ks Us :=
-  types (length Ks) Us /\
-  For_all2 (well_kinded K) (kinds_open Ks Us) Us.
+  length Ks = length Us /\
+  For_all2 (well_kinded K) (kinds_open Us Ks) Us.
 
 Definition kinds_open_vars Ks Xs :=
-  List.combine Xs (kinds_open Ks (typ_fvars Xs)).
+  List.combine Xs (kinds_open (type_vars Xs) Ks).
 
 (** Definition of typing environments *)
 
-Definition env := env sch.
+Definition senv := env sch.
 
-Definition env_ok (E:env) := ok E /\ env_prop scheme E.
+Definition senv_ok (E:senv) := ok E /\ env_prop scheme E.
 
 (** Computing free variables of a type. *)
 

@@ -16,10 +16,16 @@ Definition map_prop (f : forall c, P c) l : list_forall P l.
 induction l; auto.
 Defined.
 
+Lemma list_forall_in : forall l,
+  (forall x, In x l -> P x) -> list_forall P l.
+Proof.
+  induction l; simpl*.
+Qed.
+
 Lemma list_forall_out : forall l,
   list_forall P l -> forall x, In x l -> P x.
 Proof.
-  induction 1; simpl; intros. elim H.
+  induction 1; simpl*; intros.
   destruct* H1. subst*.
 Qed.
 
