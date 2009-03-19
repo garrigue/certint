@@ -8,41 +8,6 @@
 Set Implicit Arguments.
 Require Import Metatheory List Arith.
 
-Section ListForall.
-Variables (A:Set) (P Q:A->Prop).
-
-Definition map_prop (f : forall c, P c) l : list_forall P l.
-induction l; auto.
-Defined.
-
-Lemma list_forall_in : forall l,
-  (forall x, In x l -> P x) -> list_forall P l.
-Proof.
-  induction l; simpl*.
-Qed.
-
-Lemma list_forall_out : forall l,
-  list_forall P l -> forall x, In x l -> P x.
-Proof.
-  induction 1; simpl*; intros.
-  destruct* H1. subst*.
-Qed.
-
-Lemma list_forall_apply : forall l,
-  list_forall (fun x => P x -> Q x) l ->
-  list_forall P l -> list_forall Q l.
-Proof.
-  intros; induction* H.
-  inversion* H0.
-Qed.
-
-Lemma list_forall_imp : forall l,
-  (forall x, P x -> Q x) -> list_forall P l -> list_forall Q l.
-Proof.
-  induction 2; auto.
-Qed.
-End ListForall.
-
 (* Constraint domain specification *)
 
 Module Type CstrIntf.
@@ -59,8 +24,6 @@ End CstrIntf.
 Module Type CstIntf.
   Parameter const : Set.
   Parameter arity : const -> nat.
-  Parameter tconst : Set.
-  Parameter tarity : tconst -> nat.
 End CstIntf.
 
 (* Parameterized definitions *)
@@ -75,26 +38,7 @@ Module MkDefs(Cstr:CstrIntf)(Const:CstIntf).
 Inductive typ : Set :=
   | typ_bvar  : nat -> typ
   | typ_fvar  : var -> typ
-  | typ_arrow : typ -> typ -> typ
-  | typ_const : Const.tconst -> list typ -> typ.
-Reset typ_ind.
-
-
-Section TypInd.
-Variables (P : typ -> Prop)
-  (Hbv : forall n, P (typ_bvar n))
-  (Hfv : forall x, P (typ_fvar x))
-  (Har : forall T1 T2, P T1 -> P T2 -> P (typ_arrow T1 T2))
-  (Hcs : forall c Ts, list_forall P Ts -> P (typ_const c Ts)).
-
-Fixpoint typ_ind (T : typ) : P T :=
-  match T return P T with
-  | typ_bvar n => Hbv n
-  | typ_fvar x => Hfv x
-  | typ_arrow T1 T2 => Har (typ_ind T1) (typ_ind T2)
-  | typ_const c Ts => Hcs c (map_prop P typ_ind  Ts)
-  end.
-End TypInd.
+  | typ_arrow : typ -> typ -> typ.
 
 (** Types are inhabited, giving us a default value. *)
 
@@ -128,12 +72,11 @@ Notation "'sch_arity' M" :=
 
 (** Opening body of type schemes. *)
 
-Fixpoint typ_open (Vs : list typ) (T : typ) {struct T} : typ :=
+Fixpoint typ_open (T : typ) (Vs : list typ) {struct T} : typ :=
   match T with
   | typ_bvar i      => nth i Vs typ_def
   | typ_fvar x      => typ_fvar x 
-  | typ_arrow T1 T2 => typ_arrow (typ_open Vs T1) (typ_open Vs T2)
-  | typ_const c Ts  => typ_const c (List.map (typ_open Vs) Ts)
+  | typ_arrow T1 T2 => typ_arrow (typ_open T1 Vs) (typ_open T2 Vs)
   end.
 
 (** Opening body of type schemes with variables *)
@@ -141,21 +84,21 @@ Fixpoint typ_open (Vs : list typ) (T : typ) {struct T} : typ :=
 Definition typ_fvars := 
   List.map typ_fvar.
 
-Definition typ_open_vars Xs := 
-  typ_open (typ_fvars Xs).
+Definition typ_open_vars T Xs := 
+  typ_open T (typ_fvars Xs).
 
 (** Instanciation of a type scheme *)
 
-Definition sch_open Us M := 
-  typ_open Us (sch_type M).
+Definition sch_open M := 
+  typ_open (sch_type M).
 
-Definition sch_open_vars Xs := 
-  sch_open (typ_fvars Xs).
+Definition sch_open_vars M := 
+  typ_open_vars (sch_type M).
   
-Notation "M ^^ Vs" := (sch_open Vs M) 
+Notation "M ^^ Vs" := (sch_open M Vs) 
   (at level 67, only parsing) : typ_scope.
 Notation "M ^ Xs" := 
-  (sch_open_vars Xs M) (only parsing) : typ_scope.
+  (sch_open_vars M Xs) (only parsing) : typ_scope.
 
 Bind Scope typ_scope with typ.
 Open Scope typ_scope.
@@ -168,28 +111,7 @@ Inductive type : typ -> Prop :=
   | type_arrow : forall T1 T2,
       type T1 -> 
       type T2 -> 
-      type (typ_arrow T1 T2)
-  | type_const : forall c Ts,
-      list_for_n type (Const.tarity c) Ts ->
-      type (typ_const c Ts).
-Reset type_ind.
-
-Section TypeInd.
-Variables (P : typ -> Prop)
-  (Hfv : forall x, P (typ_fvar x))
-  (Har : forall T1 T2,
-    type T1 -> P T1 -> type T2 -> P T2 -> P (typ_arrow T1 T2))
-  (Hcs : forall c Ts,
-    list_for_n type (Const.tarity c) Ts ->
-    list_forall P Ts -> P (typ_const c Ts)).
-
-Lemma type_ind T : type T -> P T.
-Proof.
-  induction T; intros; auto; try solve [inversion* H].
-  Hint Resolve list_forall_apply Hcs.
-  inversions H0. use (proj2 H2).
-Qed.
-End TypeInd.
+      type (typ_arrow T1 T2).
 
 (** List of n locally closed types *)
 
@@ -243,14 +165,14 @@ Definition kind_map f (K:kind) : kind :=
   | Some k => Some (ckind_map f k)
   end.
 
-Definition kind_open Vs K := kind_map (typ_open Vs) K.
+Definition kind_open K Vs := kind_map (fun T => typ_open T Vs) K.
 
 (** Body of a scheme *)
 
 Definition typ_body T Ks :=
   forall Xs, length Ks = length Xs ->
-    type (typ_open_vars Xs T) /\
-    list_forall (All_kind_types (fun T' => type (typ_open_vars Xs T'))) Ks.
+    type (typ_open_vars T Xs) /\
+    list_forall (All_kind_types (fun T' => type (typ_open_vars T' Xs))) Ks.
 
 (** Definition of a well-formed scheme *)
 
@@ -358,15 +280,15 @@ Fixpoint For_all2(A B:Set)(P:A->B->Prop)(l1:list A)(l2:list B) {struct l1}
   | _ => False
   end.
 
-Definition kinds_open Us Ks :=
-  List.map (kind_open Us) Ks.
+Definition kinds_open Ks Us :=
+  List.map (fun k:kind => kind_open k Us) Ks.
 
 Definition proper_instance K Ks Us :=
   types (length Ks) Us /\
-  For_all2 (well_kinded K) (kinds_open Us Ks) Us.
+  For_all2 (well_kinded K) (kinds_open Ks Us) Us.
 
-Definition kinds_open_vars Xs Ks :=
-  List.combine Xs (kinds_open (typ_fvars Xs) Ks).
+Definition kinds_open_vars Ks Xs :=
+  List.combine Xs (kinds_open Ks (typ_fvars Xs)).
 
 (** Definition of typing environments *)
 
@@ -376,26 +298,25 @@ Definition env_ok (E:env) := ok E /\ env_prop scheme E.
 
 (** Computing free variables of a type. *)
 
-Definition fv_list (A:Set) (fv:A->vars) :=
-  List.fold_right (fun a acc => fv a \u acc) {}.
-
-Fixpoint typ_fv (T : typ) : vars :=
+Fixpoint typ_fv (T : typ) {struct T} : vars :=
   match T with
   | typ_bvar i      => {}
   | typ_fvar x      => {{x}}
   | typ_arrow T1 T2 => (typ_fv T1) \u (typ_fv T2)
-  | typ_const c Ts  => fv_list typ_fv Ts
   end.
 
 (** Computing free variables of a list of terms. *)
 
-Definition typ_fv_list := fv_list typ_fv.
+Definition typ_fv_list :=
+  List.fold_right (fun t acc => typ_fv t \u acc) {}.
 
 (** Computing free variables of a kind. *)
 
-Definition kind_fv k := typ_fv_list (kind_types k).
+Definition kind_fv k :=
+  typ_fv_list (kind_types k).
 
-Definition kind_fv_list := fv_list kind_fv.
+Definition kind_fv_list :=
+  List.fold_right (fun t acc => kind_fv t \u acc) {}.
 
 (** Computing free variables of a type scheme. *)
 
@@ -454,7 +375,7 @@ Inductive typing(gc:gc_info) : kenv -> env -> trm -> typ -> Prop :=
       K ; E | gc |= (trm_abs t1) ~: (typ_arrow U T)
   | typing_let : forall M L1 L2 K E T2 t1 t2,
       (forall Xs, fresh L1 (sch_arity M) Xs ->
-         (K & kinds_open_vars Xs (sch_kinds M)); E | gc_raise gc |=
+         (K & kinds_open_vars (sch_kinds M) Xs); E | gc_raise gc |=
            t1 ~: (M ^ Xs)) ->
       (forall x, x \notin L2 ->
          K ; (E & x ~ M) | gc_raise gc |= (t2 ^ x) ~: T2) -> 
@@ -471,7 +392,7 @@ Inductive typing(gc:gc_info) : kenv -> env -> trm -> typ -> Prop :=
   | typing_gc : forall Ks L K E t T,
       gc_ok gc ->
       (forall Xs, fresh L (length Ks) Xs ->
-        K & kinds_open_vars Xs Ks; E | gc |= t ~: T) ->
+        K & kinds_open_vars Ks Xs; E | gc |= t ~: T) ->
       K ; E | gc |= t ~: T
 
 where "K ; E | gc |= t ~: T" := (typing gc K E t T).

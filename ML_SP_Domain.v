@@ -558,6 +558,14 @@ Module SndHyp.
     apply* lt_n_S.
   Qed.
 
+  Lemma list_forall_imp : forall (A:Set) (P Q:A->Prop) l,
+    (forall x, P x -> Q x) -> list_forall P l -> list_forall Q l.
+  Proof.
+    induction l; intros; auto.
+    inversions H0.
+    constructor; auto.
+  Qed.
+
   Lemma seq_in : forall k n m, In k (seq m n) -> m <= k < m+n.
   Proof.
     induction n; intros. elim H.
