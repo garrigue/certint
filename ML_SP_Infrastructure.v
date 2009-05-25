@@ -713,7 +713,7 @@ Proof.
   intros. induction T1; intros; simpl; f_equal*.
   apply list_map_nth. apply* typ_subst_fresh.
     intro; auto.
-  case_eq (get v S); intros. apply* typ_open_type. apply* (H v).
+  case_eq (get v S); intros. apply* typ_open_type.
   auto.
 Qed.
 
@@ -866,7 +866,6 @@ Proof.
     case_eq (get v S); intros.
       rewrite* (binds_concat_fresh (combine Xs Us) H2).
         rewrite* <- typ_open_type.
-        apply* (H1 v).
       rewrite* dom_combine.
       destruct* (fresh_disjoint _ _ _ H v).
     rewrite* get_notin_dom.
@@ -900,7 +899,6 @@ Lemma typ_subst_type : forall S T,
 Proof.
   induction 2; simpl*.
   case_eq (get X S); intros; auto*.
-    apply* (H X).
 Qed.
 
 Hint Resolve typ_subst_type.

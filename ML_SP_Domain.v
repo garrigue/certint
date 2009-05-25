@@ -10,28 +10,28 @@ Require Import ML_SP_Unify ML_SP_Rename ML_SP_Inference.
 
 Module Cstr.
   Record cstr_impl : Set := C {
-    cstr_low  : vars;
-    cstr_high : option vars }.
+    cstr_low  : list var;
+    cstr_high : option (list var) }.
   Definition cstr := cstr_impl.
   Definition valid c :=
     match cstr_high c with
     | None => True
-    | Some h => cstr_low c << h
+    | Some h => incl (cstr_low c) h
     end.
   Definition entails c1 c2 :=
-    cstr_low c2 << cstr_low c1 /\
+    incl (cstr_low c2) (cstr_low c1) /\
     match cstr_high c2 with
     | None => True
     | Some h2 =>
       match cstr_high c1 with
       | None => False
-      | Some h1 => h1 << h2
+      | Some h1 => incl h1 h2
       end
      end.
   Lemma entails_refl : forall c, entails c c.
   Proof.
     intros.
-    split. apply subset_refl.
+    split. apply incl_refl.
     destruct* (cstr_high c).
   Qed.
     
@@ -39,13 +39,13 @@ Module Cstr.
     entails c1 c2 -> entails c2 c3 -> entails c1 c3.
   Proof.
     introv. intros [CL1 CH1] [CL2 CH2].
-    split. apply* subset_trans.
+    split. apply* incl_tran.
     clear CL1 CL2.
     destruct* (cstr_high c3).
     destruct* (cstr_high c2).
     destruct* (cstr_high c1).
   Qed.
-  Definition unique c v := v \in cstr_low c.
+  Definition unique c v := In v (cstr_low c).
   Hint Resolve entails_refl.
 End Cstr.
 
@@ -113,24 +113,24 @@ Qed.
 
 Module Delta.
   Definition matches_arg n := typ_arrow (typ_bvar n) (typ_bvar 1).
-  Lemma valid_tag : forall t, Cstr.valid (Cstr.C {{t}} None).
+  Lemma valid_tag : forall t, Cstr.valid (Cstr.C (t::nil) None).
     intros. compute. auto.
   Qed.
   Lemma coherent_tag : forall t,
-    coherent (Cstr.C {{t}} None) ((t, typ_bvar 0) :: nil).
+    coherent (Cstr.C (t::nil) None) ((t, typ_bvar 0) :: nil).
   Proof.
     intros t x; intros.
     destruct H0; destruct H1; try contradiction.
     inversions H0. inversions* H1.
   Qed.
-  Lemma valid_matches : forall l, Cstr.valid (Cstr.C {} (Some (mkset l))).
+  Lemma valid_matches : forall l, Cstr.valid (Cstr.C nil (Some l)).
   Proof.
     intros; unfold Cstr.valid; simpl.
-    intros x Hx; elim (in_empty Hx).
+    intros x Hx; elim Hx.
   Qed.
   Lemma coherent_matches : forall l,
     NoDup l ->
-    coherent (Cstr.C {} (Some (mkset l)))
+    coherent (Cstr.C nil (Some l))
       (combine l (map typ_bvar (seq 2 (length l)))).
   Proof.
     intros; intro; intros.
@@ -151,7 +151,7 @@ Module Delta.
     | Const.matches l ND =>
       Sch (fold_right typ_arrow (typ_arrow (typ_bvar 0) (typ_bvar 1))
              (map matches_arg (seq 2 (length l))))
-        (Some (Kind (valid_matches l) (coherent_matches ND)) ::
+        (Some (Kind (@valid_matches l) (coherent_matches ND)) ::
          map (fun _ => None) (seq 0 (S (length l))))
     end.
   Definition matches_lhs l (ND:NoDup l) k :=
@@ -716,11 +716,10 @@ Module SndHyp.
     destruct k as [[kl kh] kv kr kch]; simpl in *.
     destruct* kh as [kh|].
     unfold Cstr.valid in kv. simpl in kv.
-    use (subset_trans Low (subset_trans kv High) (in_same l')).
+    assert (In l' l) by auto.
     clear High Low kl kh kv kr kch Bk x Us.
-    use (mkset_in _ H); clear H.
-    destruct (exists_nth var_default _ _ H0) as [n [Hlen EQ]].
-    clear H0; subst l'.
+    destruct (exists_nth var_default _ _ H) as [n [Hlen EQ]].
+    clear H; subst l'.
     exists (Delta.matches_lhs ND n).
     exists (Delta.matches_rhs n).
     exists (t :: rev vl').
@@ -768,55 +767,87 @@ End SndHyp.
 
 Module Sound3 := Mk3(SndHyp).
 
+Require Import ListSet.
+
+Section ListSet.
+  Variable A : Type.
+  Hypothesis eq_dec : forall x y:A, sumbool (x = y) (x <> y).
+
+  Definition set_incl : forall (s1 s2 : list A),
+    sumbool (incl s1 s2) (~incl s1 s2).
+    intros.
+    induction s1. left; intros x Hx. elim Hx.
+    case_eq (set_mem eq_dec a s2); intros.
+      destruct IHs1.
+        left; intros x Hx. simpl in Hx; destruct Hx.
+        subst; apply* set_mem_correct1. apply* i.
+      right. intro. elim n. intros x Hx. apply* H0.
+    right. intro; elim (set_mem_complete1 eq_dec _ _ H).
+    apply* H0.
+  Defined.
+End ListSet.
+
 Ltac case_rewrite t H :=
   case_eq t; introv H; rewrite H in *; try discriminate.
 
 Module Cstr2.
-  Definition unique c := S.elements (Cstr.cstr_low c).
+  Definition unique := Cstr.cstr_low.
   Lemma unique_ok : forall c l, In l (unique c) <-> Cstr.unique c l.
   Proof.
-    unfold unique, Cstr.unique.
-    split; intros. apply S.elements_2. auto.
-    use (S.elements_1 H). clear -H0; induction H0; auto.
+    unfold unique, Cstr.unique; split*.
   Qed.
+
   Definition lub c1 c2 :=
-    Cstr.C (S.union (Cstr.cstr_low c1) (Cstr.cstr_low c2))
+    Cstr.C (set_union eq_var_dec (Cstr.cstr_low c1) (Cstr.cstr_low c2))
     (match Cstr.cstr_high c1, Cstr.cstr_high c2 with
      | None, h => h
      | h, None => h
-     | Some s1, Some s2 => Some (S.inter s1 s2)
+     | Some s1, Some s2 => Some (set_inter eq_var_dec s1 s2)
      end).
+
+  Hint Resolve incl_tran.
   Lemma lub_ok : forall c1 c2 c,
     (Cstr.entails c c1 /\ Cstr.entails c c2) <-> Cstr.entails c (lub c1 c2).
   Proof.
-    unfold Cstr.entails, lub; simpl; split; intros;
+    unfold Cstr.entails, lub; simpl; split; intros.
+      intuition.
+        intros x Hx; destruct* (set_union_elim _ _ _ _ Hx).
       case_rewrite (Cstr.cstr_high c1) R1;
       case_rewrite (Cstr.cstr_high c2) R2;
       try case_rewrite (Cstr.cstr_high c) R3; intuition.
-    sets_solve. apply* S.inter_3.
+      intros x Hx; apply set_inter_intro. apply* H2. apply* H3.
+    destruct H.
+    split; split;
+      try (intros x Hx; apply H;
+           solve [ apply* set_union_intro2 | apply* set_union_intro1 ]);
+      case_rewrite (Cstr.cstr_high c1) R1;
+      case_rewrite (Cstr.cstr_high c2) R2;
+      try case_rewrite (Cstr.cstr_high c) R3; intuition;
+      intros x Hx; destruct* (set_inter_elim _ _ _ _ (H0 _ Hx)).
   Qed.
+
   Definition valid : forall c, sumbool (Cstr.valid c) (~Cstr.valid c).
     intros.
     unfold Cstr.valid.
     case_eq (Cstr.cstr_high c); intros.
-      case_eq (S.subset (Cstr.cstr_low c) v); intros.
-        use (S.subset_2 H0).
-      right; intro. rewrite (S.subset_1 H1) in H0. discriminate.
+      destruct* (set_incl eq_var_dec (Cstr.cstr_low c) l).
     auto.
   Defined.
+
   Lemma entails_unique : forall c1 c2 v,
     Cstr.entails c1 c2 -> Cstr.unique c2 v -> Cstr.unique c1 v.
   Proof.
     unfold Cstr.entails, Cstr.unique.
     intros. auto*.
   Qed.
+
   Lemma entails_valid : forall c1 c2,
     Cstr.entails c1 c2 -> Cstr.valid c1 -> Cstr.valid c2.
   Proof.
     unfold Cstr.entails, Cstr.valid.
     intros. destruct H.
     case_rewrite (Cstr.cstr_high c1) R1; case_rewrite (Cstr.cstr_high c2) R2;
-    auto; try contradiction.
+    auto*.
   Qed.
 End Cstr2.
 

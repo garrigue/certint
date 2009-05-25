@@ -183,7 +183,7 @@ Qed.
 
 Section DecidableSorting.
 
-Variable A : Set.
+Variable A : Type.
 Variable leA : relation A.
 Hypothesis leA_dec : forall x y, {leA x y} + {~ leA x y}.
 
@@ -216,7 +216,7 @@ End DecidableSorting.
 
 Section Equality_ext.
 
-Variable A : Set.
+Variable A : Type.
 Variable ltA : relation A.
 Hypothesis ltA_trans : forall x y z, ltA x y -> ltA y z -> ltA x z.
 Hypothesis ltA_not_eqA : forall x y, ltA x y -> x <> y.

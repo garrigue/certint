@@ -331,14 +331,12 @@ Proof.
           simpl; apply* wk_kind.
             apply binds_prepend.
             use (binds_map (kind_subst S) HG).
-            simpl in H3; apply H3.
           apply entails_refl.
         rewrite typ_subst_fresh.
           unfold kind_subst. simpl.
           eapply wk_kind.
             apply binds_prepend.
             use (binds_map (kind_map (typ_subst S)) B0).
-            simpl in H2. apply H2.
           apply entails_refl.
         rewrite DS; simpl.
         destruct (fresh_disjoint _ _ _ H0 Z).
@@ -839,7 +837,6 @@ Proof.
     apply binds_prepend.
     rewrite <- map_combine.
     use (binds_map (fun k => kind_open k (Us ++ List.map typ_fvar Xs)) H2).
-    simpl in H3. apply H3.
   apply entails_refl.
 Qed.
 
@@ -1020,7 +1017,6 @@ Proof.
       clear -H7; induction Us; simpl; inversion* H7.
       induction Xs; simpl*.
     simpl; apply* well_kinded_combine2. simpl in *. split*.
-    apply HS0. apply HS.
   unfold sch_open. simpl.
   assert (K; E |(false,GcAny)|= trm_fvar x ~: (Sch U Ks) ^^ Us).
     apply* typing_var. split*.

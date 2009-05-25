@@ -180,7 +180,7 @@ Qed.
   de Bruijn indices). *)
 
 Notation "x == y" := (eq_var_dec x y) (at level 67).
-Notation "i === j" := (Peano_dec.eq_nat_dec i j) (at level 67).
+Notation "i === j" := (Peano_dec.eq_nat_dec i j) (at level 70).
 
 (** Tactic for comparing two bound or free variables. *)
 

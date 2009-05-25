@@ -44,11 +44,17 @@ val length : 'a1 list -> nat
 
 val app : 'a1 list -> 'a1 list -> 'a1 list
 
+val in_dec : ('a1 -> 'a1 -> sumbool) -> 'a1 -> 'a1 list -> sumbool
+
 val nth : nat -> 'a1 list -> 'a1 -> 'a1
 
 val rev : 'a1 list -> 'a1 list
 
+val map : ('a1 -> 'a2) -> 'a1 list -> 'a2 list
+
 val fold_left : ('a1 -> 'a2 -> 'a1) -> 'a2 list -> 'a1 -> 'a1
+
+val fold_right : ('a2 -> 'a1 -> 'a1) -> 'a1 -> 'a2 list -> 'a1
 
 val split : ('a1, 'a2) prod list -> ('a1 list, 'a2 list) prod
 
@@ -62,6 +68,8 @@ val lt_eq_lt_dec : nat -> nat -> sumbool sumor
 
 val le_lt_dec : nat -> nat -> sumbool
 
+val max : nat -> nat -> nat
+
 type 'x compare =
   | LT
   | EQ
@@ -72,6 +80,8 @@ module type OrderedType =
   type t 
   
   val compare : t -> t -> t compare
+  
+  val eq_dec : t -> t -> sumbool
  end
 
 module OrderedTypeFacts : 
@@ -89,6 +99,8 @@ module type UsualOrderedType =
   type t 
   
   val compare : t -> t -> t compare
+  
+  val eq_dec : t -> t -> sumbool
  end
 
 module Nat_as_OT : 
@@ -96,20 +108,80 @@ module Nat_as_OT :
   type t = nat
   
   val compare : t -> t -> nat compare
+  
+  val eq_dec : nat -> nat -> sumbool
  end
 
-val max : nat -> nat -> nat
+module type S = 
+ sig 
+  module E : 
+   OrderedType
+  
+  type elt = E.t
+  
+  type t 
+  
+  val empty : t
+  
+  val is_empty : t -> bool
+  
+  val mem : elt -> t -> bool
+  
+  val add : elt -> t -> t
+  
+  val singleton : elt -> t
+  
+  val remove : elt -> t -> t
+  
+  val union : t -> t -> t
+  
+  val inter : t -> t -> t
+  
+  val diff : t -> t -> t
+  
+  val compare : t -> t -> t compare
+  
+  val equal : t -> t -> bool
+  
+  val subset : t -> t -> bool
+  
+  val fold : (elt -> 'a1 -> 'a1) -> t -> 'a1 -> 'a1
+  
+  val for_all : (elt -> bool) -> t -> bool
+  
+  val exists_ : (elt -> bool) -> t -> bool
+  
+  val filter : (elt -> bool) -> t -> t
+  
+  val partition : (elt -> bool) -> t -> (t, t) prod
+  
+  val cardinal : t -> nat
+  
+  val elements : t -> elt list
+  
+  val min_elt : t -> elt option
+  
+  val max_elt : t -> elt option
+  
+  val choose : t -> elt option
+ end
+
+module type FinSet = 
+ sig 
+  module E : 
+   UsualOrderedType
+  
+  module S : 
+   S with module E = E
+  
+  type fset = S.t
+  
+  type elt = S.elt
+ end
 
 module Raw : 
  functor (X:OrderedType) ->
  sig 
-  module E : 
-   sig 
-    type t = X.t
-    
-    val compare : t -> t -> t compare
-   end
-  
   module MX : 
    sig 
     val eq_dec : X.t -> X.t -> sumbool
@@ -173,13 +245,6 @@ module MakeRaw :
  sig 
   module Raw : 
    sig 
-    module E : 
-     sig 
-      type t = X.t
-      
-      val compare : t -> t -> t compare
-     end
-    
     module MX : 
      sig 
       val eq_dec : X.t -> X.t -> sumbool
@@ -243,15 +308,17 @@ module MakeRaw :
     type t = X.t
     
     val compare : t -> t -> t compare
+    
+    val eq_dec : t -> t -> sumbool
    end
   
   module OTFacts : 
    sig 
-    val eq_dec : E.t -> E.t -> sumbool
+    val eq_dec : X.t -> X.t -> sumbool
     
-    val lt_dec : E.t -> E.t -> sumbool
+    val lt_dec : X.t -> X.t -> sumbool
     
-    val eqb : E.t -> E.t -> bool
+    val eqb : X.t -> X.t -> bool
    end
   
   type slist =
@@ -268,7 +335,7 @@ module MakeRaw :
   
   type t = slist
   
-  type elt = E.t
+  type elt = X.t
   
   val mem : elt -> t -> bool
   
@@ -313,6 +380,8 @@ module MakeRaw :
   val partition : (elt -> bool) -> t -> (t, t) prod
   
   val compare : t -> t -> t compare
+  
+  val eq_dec : t -> t -> sumbool
  end
 
 module Make : 
@@ -323,19 +392,14 @@ module Make :
     type t = X.t
     
     val compare : t -> t -> t compare
+    
+    val eq_dec : t -> t -> sumbool
    end
   
   module S : 
    sig 
     module Raw : 
      sig 
-      module E : 
-       sig 
-        type t = X.t
-        
-        val compare : t -> t -> t compare
-       end
-      
       module MX : 
        sig 
         val eq_dec : X.t -> X.t -> sumbool
@@ -399,15 +463,17 @@ module Make :
       type t = X.t
       
       val compare : t -> t -> t compare
+      
+      val eq_dec : t -> t -> sumbool
      end
     
     module OTFacts : 
      sig 
-      val eq_dec : E.t -> E.t -> sumbool
+      val eq_dec : X.t -> X.t -> sumbool
       
-      val lt_dec : E.t -> E.t -> sumbool
+      val lt_dec : X.t -> X.t -> sumbool
       
-      val eqb : E.t -> E.t -> bool
+      val eqb : X.t -> X.t -> bool
      end
     
     type slist =
@@ -424,7 +490,7 @@ module Make :
     
     type t = slist
     
-    type elt = E.t
+    type elt = X.t
     
     val mem : elt -> t -> bool
     
@@ -469,6 +535,8 @@ module Make :
     val partition : (elt -> bool) -> t -> (t, t) prod
     
     val compare : t -> t -> t compare
+    
+    val eq_dec : t -> t -> sumbool
    end
   
   type fset = S.t
@@ -483,83 +551,10 @@ module type VARIABLES =
   val var_default : var
   
   module Var_as_OT : 
-   sig 
-    type t = var
-    
-    val compare : t -> t -> t compare
-   end
+   UsualOrderedType with type t= var
   
   module VarSet : 
-   sig 
-    module E : 
-     sig 
-      type t = var
-      
-      val compare : t -> t -> t compare
-     end
-    
-    module S : 
-     sig 
-      module E : 
-       sig 
-        type t = E.t
-        
-        val compare : t -> t -> t compare
-       end
-      
-      type elt = E.t
-      
-      type t 
-      
-      val empty : t
-      
-      val is_empty : t -> bool
-      
-      val mem : elt -> t -> bool
-      
-      val add : elt -> t -> t
-      
-      val singleton : elt -> t
-      
-      val remove : elt -> t -> t
-      
-      val union : t -> t -> t
-      
-      val inter : t -> t -> t
-      
-      val diff : t -> t -> t
-      
-      val compare : t -> t -> t compare
-      
-      val equal : t -> t -> bool
-      
-      val subset : t -> t -> bool
-      
-      val fold : (elt -> 'a1 -> 'a1) -> t -> 'a1 -> 'a1
-      
-      val for_all : (elt -> bool) -> t -> bool
-      
-      val exists_ : (elt -> bool) -> t -> bool
-      
-      val filter : (elt -> bool) -> t -> t
-      
-      val partition : (elt -> bool) -> t -> (t, t) prod
-      
-      val cardinal : t -> nat
-      
-      val elements : t -> elt list
-      
-      val min_elt : t -> elt option
-      
-      val max_elt : t -> elt option
-      
-      val choose : t -> elt option
-     end
-    
-    type fset = S.t
-    
-    type elt = S.elt
-   end
+   FinSet with module E = Var_as_OT
   
   type vars = VarSet.S.t
   
@@ -577,11 +572,11 @@ module Variables :
 
 module Var_as_OT_Facts : 
  sig 
-  val eq_dec : Variables.Var_as_OT.t -> Variables.Var_as_OT.t -> sumbool
+  val eq_dec : Variables.var -> Variables.var -> sumbool
   
-  val lt_dec : Variables.Var_as_OT.t -> Variables.Var_as_OT.t -> sumbool
+  val lt_dec : Variables.var -> Variables.var -> sumbool
   
-  val eqb : Variables.Var_as_OT.t -> Variables.Var_as_OT.t -> bool
+  val eqb : Variables.var -> Variables.var -> bool
  end
 
 val eq_var_dec : Variables.var -> Variables.var -> sumbool
@@ -2391,20 +2386,32 @@ module MkInfer :
    end
  end
 
+type 'a set = 'a list
+
+val set_add : ('a1 -> 'a1 -> sumbool) -> 'a1 -> 'a1 set -> 'a1 set
+
+val set_mem : ('a1 -> 'a1 -> sumbool) -> 'a1 -> 'a1 set -> bool
+
+val set_inter : ('a1 -> 'a1 -> sumbool) -> 'a1 set -> 'a1 set -> 'a1 set
+
+val set_union : ('a1 -> 'a1 -> sumbool) -> 'a1 set -> 'a1 set -> 'a1 set
+
 module Cstr : 
  sig 
-  type cstr_impl = { cstr_low : Variables.vars;
-                     cstr_high : Variables.vars option }
+  type cstr_impl = { cstr_low : Variables.var list;
+                     cstr_high : Variables.var list option }
   
   val cstr_impl_rect :
-    (Variables.vars -> Variables.vars option -> 'a1) -> cstr_impl -> 'a1
+    (Variables.var list -> Variables.var list option -> 'a1) -> cstr_impl ->
+    'a1
   
   val cstr_impl_rec :
-    (Variables.vars -> Variables.vars option -> 'a1) -> cstr_impl -> 'a1
+    (Variables.var list -> Variables.var list option -> 'a1) -> cstr_impl ->
+    'a1
   
-  val cstr_low : cstr_impl -> Variables.vars
+  val cstr_low : cstr_impl -> Variables.var list
   
-  val cstr_high : cstr_impl -> Variables.vars option
+  val cstr_high : cstr_impl -> Variables.var list option
   
   type cstr = cstr_impl
  end
@@ -3002,7 +3009,7 @@ module Delta :
 
 module Cstr2 : 
  sig 
-  val unique : Cstr.cstr_impl -> Variables.VarSet.S.elt list
+  val unique : Cstr.cstr_impl -> Variables.var list
   
   val lub : Cstr.cstr_impl -> Cstr.cstr_impl -> Cstr.cstr_impl
   

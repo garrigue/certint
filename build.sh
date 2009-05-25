@@ -1,3 +1,4 @@
+set -e
 makeit() { for i in "$@"; do echo coqc "$i"; coqc "$i"; done; }
 makeit Lib_Tactic.v Lib_ListFacts.v Lib_ListFactsMore.v
 makeit Lib_MyFSetInterface.v Lib_FinSet.v Lib_FinSetImpl.v

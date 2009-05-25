@@ -62,6 +62,6 @@ typinf1 trm;;
 
 (* Another example, producing a recursive type *)
 (* OCaml equivalent: [fun x -> match x with `A20 y -> y | `A21 y -> x] *)
-let trm2' =
+let trm2 =
   abs (app (mtch (abs (bvar 0)) (abs (bvar 1))) (bvar 0)) ;;
 typinf1 trm2;;

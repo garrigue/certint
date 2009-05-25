@@ -456,7 +456,7 @@ Proof.
     simpl.
     eapply wk_kind.
       apply binds_prepend.
-      use (binds_map (kind_subst S) B0). simpl in H; apply H.
+      use (binds_map (kind_subst S) B0).
     apply entails_refl.
   simpl.
   intro v; destruct* (v == Z).
@@ -1325,10 +1325,8 @@ Proof.
   apply disjoint_comm.
   repeat apply disjoint_union; try solve [disjoint_solve].
   (* sch_fv M' *)
-  unfold sch_fv; simpl.
-  apply disjoint_union.
     apply* disjoint_subset. apply close_fvk_subset.
-  unfold Ks.
+  unfold Ks; simpl.
   rewrite <- He1. rewrite* dom_combine.
   apply kinds_generalize_disjoint.
   (* e2 *)

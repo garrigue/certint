@@ -200,7 +200,6 @@ Proof.
   simpl. rewrite get_notin_dom.
     apply* wk_kind. apply* binds_prepend.
       use (binds_map (kind_subst S) B).
-      simpl in H; apply H.
     apply entails_refl.
   intro; elim (binds_fresh B); clear B.
   rewrite* dom_kinds_open_vars.
@@ -614,7 +613,6 @@ Proof.
   (* Let *)
   pick_fresh x. rewrite* (@trm_subst_intro x). 
    apply_empty* (@typing_trm_subst true).
-   exists* L1.
   destruct (SH.delta_arity H4) as [a [pl [e1 e2]]]; subst.
     destruct (trm_inst_app_inv a pl tl) as [EQ|[t1' [t2' EQ]]]; rewrite EQ in *;
     discriminate.

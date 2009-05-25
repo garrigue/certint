@@ -40,7 +40,7 @@ Module MakeRaw (X : UsualOrderedType) <: FSetInterface.S with Module E := X.
  Definition sort_bool (xs : Raw.t) :=
    (if (sort_dec E.lt OTFacts.lt_dec xs) then true else false) = true.
 
- Record slist : Set :=
+ Record slist : Type :=
   {this   :> Raw.t;
    sorted :  sort_bool this}.
 
@@ -94,7 +94,7 @@ Module MakeRaw (X : UsualOrderedType) <: FSetInterface.S with Module E := X.
  Definition min_elt (s : t) : option elt := Raw.min_elt s.
  Definition max_elt (s : t) : option elt := Raw.max_elt s.
  Definition choose (s : t) : option elt  := Raw.choose s.
- Definition fold (B : Set) (f : elt -> B -> B) (s : t) : B -> B := Raw.fold (B:=B) f s.
+ Definition fold (B : Type) (f : elt -> B -> B) (s : t) : B -> B := Raw.fold (B:=B) f s.
  Definition cardinal (s : t) : nat := Raw.cardinal s.
  Definition filter (f : elt -> bool) (s : t) : t :=
    Build_slist' (Raw.filter_sort (sorted s) f).
@@ -177,7 +177,7 @@ Module MakeRaw (X : UsualOrderedType) <: FSetInterface.S with Module E := X.
   Lemma diff_3 : In x s -> ~ In x s' -> In x (diff s s').
   Proof. exact (fun H => Raw.diff_3 s.(sorted) s'.(sorted) H). Qed.
 
-  Lemma fold_1 : forall (A : Set) (i : A) (f : elt -> A -> A),
+  Lemma fold_1 : forall (A : Type) (i : A) (f : elt -> A -> A),
       fold f s i = fold_left (fun a e => f e a) (elements s) i.
   Proof. exact (Raw.fold_1 s.(sorted)). Qed.
 
@@ -230,6 +230,8 @@ Module MakeRaw (X : UsualOrderedType) <: FSetInterface.S with Module E := X.
   Proof. exact (fun H => Raw.elements_2 H). Qed.
   Lemma elements_3 : sort E.lt (elements s).
   Proof. exact (Raw.elements_3 s.(sorted)). Qed.
+  Lemma elements_3w : NoDupA E.eq (elements s).
+  Proof. exact (Raw.elements_3w s.(sorted)). Qed.
 
   Lemma min_elt_1 : min_elt s = Some x -> In x s.
   Proof. exact (fun H => Raw.min_elt_1 H). Qed.
@@ -249,6 +251,9 @@ Module MakeRaw (X : UsualOrderedType) <: FSetInterface.S with Module E := X.
   Proof. exact (fun H => Raw.choose_1 H). Qed.
   Lemma choose_2 : choose s = None -> Empty s.
   Proof. exact (fun H => Raw.choose_2 H). Qed.
+  Lemma choose_3 : choose s = Some x -> choose s' = Some y -> 
+   Equal s s' -> E.eq x y.
+  Proof. exact (@Raw.choose_3 _ _ s.(sorted) s'.(sorted) x y). Qed.
 
   Lemma eq_refl : eq s s.
   Proof. exact (Raw.eq_refl s). Qed.
@@ -267,6 +272,14 @@ Module MakeRaw (X : UsualOrderedType) <: FSetInterface.S with Module E := X.
   elim (Raw.compare s.(sorted) s'.(sorted));
    [ constructor 1 | constructor 2 | constructor 3 ];
    auto.
+  Defined.
+
+  Definition eq_dec : { eq s s' } + { ~ eq s s' }.
+  Proof.
+  change eq with Equal.
+  case_eq (equal s s'); intro H; [left | right].
+  apply equal_2; auto.
+  intro H'; rewrite equal_1 in H; auto; discriminate.
   Defined.
 
  End Spec.
@@ -301,6 +314,7 @@ Module Make (X : UsualOrderedType) <: FinSet with Module E := X.
     assert (s = s').
       unfold Raw.t in *. eapply Sort_InA_eq_ext; eauto using to_sorted.
         eexact E.lt_trans.
+        eexact E.lt_not_eq.
         intros. eapply OTFacts.lt_eq; eauto.
         intros. eapply OTFacts.eq_lt; eauto.
     intros. subst.

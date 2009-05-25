@@ -37,7 +37,7 @@ Module Type S.
   Declare Module E : OrderedType.
   Definition elt := E.t.
 
-  Parameter t : Set. (** the abstract type of sets *)
+  Parameter t : Type. (** the abstract type of sets *)
 
   (** Logical predicates *)
   Parameter In : elt -> t -> Prop.
@@ -99,7 +99,7 @@ Module Type S.
   The order in which the elements of [s] are presented to [f]
   is unspecified. *)
 
-  Parameter fold : forall A : Set, (elt -> A -> A) -> t -> A -> A.
+  Parameter fold : forall A : Type, (elt -> A -> A) -> t -> A -> A.
   (** [fold f s a] computes [(f xN ... (f x2 (f x1 a))...)],
   where [x1 ... xN] are the elements of [s], in increasing order. *)
 
@@ -214,7 +214,7 @@ Module Type S.
   Parameter diff_3 : In x s -> ~ In x s' -> In x (diff s s').
 
   (** Specification of [fold] *)
-  Parameter fold_1 : forall (A : Set) (i : A) (f : elt -> A -> A),
+  Parameter fold_1 : forall (A : Type) (i : A) (f : elt -> A -> A),
       fold f s i = fold_left (fun a e => f e a) (elements s) i.
 
   (** Specification of [cardinal] *)
@@ -258,6 +258,7 @@ Module Type S.
   Parameter elements_1 : In x s -> InA E.eq x (elements s).
   Parameter elements_2 : InA E.eq x (elements s) -> In x s.
   Parameter elements_3 : sort E.lt (elements s).
+  Parameter elements_3w : NoDupA E.eq (elements s).
 
   (** Specification of [min_elt] *)
   Parameter min_elt_1 : min_elt s = Some x -> In x s.

@@ -16,7 +16,7 @@ The first 3 files (Definitions, Infrastructure and Soundness) were heavily,
 and contain completely new properties, like elimination of kind_gc.
 Unify, Inference and Domain are completely new.
 
-All the above development were checked with coq 8.1pl4.
+All the above development were checked with coq 8.2.
 You can compile them with "sh build.sh"
 
 You can also play with the type checker. It does not work inside Coq

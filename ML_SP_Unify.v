@@ -3,7 +3,7 @@
 * Jacques Garrigue, July 2008                                              *
 ***************************************************************************)
 
-Require Import Arith Omega List Metatheory.
+Require Import Arith List Metatheory.
 Require Import ML_SP_Definitions ML_SP_Infrastructure Cardinal.
 Require Import ML_SP_Soundness.
 
@@ -67,7 +67,6 @@ Section Moregen.
     induction T; simpl. auto.
       case_eq (get v S); intros.
         rewrite* typ_subst_fresh.
-        apply (H _ _ (binds_in H0)).
       simpl.
       rewrite* H0.
     simpl; congruence.
@@ -225,7 +224,7 @@ Fixpoint unify0 unify (h:nat) (pairs:list(typ*typ)) (K:kenv) (S:subs) {struct h}
   end.
 
 Section Accum.
-  Variables A B : Set.
+  Variables A B : Type.
   Variables (f : A -> B) (op : B->B->B) (unit : B).
 
   Fixpoint accum (l:list A) {struct l} : B :=
