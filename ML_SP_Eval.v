@@ -651,7 +651,51 @@ Proof.
       apply* closed_n_app2trm.
       apply* cln_app_trm.
     apply* list_forall_map.
-
+  clear IHlist_forall L H2 H4 H5.
+  unfold app2trm.
+  induction app using rev_ind.
+    simpl.
+    destruct (app_trm_cases t').
+      do 2 rewrite H; clear H.
+      unfold trm_inst; simpl.
+      intro; intros.
+      inversions H; try discriminate.
+      apply* typing_app.
+      rewrite* term_trm_inst.
+      rewrite term_trm_inst in H12; auto.
+    destruct H. subst; unfold trm_inst; simpl.
+    intro; intros.
+    inversions H; try discriminate.
+    apply* (@typing_let gc M L1 L2).
+    rewrite* term_trm_inst.
+    rewrite term_trm_inst in H7; auto*.
+  rewrite map_app.
+  repeat rewrite fold_left_app. simpl.
+  assert (Habs: forall t t' t1,
+    fold_left app_trm (List.map clos2trm app) (app_trm t' t1) <> trm_abs t).
+    clear.
+    intros.
+    induction app using rev_ind. destruct t'; discriminate.
+    clear IHapp.
+    rewrite map_app; rewrite fold_left_app.
+    intro.
+    destruct (fold_left app_trm (List.map clos2trm app) (app_trm t' t1));
+     discriminate.
+  destruct (app_trm_cases 
+    (fold_left app_trm (List.map clos2trm app) (app_trm t' t1))).
+   rewrite H; clear H.
+   destruct (app_trm_cases 
+     (fold_left app_trm (List.map clos2trm app) (app_trm t' t2))).
+    rewrite H; clear H.
+    unfold trm_inst in *; simpl.
+    intro; intros.
+    inversions H; try discriminate.
+    assert (list_forall clos_ok app)
+      by (apply list_forall_in; intros; apply* (list_forall_out H10)).
+    assert (clos_ok x) by apply* (list_forall_out H10).
+    apply* typing_app.
+   destruct H. elim (Habs _ _ _ H).
+  destruct H. elim (Habs _ _ _ H).
 Qed.
 
 Theorem eval_sound : forall h fl benv args K E t T,
@@ -665,14 +709,7 @@ Theorem eval_sound : forall h fl benv args K E t T,
 Proof.
   induction h; introv; intros Hargs Hbenv Ht Hfl Typ.
     simpl*.
-  
-    
-  induction 2. simpl*.
-Search closed_n.
-        unfold app2trm.
-        induction 
-        
-  inversions
+    refine (retypable_stack2trm _ _ _ _ Typ); auto.
   
   
     rewrite* trm_inst_app2trm.
