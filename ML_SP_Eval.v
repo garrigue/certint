@@ -388,10 +388,9 @@ Proof.
   apply H8.
 Qed.
 
-Lemma term_trm_inst : forall t tl,
-  closed_n 0 t -> trm_inst t tl = t.
+Lemma term_trm_inst : forall n t tl,
+  closed_n n t -> trm_inst_rec n tl t = t.
 Proof.
-  unfold trm_inst; generalize 0.
   induction 1; simpl*; try congruence.
   destruct* (le_lt_dec n m).
   elimtype False; omega.
@@ -466,62 +465,109 @@ Proof.
   unfold gc in *.
   gen_eq (false, GcAny) as g.
   gen n C.
-  induction H0; intros; destruct C; try discriminate; simpl in *.
-        destruct (n === n0); try discriminate.
-         subst.
-         apply* (H K E (sch_open M Us)).
-       inversions* H5.
-       destruct (n === n0); try discriminate.
-        subst*.
-        apply* H.
-        apply* (@typing_abs gc L).
-       inversions* H4.
-        apply* (@typing_abs gc L).
-        intros.
-        simpl in *.
-        puts (H1 _ H3); clear H1.
-        unfold trm_open.
-        rewrite* trm_open_comm.
-        apply* (H2 _ H3).
-        unfold trm_open.
-        rewrite* trm_open_comm.
-      destruct (n === n0); try discriminate.
-       subst.
-       eapply typing_let.
-       
-  induction C; simpl; intros; intro; intros; auto*.
-     destruct* (n0 === n).
-    inversions H1.
-    apply* (@typing_abs gc L).
-    intros.
-    puts (H6 _ H2).
-    unfold trm_open in H4.
-    rewrite trm_open_comm in H4; auto*.
-    
+  induction H0; intros; destruct C; try discriminate; simpl in *; subst*;
+    try solve [inversion* H0 | destruct (n === n0); try discriminate; subst*].
+        inversions* H5.
+      inversions* H4.
+      apply* (@typing_abs gc L).
+      intros.
+      simpl in *.
+      puts (H1 _ H3); clear H1.
+      unfold trm_open.
+      rewrite* trm_open_comm.
+      apply* (H2 _ H3).
+      unfold trm_open.
+      rewrite* trm_open_comm.
+    inversions* H5; clear H0 H2 H5.
+    apply* (@typing_let gc M L1 L2); intros.
+    unfold trm_open.
+    rewrite* trm_open_comm.
+    apply* (H3 _ H0).
+    rewrite* trm_open_comm.
+  inversions* H4.
+Qed.
 
-    SearchRewrite trm_open.
-    simpl.
-    rewrite (@Infra.trm_open_rec _ t2 (term_var x) (S n)).
+Lemma retypable_app_trm : forall t1 t2,
+  retypable (trm_app t1 t2) (app_trm t1 t2).
+Proof.
+  intros; intro; intros.
+  unfold app_trm; destruct* t1.
+  apply* typing_app_abs_let.
+Qed.
+
+Ltac case_rewrite H t :=
+  case_eq t; introv H; rewrite H in *; try discriminate.
+
+Lemma app_trm_cases : forall t1,
+  (forall t2, app_trm t1 t2 = trm_app t1 t2) \/ (exists t, t1 = trm_abs t).
+Proof.
+  intros.
+  destruct t1; simpl*.
+Qed.
+
+Hint Resolve term_closed_0 clos_ok_term.
+
+Lemma term_closed_n : forall n t,
+  term t -> closed_n n t.
+Proof.
+  intros.
+  apply* (@closed_n_le 0); omega.
+Qed.
+
+Hint Resolve term_closed_n.
 
 Lemma trm_inst_app2trm : forall t benv args,
   list_forall clos_ok args ->
   retypable (trm_inst (app2trm t args) benv) (app2trm (trm_inst t benv) args).
 Proof.
   unfold trm_inst, app2trm.
-  induction args using rev_ind; intros; simpl*.
+  intros.
+  generalize 0; induction args using rev_ind; intros; simpl*.
     intro; auto*.
   rewrite map_app. do 2 rewrite fold_left_app; simpl.
-  rewrite IHargs.
-    destruct 
-    fold (trm_inst (clos2trm x) benv).
-    rewrite* term_trm_inst.
-    apply term_closed_0.
-    apply clos_ok_term.
-    Check list_forall_out.
-    apply* (list_forall_out H).
-  apply list_forall_in.
-  intros.
-  apply* (list_forall_out H).
+  intro; intros.
+  clear IHargs.
+  gen x T; induction args using rev_ind; intros.
+    simpl in *.
+    assert (closed_n n (clos2trm x)) by inversions* H.
+    clear H.
+    destruct (app_trm_cases t).
+      rewrite H in H0; simpl in H0.
+      inversions H0; try discriminate.
+      simpl in *.
+      apply* retypable_app_trm.
+      fold (trm_inst (clos2trm x) benv) in H8.
+      rewrite term_trm_inst in H8; auto*.
+    destruct H as [t1 Ht1].
+    subst. simpl app_trm in *.
+    simpl in H0.
+    inversions H0; try discriminate.
+    rewrite term_trm_inst in H5; auto*.
+  rewrite map_app in *.
+  repeat rewrite fold_left_app in *.
+  simpl in *.
+  destruct (app_trm_cases (app_trm
+           (fold_left app_trm (List.map clos2trm args)
+              (trm_inst_rec n benv t)) (clos2trm x))).
+    rewrite H1; clear H1.
+    destruct (app_trm_cases
+      (app_trm (fold_left app_trm (List.map clos2trm args) t) (clos2trm x))).
+      rewrite H1 in *; clear H1.
+      simpl in H0.
+      inversions H0; try discriminate; clear H0.
+      apply* typing_app.
+        simpl.
+        apply* IHargs.
+        apply* list_forall_in.
+        intros; apply* (list_forall_out H).
+      rewrite term_trm_inst in H7; auto*.
+      assert (clos_ok x0) by apply* (list_forall_out H).
+      auto.
+    destruct H1.
+    case_rewrite R (fold_left app_trm (List.map clos2trm args) t).
+  destruct H1.
+  case_rewrite R
+    (fold_left app_trm (List.map clos2trm args) (trm_inst_rec n benv t)).
 Qed.
 
 (*
@@ -554,8 +600,59 @@ Inductive frame_ok : frame -> Prop :=
     frame_ok (Frame benv app trm).
 Hint Constructors frame_ok.
 
-Ltac case_rewrite t H :=
-  case_eq t; introv H; rewrite H in *; try discriminate.
+Lemma cln_app_trm : forall n t1 t2,
+  closed_n n t1 -> closed_n n t2 -> closed_n n (app_trm t1 t2).
+Proof.
+  intros.
+  destruct (app_trm_cases t1).
+    rewrite* H1.
+  destruct H1.
+  subst; simpl.
+  inversions* H.
+Qed.
+
+Lemma closed_n_app2trm : forall n t args,
+  closed_n n t ->
+  list_forall clos_ok args ->
+  closed_n n (app2trm t args).
+Proof.
+  unfold app2trm.
+  intros.
+  induction args using rev_ind. simpl*.
+  rewrite map_app; rewrite fold_left_app. simpl.
+  assert (clos_ok x) by apply* (list_forall_out H0).
+  assert (list_forall clos_ok args) by
+    (apply list_forall_in; intros; apply* (list_forall_out H0)).
+  apply* cln_app_trm.
+Qed.
+
+Lemma retypable_stack2trm : forall t1 t2 fl,
+  term t1 -> term t2 ->
+  retypable t1 t2 ->
+  list_forall frame_ok fl ->
+  retypable (stack2trm t1 fl) (stack2trm t2 fl).
+Proof.
+  intros.
+  gen t1 t2; induction H2; intros; simpl. auto.
+  destruct x as [benv app t'].
+  case_eq (is_bvar t1); intros.
+    inversions H0; discriminate.
+  case_eq (is_bvar t2); intros.
+    inversions H1; discriminate.
+  inversions H; clear H.
+  apply IHlist_forall.
+      apply term_trm_inst_closed.
+        rewrite map_length.
+        apply* closed_n_app2trm.
+        apply* cln_app_trm.
+      apply* list_forall_map.
+    apply term_trm_inst_closed.
+      rewrite map_length.
+      apply* closed_n_app2trm.
+      apply* cln_app_trm.
+    apply* list_forall_map.
+
+Qed.
 
 Theorem eval_sound : forall h fl benv args K E t T,
   list_forall clos_ok args ->
@@ -568,6 +665,16 @@ Theorem eval_sound : forall h fl benv args K E t T,
 Proof.
   induction h; introv; intros Hargs Hbenv Ht Hfl Typ.
     simpl*.
+  
+    
+  induction 2. simpl*.
+Search closed_n.
+        unfold app2trm.
+        induction 
+        
+  inversions
+  
+  
     rewrite* trm_inst_app2trm.
   simpl.
   destruct t.
