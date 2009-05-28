@@ -321,24 +321,24 @@ Module SndHyp.
     destruct* (IHTL1 T2 TL2 Us).
   Qed.
 
-  Lemma fold_app_inv : forall K E t tl T,
-    K ; E |(false,GcLet)|= fold_left trm_app tl t ~: T ->
+  Lemma gc_lower_false : forall gc, gc_lower (false, gc) = (false, gc).
+  Proof. destruct gc; simpl*. Qed.
+
+  Lemma fold_app_inv : forall K E gc t tl T,
+    K ; E |(false,gc)|= fold_left trm_app tl t ~: T ->
     exists TL,
-      K ; E |(false,GcLet)|= t ~: fold_right typ_arrow T TL /\
-      For_all2 (typing (false,GcLet) K E) tl TL.
+      K ; E |(false,gc)|= t ~: fold_right typ_arrow T TL /\
+      For_all2 (typing (false,gc) K E) tl TL.
   Proof.
-    intros K E t tl.
-    rewrite <- (rev_involutive tl).
-    induction (rev tl); clear tl; simpl; intros.
-      exists (nil(A:=typ)). auto.
+    induction tl using rev_ind; simpl; intros.
+      exists* (nil(A:=typ)).
     rewrite fold_left_app in *; simpl in *.
-    inversions H.
-    destruct (IHl (typ_arrow S T) H4).
-    exists (x ++ S :: nil).
+    inversions H; try discriminate. rewrite gc_lower_false in *.
+    destruct (IHtl (typ_arrow S T) H4).
+    exists (x0 ++ S :: nil).
     rewrite fold_right_app; simpl.
     split*. apply* For_all2_app.
     simpl. split*.
-    discriminate.
   Qed.
 
   Lemma map_nth : forall (A B:Set) d1 d2 (f:A->B) k l,
@@ -368,12 +368,12 @@ Module SndHyp.
 
   Hint Rewrite combine_length combine_nth : list.
 
-  Lemma get_kind_for_matches : forall k l (ND:NoDup l) t K E Us,
+  Lemma get_kind_for_matches : forall k l (ND:NoDup l) t K E gc Us,
     k < length l ->
     proper_instance K (sch_kinds (Delta.type (Const.matches ND))) Us ->
-    K; E |(false,GcLet)|= trm_app (trm_cst (Const.tag (nth k l var_default)))
+    K; E |(false,gc)|= trm_app (trm_cst (Const.tag (nth k l var_default)))
                     t ~: nth 0 Us typ_def ->
-    K; E |(false,GcLet)|= t ~: nth (S (S k)) Us typ_def.
+    K; E |(false,gc)|= t ~: nth (S (S k)) Us typ_def.
   Proof.
     introv Hk PI Typ.
     destruct PI as [[Arity _] WK].
@@ -385,6 +385,7 @@ Module SndHyp.
     inversions WK. clear WK.
     destruct H2 as [_ HE]. simpl in *.
     inversions Typ; try discriminate. clear Typ.
+    rewrite gc_lower_false in *.
     inversions H4; try discriminate. clear H4 H8.
     destruct H9 as [_ WK'].
     destruct* Us0. discriminate.
@@ -418,18 +419,18 @@ Module SndHyp.
     rewrite* min_l.
   Qed.
 
-  Lemma delta_typed : forall n t1 t2 tl K E T,
+  Lemma delta_typed : forall n t1 t2 tl K E gc T,
     Delta.rule n t1 t2 ->
     list_for_n term n tl ->
-    K ; E |(false,GcLet)|= trm_inst t1 tl ~: T ->
-    K ; E |(true,GcAny)|= trm_inst t2 tl ~: T.
+    K ; E |(false,gc)|= trm_inst t1 tl ~: T ->
+    K ; E |(false,gc)|= trm_inst t2 tl ~: T.
   Proof.
     intros.
-    apply (@typing_gc_any (false,GcLet)).
     clear H0.
     destruct H as [l [ND [k [HN [HK [T1 T2]]]]]].
     subst.
     inversions H1; try discriminate; clear H1.
+    rewrite gc_lower_false in *.
     rewrite trm_inst_app in H4.
     unfold const_app in H4.
     destruct (fold_app_inv _ _ H4) as [TL [Typ0 TypA]]; clear H4.
@@ -451,7 +452,7 @@ Module SndHyp.
        rewrite seq_nth in TypA; auto.
        simpl in TypA, H.
        inversions H; clear H.
-       apply* typing_app.
+       eapply typing_app; rewrite* gc_lower_false.
        apply* get_kind_for_matches.
       rewrite* seq_length.
      rewrite* seq_length.
@@ -490,8 +491,8 @@ Module SndHyp.
     induction TL; simpl; auto.
   Qed.
 
-  Lemma value_is_tag : forall K v n T,
-    K; empty |(false,GcLet)|= v ~: T ->
+  Lemma value_is_tag : forall K gc v n T,
+    K; empty |(false,gc)|= v ~: T ->
     valu n v ->
     typ_arity T <= n ->
     exists l, exists tl, v = const_app (Const.tag l) tl.
@@ -500,6 +501,7 @@ Module SndHyp.
       try discriminate.
       simpl in TA. elim (le_Sn_O _ TA).
       clear IHv2.
+      rewrite gc_lower_false in *.
       destruct* (IHv1 (Datatypes.S n) _ H5) as [l [tl EQ]].
         simpl. apply* le_n_S.
       exists l. exists (tl ++ v2 :: nil).
@@ -515,11 +517,11 @@ Module SndHyp.
     simpl. omega.
   Qed.
 
-  Lemma tag_is_const : forall v vl K T TL,
+  Lemma tag_is_const : forall v vl K gc T TL,
     S (Const.arity (Const.tag v)) = length vl ->
-    K; empty |(false,GcLet)|= trm_cst (Const.tag v) ~:
+    K; empty |(false,gc)|= trm_cst (Const.tag v) ~:
       fold_right typ_arrow T TL ->
-    For_all2 (typing (false,GcLet) K empty) vl TL -> False.
+    For_all2 (typing (false,gc) K empty) vl TL -> False.
   Proof.
     introv Hv TypC TypA.
     inversions TypC; try discriminate. clear TypC H4.
@@ -605,10 +607,10 @@ Module SndHyp.
     apply nth_indep. omega.
   Qed.
 
-  Lemma typing_tag_inv : forall K l tl x,
-    K; empty |(false,GcLet)|= const_app (Const.tag l) tl ~: typ_fvar x ->
+  Lemma typing_tag_inv : forall K gc l tl x,
+    K; empty |(false,gc)|= const_app (Const.tag l) tl ~: typ_fvar x ->
     exists t, exists T, exists k,
-      tl = t :: nil /\  K; empty |(false,GcLet)|= t ~: T /\ binds x (Some k) K
+      tl = t :: nil /\  K; empty |(false,gc)|= t ~: T /\ binds x (Some k) K
       /\ exists M, entails k (@Kind _ (Delta.valid_tag l) ((l, T) :: nil) M).
   Proof.
     introv Typv.
@@ -641,13 +643,13 @@ Module SndHyp.
     exists* kh.
   Qed.
 
-  Lemma const_arity_ok0 : forall c vl K T,
+  Lemma const_arity_ok0 : forall c vl K gc T,
     S(Const.arity c) = length vl ->
-    K ; empty |(false,GcLet)|= const_app c vl ~: T ->
+    K ; empty |(false,gc)|= const_app c vl ~: T ->
     exists l, exists ND : NoDup l, exists Us, exists v, exists vl',
       vl = rev (v :: vl') /\ c = Const.matches ND /\ length l = length vl' /\
       proper_instance K (sch_kinds (Delta.type (Const.matches ND))) Us /\
-      K; empty |(false,GcLet)|= v ~: nth 0 Us typ_def.
+      K; empty |(false,gc)|= v ~: nth 0 Us typ_def.
   Proof.
     intros.
     unfold const_app in H0.
@@ -682,9 +684,9 @@ Module SndHyp.
     simpl in H0. inversions* H0.
   Qed.
 
-  Lemma const_arity_ok : forall c vl K T,
+  Lemma const_arity_ok : forall c vl K gc T,
     list_for_n value (S(Const.arity c)) vl ->
-    K ; empty |(false,GcLet)|= const_app c vl ~: T ->
+    K ; empty |(false,gc)|= const_app c vl ~: T ->
     exists n:nat, exists t1:trm, exists t2:trm, exists tl:list trm,
       Delta.rule n t1 t2 /\ list_for_n term n tl /\
       const_app c vl = trm_inst t1 tl.

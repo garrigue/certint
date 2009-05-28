@@ -544,14 +544,14 @@ Qed.
 (** Extra hypotheses for main results *)
 
 Module Type SndHypIntf.
-  Parameter delta_typed : forall n t1 t2 tl K E T,
+  Parameter delta_typed : forall n t1 t2 tl K E gc T,
     Delta.rule n t1 t2 ->
     list_for_n term n tl ->
-    K ; E |(false,GcLet)|= trm_inst t1 tl ~: T ->
-    K ; E |(true,GcAny)|= trm_inst t2 tl ~: T.
-  Parameter const_arity_ok : forall c vl K T,
+    K ; E |(false,gc)|= trm_inst t1 tl ~: T ->
+    K ; E |(false,gc)|= trm_inst t2 tl ~: T.
+  Parameter const_arity_ok : forall c vl K gc T,
     list_for_n value (S(Const.arity c)) vl ->
-    K ; empty |(false,GcLet)|= const_app c vl ~: T ->
+    K ; empty |(false,gc)|= const_app c vl ~: T ->
     exists n:nat, exists t1:trm, exists t2:trm, exists tl:list trm,
       Delta.rule n t1 t2 /\ list_for_n term n tl /\
       const_app c vl = trm_inst t1 tl.
@@ -628,6 +628,7 @@ Proof.
   clear -H0 H1 H3.
   gen_eq (trm_inst t0 tl) as t1.
   induction H3 using typing_gc_ind; intros; subst.
+    apply* typing_gc_any.
     apply* delta_typed.
   apply* typing_gc. simpl; auto.
   (* App1 *)
@@ -635,6 +636,7 @@ Proof.
   (* App2 *)
   auto*.
   (* Delta/cst *)
+  apply* (@typing_gc_any (false,GcAny)).
   apply* delta_typed.
   rewrite* H2.
 Qed. 
@@ -671,7 +673,7 @@ Lemma progress_delta : forall K t0 t3 t2 T,
 Proof.
   intros.
   destruct (value_app_const H0) as [c [vl [Hlen [Heq Hv]]]].
-  destruct (const_arity_ok (c:=c) (vl:=vl ++ t2 :: nil) (K:=K) (T:=T)).
+  destruct (@const_arity_ok c (vl ++ t2 :: nil) K GcLet T).
     split. rewrite <- Hlen. rewrite app_length. simpl; ring.
     apply* list_forall_concat.
     rewrite Heq in H.
@@ -712,7 +714,7 @@ Proof.
         right; exists* (t0 ^^ t2).
         case_eq (Const.arity c); intros.
           right. rewrite H0 in Val1.
-          destruct (const_arity_ok (c:=c)(vl:=t2::nil)(K:=K)(T:=T)).
+          destruct (@const_arity_ok c (t2::nil) K GcLet T).
             rewrite H0. constructor; simpl; auto.
           unfold const_app; simpl*.
           destruct H1 as [t1' [t3' [tl [R [Htl Heq]]]]].
