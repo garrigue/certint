@@ -61,8 +61,6 @@ Inductive clos : Set :=
   | clos_abs : trm -> list clos -> clos
   | clos_const : Const.const -> list clos -> clos.
 
-Check clos_ind.
-
 Section ClosInd.
 Variable P : clos -> Prop.
 Hypothesis Habs : forall t l, list_forall P l -> P (clos_abs t l).
@@ -141,7 +139,6 @@ Inductive clos_ok : clos -> Prop :=
       list_forall clos_ok cls ->
       List.length cls <= Const.arity c ->
       clos_ok (clos_const c cls).
-Check clos_ok_ind.
 Reset clos_ok_ind.
 
 Section ClosOkInd.
@@ -312,8 +309,7 @@ Fixpoint eval (h:nat) (benv:list clos) (app:list clos) (t:trm)
   end.
 End Eval.
 
-Check eval.
-
+(*
 Definition trm_S :=
   trm_abs (trm_abs (trm_abs
     (trm_app (trm_app (trm_bvar 2) (trm_bvar 0))
@@ -337,6 +333,7 @@ Definition skk' := eval nil 3 nil nil
 
 Eval compute in skk'.
 Eval compute in res2trm skk'.
+*)
 
 Module Rename2 := Rename.Mk2(Delta).
 Import Rename2.
@@ -873,7 +870,54 @@ Proof.
   apply* has_scheme_from_vars'.
 Qed.
 
-Theorem eval_sound : forall h fl benv args K t T,
+Lemma retypable_app_clos : forall benv t t1,
+  closed_n (length benv) t ->
+  trm2app t = None ->
+  retypable E (app_trm (trm_inst t (List.map clos2trm benv)) t1)
+    (app_trm (clos2trm (trm2clos benv fenv t)) t1).
+Proof.
+  intros; intro; intros.
+  destruct (app_trm_cases (trm_inst t (List.map clos2trm benv))).
+    rewrite H2 in H1.
+    apply retypable_trm_app.
+    inversions H1; try discriminate.
+    apply* typing_app.
+    simpl gc_lower in *.
+    apply* retypable_clos.
+  destruct H2.
+  rewrite H2 in H1; simpl in H1.
+  inversions H1; try discriminate; clear H1.
+  destruct t; try discriminate.
+    simpl.
+    rewrite <- (map_nth clos2trm).
+    rewrite <- trm_inst_n.
+      rewrite H2; simpl*.
+    rewrite* map_length.
+  simpl.
+  unfold trm_inst in H2; simpl in H2; inversions* H2.
+Qed.
+
+Lemma clos_ok_trm : forall benv K t T,
+  list_forall clos_ok benv ->
+  closed_n (length benv) t ->
+  K;E |gc|= trm_inst t (List.map clos2trm benv) ~: T ->
+  trm2app t = None ->
+  clos_ok (trm2clos benv fenv t).
+Proof.
+  intros.
+  destruct t; simpl; try discriminate.
+     apply (list_forall_out H).
+     inversions H0; apply* nth_In.
+    inversions H1; try discriminate.
+    destruct (fenv_ok H6) as [cl [B [Hcl Typ]]].
+    rewrite* B.
+   inversions H0.
+   constructor; auto.
+  constructor; auto.
+  simpl; omega.
+Qed.
+
+Theorem eval_sound_rec : forall h fl benv args K t T,
   list_forall clos_ok args ->
   list_forall clos_ok benv ->
   closed_n (length benv) t ->
@@ -964,514 +1008,164 @@ Proof.
     apply* retypable_app2trm.
     intro; intros.
     clear Typ.
+    poses Typ (retypable_app_clos _ _ Ht H H1); clear H1.
+    rewrite H0 in Typ.
+    simpl in Typ.
     unfold trm_inst.
     rewrite <- trm_inst_rec_more;
       [|rewrite* map_length | apply* list_forall_map].
     set (t1 := trm_inst_rec 1 (List.map clos2trm l) t0) in *.
-    case_eq (is_abs (trm_inst t (List.map clos2trm benv))); intros.
-      assert (trm_inst t (List.map clos2trm benv) = clos2trm (clos_abs t0 l)).
-        destruct t; try discriminate; simpl in *.
-         rewrite (trm_inst_n (clos2trm clos_def)).
-          rewrite map_nth. rewrite* H0.
-         rewrite* map_length.
-        inversions* H0.
-      rewrite H7 in *.
-      simpl in H1.
-      fold t1 in H1.
-      clear H H2 fl Hfl; inversions H1; try discriminate.
-      destruct (var_fresh (L2 \u trm_fv t1)).
-      forward~ (H12 x) as Typ; clear H12; simpl gc_raise in Typ.
-      fold (trm_open t1 (clos2trm arg)).
-      rewrite* (@trm_subst_intro x).
-      replace E with (E & empty) by simpl*.
-      apply* typing_trm_subst.
-      simpl*.
-    rewrite (app_trm_false _ _ H2) in H1.
-    inversions H1; try discriminate; clear H1.
-    puts (retypable_clos _ Ht H H11); clear H11.
-    rewrite H0 in H1.
-    simpl in H1.
-    unfold trm_inst in H1; simpl in H1.
-    fold t1 in H1.
-    inversions H1; try discriminate; clear H1.
-    destruct (var_fresh (L \u trm_fv t1)).
-    forward~ (H14 x) as Typ; clear H14; simpl gc_raise in *.
+    clear H fl Hfl; inversions Typ; try discriminate.
+    destruct (var_fresh (L2 \u trm_fv t1)).
+    clear Typ; forward~ (H10 x) as Typ; clear H10; simpl gc_raise in Typ.
     fold (trm_open t1 (clos2trm arg)).
     rewrite* (@trm_subst_intro x).
     replace E with (E & empty) by simpl*.
-    apply* (@typing_trm_subst false empty (Sch S nil)).
-    exists {}. intro; simpl; intros.
-    unfold kinds_open_vars, sch_open_vars; simpl*.
-    puts (fresh_length _ _ _ H1).
-    destruct Xs; try discriminate.
-    rewrite* typ_open_vars_nil.
+    apply* typing_trm_subst.
+    simpl*.
   simpl length.
   rewrite <- plus_n_Sm.
+  case_eq (is_abs (trm_inst t (List.map clos2trm benv))); intros.
+    elimtype False.
+    destruct t; try discriminate.
+    simpl in H0.
+    rewrite (trm_inst_n (clos2trm clos_def)) in H1; try rewrite* map_length.
+    rewrite map_nth in H1. rewrite H0 in H1.
+    clear -H1.
+    simpl in H1. unfold const_app in H1.
+    induction (List.map clos2trm l) using rev_ind. discriminate.
+    rewrite fold_left_app in H1. discriminate.
+  assert (Hc: clos_ok (clos_const c l)).
+    rewrite <- H0.
+    destruct (typing_stack2trm_inv _ _ Typ).
+      apply* is_bvar_term.
+    destruct H2.
+    destruct* (typing_app2trm_inv _ _ H2).
+    apply* clos_ok_trm.
+  assert (Typ': K; E |gc|= stack2trm
+    (app2trm (clos2trm (trm2clos benv fenv t)) (arg :: args)) fl ~:  T).
+    refine (retypable_stack2trm _ _ _ _ Typ); auto.
+    unfold app2trm in *; simpl in *.
+    clear Typ; intro; introv Typ.
+    refine (retypable_app2trm _ _ _ Typ); auto.
+      apply* retypable_app_clos.
+    inversions* Hargs.
+  clear Typ; rewrite H0 in Typ'; simpl in Typ'.
   destruct (le_lt_dec (Const.arity c) (length l + length args)).
     simpl.
     case_eq (l ++ arg :: args); intros. destruct l; discriminate.
     case_eq (cut (Const.arity c) l1); intros.
     assert (Const.arity c <= length l1).
-      clear -l0 H1.
-      puts (f_equal (@length clos) H1).
+      clear -l0 H2.
+      puts (f_equal (@length clos) H2).
       rewrite app_length in H.
       simpl in H.
       omega.
-    destruct (cut_ok _ H3 H2).
+    destruct (cut_ok _ H4 H3).
     subst.
-    case_eq (is_abs (trm_inst t (List.map clos2trm benv))); intros.
-      destruct t; try discriminate.
-      simpl in H0.
-      rewrite (trm_inst_n (clos2trm clos_def)) in H5; try rewrite* map_length.
-      rewrite map_nth in H5. rewrite H0 in H5.
-      elimtype False; clear -H5.
-      simpl in H5. unfold const_app in H5.
-      induction (List.map clos2trm l) using rev_ind. discriminate.
-      rewrite fold_left_app in H5. discriminate.
     assert (Hok: list_forall clos_ok (c0 :: l2 ++ l3)).
-      rewrite <- H1.
+      rewrite <- H2.
       apply list_forall_in.
       intros.
       destruct (in_app_or _ _ _ H6).
-        assert (clos_ok (clos_const c l)).
-          rewrite <- H0.
-Lemma clos_ok_trm : forall benv K t T,
-  list_forall clos_ok benv ->
-  closed_n (length benv) t ->
-  K;E |gc|= t ~: T ->
-  trm2app t = None ->
-  clos_ok (trm2clos benv fenv t).
-Proof.
-  intros.
-  destruct t; simpl; try discriminate.
-     apply (list_forall_out H).
-     inversions H0; apply* nth_In.
-    inversions H1; try discriminate.
-    destruct (fenv_ok H6) as [cl [B [Hcl Typ]]].
-    rewrite* B.
-   inversions H0.
-   constructor; auto.
-  constructor; auto.
-  simpl; omega.
-Qed.
-   
-
-      
-          destruct t; try discriminate.
-          apply (list_forall_out Hbenv).
-          inversions Ht; apply* nth_In.
-           inversions H6; clear H6.
-           apply* (list_forall_out H9).
-          apply* (list_forall_out Hargs).
-         assert (Hok2: list_forall clos_ok (c0 :: l2)).
-          apply list_forall_in; intros; apply* (list_forall_out Hok).
-         assert (Hok3: list_forall clos_ok l3).
-          apply list_forall_in; intros; apply* (list_forall_out Hok).
-         destruct (@delta_red_sound c (c0 :: l2))
-           as [t1 [t2 [tl Hd]]].
-           split*. simpl; rewrite* H3.
-
-        replace (app2trm (const_app c (List.map clos2trm l)) (arg :: args))
-          with (app2trm (const_app c (List.map clos2trm (c0 :: l2))) l3)
-            in Typ.
-         subst.
-         assert (K; E |gc|=
-           stack2trm (app2trm (clos2trm (delta_red c (c0 :: l2))) l3) fl ~: T).
-          assert (Habs: forall l, is_abs (const_app c l) = false).
-           clear; unfold const_app.
-           induction l using rev_ind.
-            simpl*.
-           rewrite fold_left_app. simpl*.
-          refine (retypable_stack2trm _ _ _ _ Typ); auto.
-            apply* term_app2trm.
-            unfold const_app. apply* term_fold_app.
-            apply* (@list_forall_map _ _ clos2trm clos_ok).
-           apply* is_abs_app2trm.
-          apply* retypable_app2trm.
-          intro; intros.
-          destruct (Hd _ _ _ H4) as [Hr [Htl [Ht1 [Ht2 _]]]]; clear Typ Hd.
-          rewrite Ht1 in H4.
-          rewrite Ht2.
-          apply* SH.delta_typed. split*.
-         assert (clos_ok (delta_red c (c0 :: l2))).
-          clear -Typ Hd.
-          set (args := List.map clos2trm (c0 :: l2)) in *.
-          destruct (typing_stack2trm_inv _ _ Typ).
-           destruct (app2trm_cases (const_app c args) l3).
-            destruct H as [t1' [t2' Happ]]. rewrite* Happ.
-           destruct H.
-            destruct H as [t1' [t2' Happ]]. rewrite* Happ.
-           rewrite H. unfold const_app.
-           clear. induction args using rev_ind.
-            simpl*.
-           rewrite fold_left_app. simpl*.
-          destruct H.
-          destruct (typing_app2trm_inv _ _ H).
-           clear. unfold const_app; induction args using rev_ind.
-            simpl*.
-           rewrite fold_left_app. simpl*.
-          destruct* (Hd _ _ _ H0).
-         case_rewrite R (delta_red c (c0 :: l2)).
-          inversions H5.
-          apply* IHh.
-         inversions H5.
-         apply* IHh.
-          apply* list_forall_app.
-         simpl in *.
-         rewrite trm_inst_nil.
-         rewrite app2trm_app.
-         rewrite* app2trm_cst.
-        do 2 rewrite <- app2trm_cst.
-        do 2 rewrite <- app2trm_app.
-        rewrite H0. simpl. rewrite* H4.
-       simpl.
-       assert (Hlen: n < length benv).
-        destruct* (le_lt_dec (length benv) n).
-        rewrite nth_overflow in H; auto. discriminate.
-       assert (Hn: trm_inst (trm_bvar n) (List.map clos2trm benv)
-                   = clos2trm (clos_const c l)).
-        unfold trm_inst; simpl.
-        rewrite <- minus_n_O.
-        rewrite <- (map_length clos2trm) in Hlen.
-        rewrite <- (nth_indep _ (clos2trm clos_def) (trm_bvar n) Hlen).
-        rewrite map_nth.
-        rewrite* H.
-       destruct fl.
-        simpl in *.
-        rewrite <- app2trm_cst.
-        rewrite app2trm_app.
-        rewrite app2trm_cst.
-        rewrite Hn in Typ. auto.
-       destruct f as [benv' app' t].
-       inversions Hfl; clear Hfl.
-       inversions H3; clear H3.
-       apply* IHh; clear IHh.
-        constructor; auto.
-        constructor.
-         apply* list_forall_app.
-         assert (clos_ok (clos_const c l)).
-          rewrite <- H.
-          apply (list_forall_out Hbenv).
-          apply* nth_In.
-         inversions* H0.
-        rewrite app_length; simpl; omega.
-       simpl in Typ.
-       rewrite Hn in Typ.
-       case_rewrite R (is_bvar
-                      (app2trm (clos2trm (clos_const c l)) (arg :: args))).
-        unfold app2trm in R.
-        clear -R; induction args using rev_ind; simpl in R.
-         rewrite is_bvar_app_trm in R. discriminate.
-        rewrite map_app in R; rewrite fold_left_app in R; simpl in R.
-        rewrite is_bvar_app_trm in R. discriminate.
-       simpl in Typ.
-       rewrite <- app2trm_cst in Typ.
-       rewrite <- app2trm_app in Typ.
-       unfold app2trm in Typ.
-       unfold app2trm; simpl.
-       rewrite <- app2trm_cst.
-       apply Typ.
-
-
-
-
-
-
-
-  destruct t.
-       destruct args as [|arg args].
-        unfold app2trm, trm_inst in Typ; simpl in *.
-        rewrite <- minus_n_O in Typ.
-        destruct fl.
-         clear IHh. simpl in *.
-         destruct (le_lt_dec (length (List.map clos2trm benv)) n).
-          rewrite nth_overflow in Typ; auto. inversions Typ. inversion H.
-         rewrite <- (nth_indep _ (clos2trm clos_def) (trm_bvar n) l) in Typ.
-         rewrite map_nth in Typ. auto.
-        destruct f as [benv' app' t'].
-        inversions Hfl; clear Hfl.
-        inversions H2; clear H2.
-        inversions Ht; clear Ht.
-        poses Hlen H2.
-        rewrite <- (map_length clos2trm) in H2.
-        rewrite (nth_indep _ (trm_bvar n) (clos2trm clos_def) H2) in Typ.
-        rewrite map_nth in Typ.
-        assert (Hn: clos_ok (nth n benv clos_def)).
-         apply (list_forall_out Hbenv).
-         apply* nth_In.
-        simpl in Typ.
-        case_rewrite R (is_bvar (clos2trm (nth n benv clos_def))).
-         case_rewrite R1 (clos2trm (nth n benv clos_def)).
-         clear -R1 Hn.
-         assert (term (trm_bvar n0)).
-          rewrite <- R1.
-          apply* clos_ok_term.
-         inversion H.
-        clear R.
-        set (t1 := trm_inst t' (List.map clos2trm benv')) in *.
-        replace (app2trm (app_trm t1 (clos2trm (nth n benv clos_def))) app')
-          with (app2trm t1 (nth n benv clos_def :: app')) in Typ; auto*.
-       simpl trm2clos.
-       case_eq (nth n benv clos_def); intros.
-        inversions Hargs; clear Hargs.
-        assert (clos_ok (clos_abs t l)).
-          rewrite <- H.
-          apply (list_forall_out Hbenv).
-          inversions Ht.
-          apply* nth_In.
-        inversions H0; clear H0.
-        apply* IHh.
-        unfold app2trm, trm_inst in *; simpl in *.
-        rewrite <- minus_n_O in Typ.
-        inversions Ht.
-        rewrite <- (nth_indep _ (clos2trm clos_def)) in Typ;
-          try (rewrite* map_length).
-        rewrite map_nth in Typ.
-        rewrite H in Typ.
-        simpl in Typ.
-        refine (retypable_stack2trm _ _ _ _ Typ); auto.
+        inversions Hc.
+        apply* (list_forall_out H10).
+      apply* (list_forall_out Hargs).
+    assert (Hok2: list_forall clos_ok (c0 :: l2)).
+      apply list_forall_in; intros; apply* (list_forall_out Hok).
+    assert (Hok3: list_forall clos_ok l3).
+      apply list_forall_in; intros; apply* (list_forall_out Hok).
+    destruct (@delta_red_sound c (c0 :: l2))
+      as [t1 [t2 [tl Hd]]].
+      split*. simpl; rewrite* H5.
+    replace (app2trm (const_app c (List.map clos2trm l)) (arg :: args))
+      with (app2trm (const_app c (List.map clos2trm (c0 :: l2))) l3)
+        in Typ'.
+      assert (K; E |gc|=
+        stack2trm (app2trm (clos2trm (delta_red c (c0 :: l2))) l3) fl ~: T).
+        assert (Habs: forall l, is_abs (const_app c l) = false).
+          clear; unfold const_app.
+          induction l using rev_ind. simpl*.
+          rewrite fold_left_app. simpl*.
+        refine (retypable_stack2trm _ _ _ _ Typ'); auto.
           apply* term_app2trm.
-          rewrite <- (@term_trm_inst 0 (clos2trm arg) (List.map clos2trm l)).
-           change (term (trm_inst (trm_let (clos2trm arg) t)
-                            (List.map clos2trm l))).
-           apply term_trm_inst_closed.
-            rewrite* map_length.
-           apply* list_forall_map.
-          auto.
-         apply* is_abs_app2trm.
+          unfold const_app. apply* term_fold_app.
+          apply* (@list_forall_map _ _ clos2trm clos_ok).
         apply* retypable_app2trm.
         intro; intros.
-        clear Typ; inversions H0; try discriminate.
-        unfold trm_inst, trm_open in H12.
-        clear -H10 H12 H3 H4 H5 H6.
-        rewrite <- trm_inst_rec_more.
-          set (t0 := trm_inst_rec 1 (List.map clos2trm l) t) in *.
-        destruct (var_fresh (L2 \u trm_fv t0)).
-        forward~ (H12 x) as Typ; clear H12; simpl gc_raise in Typ.
-          replace ({0 ~> clos2trm arg}t0)
-            with (trm_subst x (clos2trm arg) ({0 ~> trm_fvar x}t0)).
-           replace E0 with (E0 & empty) by simpl*.
-           apply* typing_trm_subst.
-           simpl*.
-          fold (t0 ^ x).
-          rewrite* trm_subst_open.
-          rewrite* trm_subst_fresh.
-          simpl. destruct* (x == x).
-         rewrite* map_length.
-        apply* list_forall_map.
-       simpl length.
-       rewrite <- plus_n_Sm.
-       destruct (le_lt_dec (Const.arity c) (length l + length args)).
-        simpl.
-        case_eq (l ++ arg :: args); intros. destruct l; discriminate.
-        case_eq (cut (Const.arity c) l1); intros.
-        unfold trm_inst in Typ; simpl in Typ.
-        rewrite <- minus_n_O in Typ.
-        rewrite <- (nth_indep _ (clos2trm clos_def)) in Typ;
-          [|rewrite map_length; inversions* Ht].
-        rewrite map_nth in Typ.
-        rewrite H in Typ; simpl in Typ.
-        assert (Const.arity c <= length l1).
-         clear -l0 H0.
-         puts (f_equal (@length clos) H0).
-         rewrite app_length in H.
-         simpl in H.
-         omega.
-        destruct (cut_ok _ H2 H1).
-        replace (app2trm (const_app c (List.map clos2trm l)) (arg :: args))
-          with (app2trm (const_app c (List.map clos2trm (c0 :: l2))) l3)
-            in Typ.
-         subst.
-         assert (Hok: list_forall clos_ok (c0 :: l2 ++ l3)).
-          rewrite <- H0.
-          apply list_forall_in.
-          intros.
-          destruct (in_app_or _ _ _ H4).
-           assert (clos_ok (clos_const c l)).
-            rewrite <- H.
-            apply (list_forall_out Hbenv).
-            inversions Ht.
-            apply* nth_In.
-           inversions H6; clear H6.
-           apply* (list_forall_out H9).
-          apply* (list_forall_out Hargs).
-         assert (Hok2: list_forall clos_ok (c0 :: l2)).
-          apply list_forall_in; intros; apply* (list_forall_out Hok).
-         assert (Hok3: list_forall clos_ok l3).
-          apply list_forall_in; intros; apply* (list_forall_out Hok).
-         destruct (@delta_red_sound c (c0 :: l2))
-           as [t1 [t2 [tl Hd]]].
-           split*. simpl; rewrite* H3.
-         assert (K; E |gc|=
-           stack2trm (app2trm (clos2trm (delta_red c (c0 :: l2))) l3) fl ~: T).
-          assert (Habs: forall l, is_abs (const_app c l) = false).
-           clear; unfold const_app.
-           induction l using rev_ind.
-            simpl*.
-           rewrite fold_left_app. simpl*.
-          refine (retypable_stack2trm _ _ _ _ Typ); auto.
-            apply* term_app2trm.
-            unfold const_app. apply* term_fold_app.
-            apply* (@list_forall_map _ _ clos2trm clos_ok).
-           apply* is_abs_app2trm.
-          apply* retypable_app2trm.
-          intro; intros.
-          destruct (Hd _ _ _ H4) as [Hr [Htl [Ht1 [Ht2 _]]]]; clear Typ Hd.
-          rewrite Ht1 in H4.
-          rewrite Ht2.
-          apply* SH.delta_typed. split*.
-         assert (clos_ok (delta_red c (c0 :: l2))).
-          clear -Typ Hd.
-          set (args := List.map clos2trm (c0 :: l2)) in *.
-          destruct (typing_stack2trm_inv _ _ Typ).
-           destruct (app2trm_cases (const_app c args) l3).
+        destruct (Hd _ _ _ H6) as [Hr [Htl [Ht1 [Ht2 _]]]]; clear Typ' Hd.
+        rewrite Ht1 in H6.
+        rewrite Ht2.
+        apply* SH.delta_typed. split*.
+      assert (clos_ok (delta_red c (c0 :: l2))).
+        clear -Typ' Hd.
+        set (args := List.map clos2trm (c0 :: l2)) in *.
+        destruct (typing_stack2trm_inv _ _ Typ').
+          destruct (app2trm_cases (const_app c args) l3).
             destruct H as [t1' [t2' Happ]]. rewrite* Happ.
-           destruct H.
-            destruct H as [t1' [t2' Happ]]. rewrite* Happ.
-           rewrite H. unfold const_app.
-           clear. induction args using rev_ind.
-            simpl*.
-           rewrite fold_left_app. simpl*.
           destruct H.
-          destruct (typing_app2trm_inv _ _ H).
-           clear. unfold const_app; induction args using rev_ind.
-            simpl*.
-           rewrite fold_left_app. simpl*.
-          destruct* (Hd _ _ _ H0).
-         case_rewrite R (delta_red c (c0 :: l2)).
-          inversions H5.
-          apply* IHh.
-         inversions H5.
-         apply* IHh.
-          apply* list_forall_app.
-         simpl in *.
-         rewrite trm_inst_nil.
-         rewrite app2trm_app.
-         rewrite* app2trm_cst.
-        do 2 rewrite <- app2trm_cst.
-        do 2 rewrite <- app2trm_app.
-        rewrite H0. simpl. rewrite* H4.
-       simpl.
-       assert (Hlen: n < length benv).
-        destruct* (le_lt_dec (length benv) n).
-        rewrite nth_overflow in H; auto. discriminate.
-       assert (Hn: trm_inst (trm_bvar n) (List.map clos2trm benv)
-                   = clos2trm (clos_const c l)).
-        unfold trm_inst; simpl.
-        rewrite <- minus_n_O.
-        rewrite <- (map_length clos2trm) in Hlen.
-        rewrite <- (nth_indep _ (clos2trm clos_def) (trm_bvar n) Hlen).
-        rewrite map_nth.
-        rewrite* H.
-       destruct fl.
-        simpl in *.
-        rewrite <- app2trm_cst.
-        rewrite app2trm_app.
-        rewrite app2trm_cst.
-        rewrite Hn in Typ. auto.
-       destruct f as [benv' app' t].
-       inversions Hfl; clear Hfl.
-       inversions H3; clear H3.
-       apply* IHh; clear IHh.
-        constructor; auto.
-        constructor.
-         apply* list_forall_app.
-         assert (clos_ok (clos_const c l)).
-          rewrite <- H.
-          apply (list_forall_out Hbenv).
-          apply* nth_In.
-         inversions* H0.
-        rewrite app_length; simpl; omega.
-       simpl in Typ.
-       rewrite Hn in Typ.
-       case_rewrite R (is_bvar
-                      (app2trm (clos2trm (clos_const c l)) (arg :: args))).
-        unfold app2trm in R.
-        clear -R; induction args using rev_ind; simpl in R.
-         rewrite is_bvar_app_trm in R. discriminate.
-        rewrite map_app in R; rewrite fold_left_app in R; simpl in R.
-        rewrite is_bvar_app_trm in R. discriminate.
-       simpl in Typ.
-       rewrite <- app2trm_cst in Typ.
-       rewrite <- app2trm_app in Typ.
-       unfold app2trm in Typ.
-       unfold app2trm; simpl.
-       rewrite <- app2trm_cst.
-       apply Typ.
-      destruct args as [|arg args].
-       destruct fl.
-        unfold app2trm, trm_inst in Typ.
-        clear -fenv_ok Typ.
-        simpl in *.
-        inversions Typ; try discriminate.
-        destruct (fenv_ok H2) as [cl [B Typ']].
-        rewrite B.
-        destruct H5.
-        apply* has_scheme_from_vars'.
-       
-
-End.
-
-
-Theorem eval_sound : forall h fl xs benv K E t T,
-  fresh (dom E) (length benv) xs ->
-  (forall x cl, binds x cl (combine xs benv) ->
-    exists M, binds x M E /\ K;E' |gc|= clos2trm cl 
-  K ; E' & E |gc|= trm_inst t xs ~: T ->
-  (K ; E' & E |gc|= trm_inst t xs ~: T -> K'; E' |gc|= stack2trm t fl ~: T') ->
-  K' ; E' |gc|= res2trm (eval fenv h benv nil t fl) ~: T'.
-Proof.
-  induction h; intros.
-    simpl. rewrite* trm_inst_nil.
-  induction fl.
-  (* fl = nil *)
-  poses Typ (H0 H).
-  simpl in *.
-  clear H H0; inversions Typ.
-  (* Var *)
+            destruct H as [t1' [t2' Happ]]. rewrite* Happ.
+          rewrite H. unfold const_app.
+          clear. induction args using rev_ind. simpl*.
+          rewrite fold_left_app. simpl*.
+        destruct H.
+        destruct (typing_app2trm_inv _ _ H).
+          clear. unfold const_app; induction args using rev_ind. simpl*.
+          rewrite fold_left_app; simpl*.
+        destruct* (Hd _ _ _ H0).
+      case_rewrite R (delta_red c (c0 :: l2));
+        inversions H7; apply* IHh; clear IHh.
+        apply* list_forall_app.
+      simpl in *.
+      rewrite trm_inst_nil.
+      rewrite app2trm_app.
+      rewrite* app2trm_cst.
+    do 2 rewrite <- app2trm_cst.
+    do 2 rewrite <- app2trm_app.
+    rewrite H2. simpl*.
   simpl.
-  destruct (fenv_ok H1) as [cl [B HS]].
-  rewrite B.
-  destruct H2.
-  apply* (has_scheme_from_vars' HS).
-  (* Abs *)
-  simpl. rewrite* trm_inst_nil.
-  (* Let *)
-  destruct (var_freshes L1 (sch_arity M)) as [Xs Fr].
-  poses Typ1 (H _ Fr).
-  rewrite <- (trm_inst_nil t1) in Typ1.
-  refine (IHh _ _ _ _ _ _ Typ1 _); intros.
-  simpl.
-  rewrite trm_inst_nil in Typ1.
-  assert (is_bvar t1 = false).
-    assert (trm1: term t1) by auto;
-    inversions* trm1.
-  rewrite H2. rewrite* trm_inst_nil.
-  (* App *)
-  rewrite <- (trm_inst_nil t2) in H0.
-  refine (IHh _ _ _ _ _ _ H0 _); intros.
-  simpl.
-  rewrite trm_inst_nil in H0.
-  assert (is_bvar t2 = false).
-    assert (trm2: term t2) by auto;
-    inversions* trm2.
-  Hint Resolve typing_app_abs_let.
-  rewrite H2.
-  inversions H; simpl; try discriminate; try rewrite* trm_inst_nil.
-  (* Cst *)
-  apply Typ.
-  (* Gc *)
-  discriminate.
-  (* a :: fl *)
-  simpl.
-  destruct a as [benv' app' t'].
-  destruct t.
-  (* Var *)
-  simpl.
-  destruct (fenv_ok H4) as [cl [B HS]].
-  apply IHfl.
-  
+  destruct fl.
+    simpl in *.
+    rewrite <- app2trm_cst.
+    rewrite app2trm_app.
+    rewrite* app2trm_cst.
+  destruct f as [benv' app' t'].
+  inversions Hfl; clear Hfl.
+  inversions H5; clear H5.
+  apply* IHh; clear IHh.
+    constructor; auto.
+    constructor.
+      apply* list_forall_app.
+      inversions* Hc.
+    rewrite app_length; simpl; omega.
+  simpl in Typ'.
+  case_rewrite R
+    (is_bvar (app2trm (const_app c (List.map clos2trm l)) (arg :: args))).
+    unfold app2trm in R.
+    clear -R; induction args using rev_ind; simpl in R.
+      rewrite is_bvar_app_trm in R. discriminate.
+    rewrite map_app in R; rewrite fold_left_app in R; simpl in R.
+    rewrite is_bvar_app_trm in R. discriminate.
+  simpl in Typ'.
+  rewrite <- app2trm_cst in Typ'.
+  rewrite <- app2trm_app in Typ'.
+  unfold app2trm in Typ'.
+  unfold app2trm; simpl.
+  rewrite <- app2trm_cst.
+  apply Typ'.
 Qed.
+
+Theorem eval_sound : forall h K t T,
+  K ; E |gc|= t ~: T ->
+  K ; E |gc|= res2trm (eval fenv h nil nil t nil) ~: T.
+Proof.
+  intros.
+  apply* eval_sound_rec.
+  unfold app2trm; simpl.
+  rewrite* trm_inst_nil.
+Qed.
+
+End Eval.
 
 End Mk3.
 End Mk2.
