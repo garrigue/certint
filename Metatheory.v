@@ -7,6 +7,7 @@ Require Export Lib_Tactic Lib_FinSet.
 Require Export Metatheory_Var.
 Require Export Metatheory_Fresh.
 Require Export Metatheory_Env.
+Require Export Metatheory_SP.
 Export Env.
 Open Scope set_scope.
 Open Scope env_scope.

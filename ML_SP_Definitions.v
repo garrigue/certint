@@ -272,14 +272,6 @@ Inductive well_kinded : kenv -> kind -> typ -> Prop :=
 
 Hint Constructors well_kinded.
 
-Fixpoint For_all2(A B:Set)(P:A->B->Prop)(l1:list A)(l2:list B) {struct l1}
-  : Prop :=
-  match (l1, l2) with
-  | (nil,nil)   => True
-  | (a::l1',b::l2') => P a b /\ For_all2 P l1' l2'
-  | _ => False
-  end.
-
 Definition kinds_open Ks Us :=
   List.map (fun k:kind => kind_open k Us) Ks.
 

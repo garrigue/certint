@@ -695,3 +695,32 @@ Proof.
   rewrite* (IHT2 U2).
 Qed.
 
+
+Fixpoint map_get (A:Set) (l:list var) (E:Env.env A) {struct l} : list A :=
+  match l with
+  | nil => nil
+  | h :: t =>
+    match get h E with
+    | Some x => x :: map_get t E
+    | None => map_get t E
+    end
+  end.
+
+Lemma map_get_fresh : forall (A:Set) a (a0:A) S Xs,
+  fresh {{a}} (length Xs) Xs ->
+  map_get Xs ((a, a0) :: S) = map_get Xs S.
+Proof.
+  induction Xs; simpl; intros.
+    auto.
+  destruct* (eq_var_dec a1 a).
+    rewrite e in H. destruct* H. elim H. auto.
+  rewrite* IHXs.
+Qed.
+
+Lemma in_vars_dec : forall x L,
+  x \in L \/ x \notin L.
+Proof.
+  intros.
+  case_eq (S.mem x L); intros; auto with sets.
+Qed.
+

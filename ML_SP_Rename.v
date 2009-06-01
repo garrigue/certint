@@ -68,15 +68,15 @@ Require Import ML_SP_Soundness ML_SP_Unify.
 Module MkRename(Cstr:CstrIntf)(Const:CstIntf).
 
 Module Unify := MkUnify(Cstr)(Const).
-Import Unify.Sound.
+Import Unify.MyEval.Sound.
 Import Infra.
 Import Defs.
 Import Metatheory_Env.Env.
 
 Module Mk2(Delta:DeltaIntf).
 
-Module Sound := Unify.Sound.Mk2(Delta).
-Import Sound.
+Module MyEval2 := Unify.MyEval.Mk2(Delta).
+Import MyEval2.Sound2.
 Import JudgInfra.
 Import Judge.
 

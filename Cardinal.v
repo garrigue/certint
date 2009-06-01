@@ -88,7 +88,6 @@ Proof.
   destruct (a == a0).
     destruct (S.union_1 H); elim (S.remove_1 e H0).
   apply* S.remove_2.
-  destruct (S.union_1 H); eauto with sets.
 Qed.
 
 Lemma nodup_notin_split : forall a l2 l1,
@@ -188,13 +187,6 @@ Proof.
                         x \in S.remove b (S.remove a L)).
     intros.
     use (S.remove_3 H).
-    use (S.remove_3 H0).
-    apply* S.remove_2.
-      intro.
-      elim (S.remove_1 H2 H0).
-    apply* S.remove_2.
-    intro.
-    elim (S.remove_1 H2 H).
   intros.
   apply eq_ext; intro; split; intro; auto.
 Qed.

@@ -1,6 +1,6 @@
 (***************************************************************************
 * More properties about Lists                                              *
-* Arthur Charguéraud, July 2007, Coq v8.1                                  *
+* Arthur Chargueraud, July 2007, Coq v8.1                                  *
 ***************************************************************************)
 
 Set Implicit Arguments.

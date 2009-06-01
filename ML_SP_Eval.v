@@ -7,50 +7,12 @@ Set Implicit Arguments.
 
 Require Import Arith List Metatheory.
 Require Import ML_SP_Definitions ML_SP_Infrastructure.
-Require Import ML_SP_Soundness ML_SP_Unify ML_SP_Rename.
-
-Ltac case_rewrite H t :=
-  case_eq t; introv H; rewrite H in *; try discriminate.
-
-
-Section ListForall.
-Variables (A:Set) (P:A->Prop).
-
-Definition map_prop (f : forall c, P c) l : list_forall P l.
-induction l; auto.
-Defined.
-
-Lemma list_forall_in : forall l,
-  (forall x, In x l -> P x) -> list_forall P l.
-Proof.
-  induction l; simpl*.
-Qed.
-
-Lemma list_forall_out : forall l,
-  list_forall P l -> forall x, In x l -> P x.
-Proof.
-  induction 1; simpl*; intros.
-  destruct* H1. subst*.
-Qed.
-
-Variable Q : A -> Prop.
-
-Lemma list_forall_apply : forall l,
-  list_forall (fun x => P x -> Q x) l ->
-  list_forall P l -> list_forall Q l.
-Proof.
-  intros; induction* H.
-  inversion* H0.
-Qed.
-End ListForall.
-
-Hint Resolve list_forall_apply.
+Require Import ML_SP_Soundness.
 
 Module MkEval(Cstr:CstrIntf)(Const:CstIntf).
 
-Module Rename := MkRename(Cstr)(Const).
-Import Rename.
-Import Unify.Sound.
+Module Sound := MkSound(Cstr)(Const).
+Import Sound.
 Import Infra.
 Import Defs.
 Import Metatheory_Env.Env.
@@ -180,34 +142,6 @@ Proof.
   inversion* H1.
 Qed.
 
-Section Cut.
-Variable A:Set.
-Fixpoint cut (n:nat) (l:list A) {struct n} : list A * list A :=
-  match n with
-  | 0 => (nil, l)
-  | S n =>
-    match l with
-    | nil => (nil, nil)
-    | a :: l => let (l1, l2) := cut n l in (a :: l1, l2)
-    end
-  end.
-
-Lemma cut_ok : forall n l l1 l2,
-  n <= length l -> cut n l = (l1, l2) ->
-  length l1 = n /\ l = l1 ++ l2.
-Proof.
-  induction n; simpl; intros.
-    inversions* H0.
-  destruct l; simpl in *.
-    elimtype False; omega.
-  assert (n <= length l) by omega.
-  case_rewrite R (cut n l).
-  inversions* H0.
-  destruct* (IHn l l0 l2).
-  subst*.
-Qed.
-End Cut.
-
 Parameter delta_red : Const.const -> list clos -> clos.
 
 Section Eval.
@@ -335,8 +269,8 @@ Eval compute in skk'.
 Eval compute in res2trm skk'.
 *)
 
-Module Rename2 := Rename.Mk2(Delta).
-Import Rename2.
+Module Sound2 := Sound.Mk2(Delta).
+Import Sound2.
 Import Sound.
 Import JudgInfra.
 Import Judge.
@@ -355,7 +289,7 @@ Parameter delta_red_sound : forall c cls,
 
 Module Mk3(SH:SndHypIntf).
 
-Module Sound3 := Sound.Mk3(SH).
+Module Sound3 := Sound2.Mk3(SH).
 Import Sound3.
 
 Lemma clos_ok_value : forall cl,
@@ -493,42 +427,6 @@ Proof.
   rewrite* IHt1.
   rewrite* IHt2.
 Qed.
-
-(*
-Lemma hole_retypable : forall t1 t2 C,
-  term t1 -> term t2 ->
-  retypable t1 t2 -> retypable (C ^^ t1) (C ^^ t2).
-Proof.
-  introv Ht1 Ht2 H.
-  unfold trm_open.
-  generalize 0.
-  intros; intro; intros.
-  gen_eq ({n ~> t1} C) as t.
-  unfold gc in *.
-  gen_eq (false, GcAny) as g.
-  gen n C.
-  induction H0; intros; destruct C; try discriminate; simpl in *; subst*;
-    try solve [inversion* H0 | destruct (n === n0); try discriminate; subst*].
-        inversions* H5.
-      inversions* H4.
-      apply* (@typing_abs gc L).
-      intros.
-      simpl in *.
-      puts (H1 _ H3); clear H1.
-      unfold trm_open.
-      rewrite* trm_open_comm.
-      apply* (H2 _ H3).
-      unfold trm_open.
-      rewrite* trm_open_comm.
-    inversions* H5; clear H0 H2 H5.
-    apply* (@typing_let gc M L1 L2); intros.
-    unfold trm_open.
-    rewrite* trm_open_comm.
-    apply* (H3 _ H0).
-    rewrite* trm_open_comm.
-  inversions* H4.
-Qed.
-*)
 
 Lemma retypable_trm_app : forall E t1 t2,
   retypable E (trm_app t1 t2) (app_trm t1 t2).
@@ -1090,7 +988,7 @@ Proof.
         refine (retypable_stack2trm _ _ _ _ Typ'); auto.
           apply* term_app2trm.
           unfold const_app. apply* term_fold_app.
-          apply* (@list_forall_map _ _ clos2trm clos_ok).
+          apply* (@list_forall_map _ clos_ok _ term clos2trm).
         apply* retypable_app2trm.
         intro; intros.
         destruct (Hd _ _ _ H6) as [Hr [Htl [Ht1 [Ht2 _]]]]; clear Typ' Hd.

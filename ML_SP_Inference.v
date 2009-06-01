@@ -7,12 +7,14 @@ Set Implicit Arguments.
 
 Require Import List Metatheory.
 Require Import ML_SP_Definitions ML_SP_Infrastructure.
-Require Import ML_SP_Soundness ML_SP_Unify ML_SP_Rename.
+Require Import ML_SP_Soundness ML_SP_Eval ML_SP_Unify ML_SP_Rename.
 
 Module MkInfer(Cstr:CstrIntf)(Const:CstIntf).
 
 Module Rename := MkRename(Cstr)(Const).
-Import Rename.Unify.
+Import Rename.
+Import Unify.
+Import MyEval.
 Import Sound.
 Import Infra.
 Import Defs.
@@ -22,11 +24,12 @@ Module Mk2(Delta:DeltaIntf)(Cstr2:Cstr2I).
 
 Module Rename2 := Rename.Mk2(Delta).
 Import Rename2.
+Import MyEval2.Sound2.
 Import Sound.
 Import JudgInfra.
 Import Judge.
 
-Module Body := Rename.Unify.Mk2(Cstr2).
+Module Body := Unify.Mk2(Cstr2).
 Import Body.
 
 Definition unify K T1 T2 S :=
@@ -261,11 +264,11 @@ Proof.
   destruct H4.
   use (typ_subst_type H1 H4).
   use (typ_subst_type H1 H5).
-  case_rewrite (typ_subst S t) R1; try solve [inversion H6];
-    case_rewrite (typ_subst S t0) R2; try solve [inversion H7];
+  case_rewrite R1 (typ_subst S t); try solve [inversion H6];
+    case_rewrite R2 (typ_subst S t0); try solve [inversion H7];
       try (unfold unify_nv in H;
-           case_rewrite (S.mem v (typ_fv (typ_arrow t1 t2))) R3;
-           case_rewrite (get_kind v K) R4; apply* IHh).
+           case_rewrite R3 (S.mem v (typ_fv (typ_arrow t1 t2)));
+           case_rewrite R4 (get_kind v K); apply* IHh).
     destruct (v == v0). apply* (IHh0 pairs).
     simpl in H.
     unfold unify_vars in H.
@@ -278,7 +281,7 @@ Proof.
       intros; apply (proj2 H2 x a).
       use (incl_remove_env v0 _ _ H8).
       apply* (incl_remove_env _ _ _ H9).
-    case_rewrite (get_kind v K) R3; case_rewrite (get_kind v0 K) R4;
+    case_rewrite R3 (get_kind v K); case_rewrite R4 (get_kind v0 K);
       try poses Aktc (proj2 H2 _ _ (binds_in (get_kind_binds _ _ R3)));
       try poses Aktc0 (proj2 H2 _ _ (binds_in (get_kind_binds _ _ R4)));
       simpl unify_kinds in H.
@@ -319,9 +322,9 @@ Proof.
     split. intros x Hx. elim (in_empty Hx).
     auto.
   destruct a.
-  case_rewrite (split_env B E) R1.
+  case_rewrite R1 (split_env B E).
   simpl in *.
-  case_rewrite (S.mem v B) R2.
+  case_rewrite R2 (S.mem v B).
     inversions H; clear H.
     inversions H0; clear H0.
     destruct* (IHE Eb e0) as [Hok [Dis [Dom [I1 I2]]]]; clear IHE.
@@ -641,7 +644,7 @@ Lemma typ_fv_subst0 : forall S T,
   typ_fv (typ_subst S T) << S.diff (typ_fv T) (dom S) \u fv_in typ_fv S.
 Proof.
   induction T; simpl; intros x Hx. elim (in_empty Hx).
-    case_rewrite (get v S) R1.
+    case_rewrite R1 (get v S).
       use (fv_in_spec typ_fv _ _ _ (binds_in R1)).
     use (get_none_notin _ R1).
     simpl in Hx. auto.
@@ -876,7 +879,7 @@ Lemma soundness_var : forall h L0 v K0 E T S0 K S L,
 Proof.
   intros; intros HI HS0 HTS0 HK0 Dis HL0 HE HT.
   poses HI' HI; simpl in HI.
-  case_rewrite (get v E) R1.
+  case_rewrite R1 (get v E).
   destruct (var_freshes L0 (sch_arity s));
     simpl proj1_sig in HI.
   inversions HI; clear HI. rename H0 into HI.
@@ -980,7 +983,7 @@ Proof.
   destruct (var_fresh L0); simpl in HI.
   destruct (var_fresh (L0 \u {{x}})); simpl in HI.
   destruct (var_fresh (dom E \u trm_fv t)); simpl in HI.
-  case_rewrite (unify K0 (typ_arrow (typ_fvar x) (typ_fvar x0)) T S0) R1.
+  case_rewrite R1 (unify K0 (typ_arrow (typ_fvar x) (typ_fvar x0)) T S0).
   destruct p as [K' S'].
   unfold unify in R1.
   destruct* (unify_keep _ _ _ R1) as [HS' _].
@@ -1086,7 +1089,7 @@ Lemma cardinal_0 : forall L,
 Proof.
   intros.
   rewrite S.cardinal_1 in H.
-  case_rewrite (S.elements L) R1.
+  case_rewrite R1 (S.elements L).
   apply eq_ext; intros; split; intro; intros.
     use (S.elements_1 H0).
     rewrite R1 in H1.
@@ -1104,7 +1107,7 @@ Proof.
   revert L H0 H2 H3; generalize (dom K).
   induction (length K); simpl; intros.
     rewrite (cardinal_0 H2) in *. elim (in_empty H3).
-  case_rewrite (S.choose (S.inter v L)) R1.
+  case_rewrite R1 (S.choose (S.inter v L)).
     use (S.choose_1 R1).
     destruct (x == e).
       subst.
@@ -1115,7 +1118,7 @@ Proof.
                kind_fv k << close_fvars n K (S.remove e v) L').
       intros; apply* IHn.
       rewrite <- (@cardinal_remove e) in H2; auto.
-    case_rewrite (get e K) R2; intros; auto.
+    case_rewrite R2 (get e K); intros; auto.
   use (S.choose_2 R1).
   elim (H4 x).
   auto with sets.
@@ -1227,7 +1230,7 @@ Lemma diff_disjoint : forall L1 L2, disjoint (S.diff L1 L2) L2.
 Proof.
   intros. intro y.
   destruct* (in_vars_dec y (S.diff L1 L2)).
-  use (S.diff_2 H).
+  use (S.diff_2 i).
 Qed.
 
 Definition ok_concat_inv1 A (E1 E2:env A) H := proj1 (ok_concat_inv E1 E2 H).
@@ -1444,17 +1447,6 @@ Proof.
   use (kinds_fv_generalize _ _ H).
 Qed.
 
-Lemma incl_fv_in_subset : forall (A:Set) fv (E F:env A),
-  incl E F -> fv_in fv E << fv_in fv F.
-Proof.
-  induction E; simpl; intros. auto.
-  destruct a.
-  assert (In (v,a) F) by auto.
-  use (fv_in_spec fv _ _ _ H0).
-  simpl in *.
-  forward~ (IHE F) as G.
-Qed.
-
 Lemma fv_in_kind_fv_list : forall Xs Ks,
   length Xs = length Ks ->
   fv_in kind_fv (combine Xs Ks) = kind_fv_list Ks.
@@ -1477,13 +1469,13 @@ Proof.
   unfold typinf_generalize.
   introv Typ HI.
   set (ftve := close_fvk K' (env_fv E')) in *.
-  case_rewrite (split_env ftve K') R2.
-  case_rewrite (split_env (close_fvk K' (typ_fv T1)) e) R3.
-  case_rewrite (split e2) R4.
+  case_rewrite R2 (split_env ftve K').
+  case_rewrite R3 (split_env (close_fvk K' (typ_fv T1)) e).
+  case_rewrite R4 (split e2).
   set (Bs := S.elements (S.diff (close_fvk K' (typ_fv T1)) (ftve \u dom e2)))
     in *.
   set (l0' := List.map (fun _:var => @None ckind) Bs) in *.
-  case_rewrite (split_env L e) R5.
+  case_rewrite R5 (split_env L e).
   inversion HI; clear HI. subst KA.
   destruct* (split_env_ok _ R2) as [Ok [Dise [Se0 [Inc1 Inc2]]]].
   destruct* (split_env_ok _ R3) as [Ok' [Dise' [Se2 [Inc3 Inc4]]]].
@@ -1646,14 +1638,14 @@ Lemma soundness_let : forall h L0 t1 t2 K0 E T S0 S K L,
 Proof.
   intros until L; intros IHh  HI HS0 HTS0 HK0 Dis HL0 HE HT; simpl in HI.
   destruct (var_fresh L0); simpl in HI.
-  case_rewrite (typinf K0 E t1 (typ_fvar x) (L0 \u {{x}}) S0 h) R1.
+  case_rewrite R1 (typinf K0 E t1 (typ_fvar x) (L0 \u {{x}}) S0 h).
   destruct o; try discriminate. destruct p.
   fold (typ_subst s (typ_fvar x)) in HI.
   set (K' := map (kind_subst s) k) in *.
   set (E' := map (sch_subst s) E) in *.
   set (T1 := typ_subst s (typ_fvar x)) in *.
   destruct (var_fresh (dom E \u trm_fv t1 \u trm_fv t2)); simpl proj1_sig in HI.
-  case_rewrite (typinf_generalize K' E' (vars_subst s (kdom K0)) T1) R2.
+  case_rewrite R2 (typinf_generalize K' E' (vars_subst s (kdom K0)) T1).
   destruct* (IHh _ _ _ _ _ _ _ _ _ R1); clear R1.
     simpl*.
   destruct H0 as [HTs [Hs [Hk [Disk [WS' [HL0' Typ']]]]]].
@@ -1703,7 +1695,7 @@ Lemma soundness_app : forall h L0 t1 t2 K0 E T S0 S K L,
 Proof.
   intros until L; intros IHh HI HS0 HTS0 HK0 Dis HL0 HE HT; simpl in HI.
   destruct (var_fresh L0); simpl in HI.
-  case_rewrite (typinf K0 E t1 (typ_arrow (typ_fvar x) T) (L0\u{{x}}) S0 h) R1.
+  case_rewrite R1 (typinf K0 E t1 (typ_arrow (typ_fvar x) T) (L0\u{{x}}) S0 h).
   destruct o; try discriminate. destruct p as [K' S'].
   destruct* (IHh _ _ _ _ _ _ _ _ _ R1); clear R1.
     simpl*.
@@ -1738,8 +1730,8 @@ Corollary typinf_sound' : forall t K T,
 Proof.
   unfold typinf'.
   intros.
-  case_rewrite (typinf empty empty t (typ_fvar var_default) 
-             (S.singleton var_default) empty (S (trm_depth t))) R1.
+  case_rewrite R1 (typinf empty empty t (typ_fvar var_default) 
+             (S.singleton var_default) empty (S (trm_depth t))).
   destruct o; try discriminate.
   destruct p. inversions H; clear H.
   destruct* (typinf_sound _ _ R1).
@@ -2385,7 +2377,7 @@ Proof.
   use (cardinal_env H).
   revert L' H0 Hy H1; generalize (dom K).
   induction (length K); simpl; intros; auto.
-  case_rewrite (S.choose (S.inter v L')) R1.
+  case_rewrite R1 (S.choose (S.inter v L')).
     puts (S.choose_1 R1).
     assert (e \in close_fvk K L) by auto.
     assert (S.cardinal (S.remove e v) = n).
@@ -2393,7 +2385,7 @@ Proof.
       use (cardinal_remove H4).
       rewrite H1 in H5.
       inversion* H5.
-    case_rewrite (get e K) R2.
+    case_rewrite R2 (get e K).
       use (close_fvk_ok L H H3 R2).
       assert (L' \u kind_fv k << close_fvk K L) by auto.
       apply* (IHn _ _ H6 Hy).
@@ -2411,7 +2403,7 @@ Proof.
   intro; intros.
   puts (IHn _ _ _ H).
   sets_solve.
-  case_rewrite (get e K) R1.
+  case_rewrite R1 (get e K).
     use (fv_in_spec kind_fv _ _ _ (binds_in R1)).
   auto.
 Qed.
@@ -2436,18 +2428,6 @@ Proof.
   assert (SetoidList.InA E.eq e (e::l)) by auto.
   rewrite Heql in H.
   puts (S.elements_2 H). elim (in_empty H0).
-Qed.
-
-Lemma InA_In : forall v L, SetoidList.InA E.eq v L -> In v L.
-  induction 1; auto.
-Qed.
-
-Lemma subset_incl_elements : forall L1 L2,
-  L1 << L2 -> incl (S.elements L1) (S.elements L2).
-Proof.
-  intros; intro; intros. 
-  apply InA_In; apply S.elements_1.
-  use (S.elements_2 (SetoidList.In_InA E.eq_refl H0)).
 Qed.
 
 Lemma vars_subst_incl : forall S l1 l2,
@@ -2501,29 +2481,6 @@ Proof.
   use (vars_subst_incl S H).
   rewrite map_app in H2.
   rewrite typ_fv_list_app in H2. auto.
-Qed.
-
-Lemma elements_singleton : forall x,
-  S.elements {{x}} = (x :: nil).
-Proof.
-  intros.
-  assert (x \in {{x}}) by auto.
-  puts (S.elements_1 H).
-  remember (S.elements {{x}}) as l.
-  destruct l. inversion H0.
-  destruct l.
-    inversions H0. rewrite H2. auto.
-    inversion H2.
-  puts (S.elements_3 {{x}}).
-  rewrite <- Heql in H1.
-  inversions H1. inversions H5.
-  assert (e \in {{x}}). apply S.elements_2.
-    rewrite* <- Heql.
-  assert (e0 \in {{x}}). apply S.elements_2.
-    rewrite* <- Heql.
-  rewrite <- (S.singleton_1 H2) in H3.
-  rewrite <- (S.singleton_1 H6) in H3.
-  elim (E.lt_not_eq _ _ H3). reflexivity.
 Qed.
 
 Lemma typ_fv_after_subst : forall S T,
@@ -2596,8 +2553,8 @@ Proof.
     use (IHKs H0).
   revert L Hx H. generalize (dom K).
   induction (length K); simpl close_fvars; intros. auto.
-  case_rewrite (S.choose (S.inter v L)) R1.
-    case_rewrite (get e K) R2.
+  case_rewrite R1 (S.choose (S.inter v L)).
+    case_rewrite R2 (get e K).
       apply (IHn _ _ Hx); clear IHn Hx; intros.
       destruct* (S.union_1 H0); clear H0.
       puts (S.inter_2 (S.choose_1 R1)).
@@ -2725,7 +2682,7 @@ Proof.
   assert (L' << close_fvk K L) by apply close_fvk_subset.
   gen L'; generalize (dom (K&K')); induction (length (K & K')); simpl; intros.
     auto.
-  case_rewrite (S.choose (S.inter v L')) R1.
+  case_rewrite R1 (S.choose (S.inter v L')).
     puts (S.inter_2 (S.choose_1 R1)).
     assert (e # K') by destruct* (H e).
     case_eq (get e K); introv R2.
@@ -2897,23 +2854,23 @@ Proof.
     destruct* (in_vars_dec x ftve).
     elimtype False.
     destruct* (sch_generalize_disjoint (l++Bs) T1 (l0 ++ l0') x).
-    elim H7; clear H7.
+    elim H6; clear H6.
     rewrite mkset_app.
     unfold Bs; rewrite mkset_elements.
     rewrite <- H5. rewrite dom_combine; [|apply* split_length].
     destruct* (in_vars_dec x (mkset l)).
     assert (x \in close_fvk K1 (typ_fv T1)).
-      destruct* (split_env_ok _ R1). clear H3 H8.
+      destruct* (split_env_ok _ R1). clear H3 H6.
       puts (sch_fv_generalize Hx).
       unfold sch_fv in H3; simpl in H3.
       sets_solve. apply* close_fvk_subset.
-      rewrite kind_fv_list_app in H8.
+      rewrite kind_fv_list_app in H6.
       sets_solve.
         rewrite <- (fv_in_kind_fv_list _ _ (split_length _ R3)) in H3.
         rewrite H5 in H3.
         destruct (fv_in_binds _ _ H3) as [y [b [Hx' Hy]]].
         assert (In (y,b) K1).
-          apply (proj44 H9).
+          apply (proj44 H7).
           apply in_or_concat; left*.
         refine (close_fvk_ok _ _ _ _ Hx'); trivial.
           apply (proj42 H4). apply (in_dom _ _ _ Hy).
