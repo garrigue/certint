@@ -4,9 +4,27 @@
 ***************************************************************************)
 
 Set Implicit Arguments.
-Require Import Lib_FinSet Metatheory List Arith.
+Require Import Lib_FinSet Metatheory List ListSet Arith.
 Require Import ML_SP_Infrastructure ML_SP_Soundness ML_SP_Eval.
 Require Import ML_SP_Unify ML_SP_Rename ML_SP_Inference.
+
+Section ListSet.
+  Variable A : Type.
+  Hypothesis eq_dec : forall x y:A, sumbool (x = y) (x <> y).
+
+  Definition set_incl : forall (s1 s2 : list A),
+    sumbool (incl s1 s2) (~incl s1 s2).
+    intros.
+    induction s1. left; intros x Hx. elim Hx.
+    case_eq (set_mem eq_dec a s2); intros.
+      destruct IHs1.
+        left; intros x Hx. simpl in Hx; destruct Hx.
+        subst; apply* set_mem_correct1. apply* i.
+      right. intro. elim n. intros x Hx. apply* H0.
+    right. intro; elim (set_mem_complete1 eq_dec _ _ H).
+    apply* H0.
+  Defined.
+End ListSet.
 
 Module Cstr.
   Record cstr_impl : Set := C {
@@ -45,8 +63,65 @@ Module Cstr.
     destruct* (cstr_high c2).
     destruct* (cstr_high c1).
   Qed.
-  Definition unique c v := In v (cstr_low c).
-  Hint Resolve entails_refl.
+
+  Definition unique c v := set_mem E.eq_dec v (cstr_low c).
+
+  Definition lub c1 c2 :=
+    C (set_union eq_var_dec (cstr_low c1) (cstr_low c2))
+    (match cstr_high c1, cstr_high c2 with
+     | None, h => h
+     | h, None => h
+     | Some s1, Some s2 => Some (set_inter eq_var_dec s1 s2)
+     end).
+
+  Hint Resolve incl_tran.
+  Lemma entails_lub : forall c1 c2 c,
+    (entails c c1 /\ entails c c2) <-> entails c (lub c1 c2).
+  Proof.
+    unfold entails, lub; simpl; split; intros.
+      intuition.
+        intros x Hx; destruct* (set_union_elim _ _ _ _ Hx).
+      case_rewrite R1 (cstr_high c1);
+      case_rewrite R2 (cstr_high c2);
+      try case_rewrite R3 (cstr_high c); intuition.
+      intros x Hx; apply set_inter_intro. apply* H2. apply* H3.
+    destruct H.
+    split; split;
+      try (intros x Hx; apply H;
+           solve [ apply* set_union_intro2 | apply* set_union_intro1 ]);
+      case_rewrite R1 (cstr_high c1);
+      case_rewrite R2 (cstr_high c2);
+      try case_rewrite R3 (cstr_high c); intuition;
+      intros x Hx; destruct* (set_inter_elim _ _ _ _ (H0 _ Hx)).
+  Qed.
+
+  Definition valid_dec : forall c, sumbool (valid c) (~valid c).
+    intros.
+    unfold valid.
+    case_eq (cstr_high c); intros.
+      destruct* (set_incl eq_var_dec (cstr_low c) l).
+    auto.
+  Defined.
+
+  Lemma entails_unique : forall c1 c2 v,
+    entails c1 c2 -> unique c2 v = true -> unique c1 v = true.
+  Proof.
+    unfold entails, unique.
+    intros.
+    destruct H.
+    apply set_mem_correct2.
+    apply H.
+    apply* set_mem_correct1.
+  Qed.
+
+  Lemma entails_valid : forall c1 c2,
+    entails c1 c2 -> valid c1 -> valid c2.
+  Proof.
+    unfold entails, valid.
+    intros. destruct H.
+    case_rewrite R1 (cstr_high c1); case_rewrite R2 (cstr_high c2);
+    auto*.
+  Qed.
 End Cstr.
 
 Section NoDup.
@@ -266,8 +341,10 @@ Module Delta.
   Qed.
 End Delta.
 
-Module MyEval := Rename.Unify.MyEval.Mk2(Delta).
-Import MyEval.Sound2.
+Module Infer2 := Mk2(Delta).
+Import Infer.Rename.Unify.MyEval.
+Import Infer2.Rename2.MyEval2.
+Import Sound2.
 Import JudgInfra.
 Import Judge.
 
@@ -363,6 +440,7 @@ Module SndHyp.
     rewrite (kh (nth k l var_default) t0 (nth k Us typ_def)) in H6; auto.
       unfold Cstr.unique.
       destruct H as [Hlow _]. simpl in Hlow.
+      apply set_mem_correct2.
       apply* Hlow.
     apply HE.
     clear HE t0 H6 H7 H H1.
@@ -519,10 +597,10 @@ Module SndHyp.
     apply nth_indep. omega.
   Qed.
 
-  Lemma typing_tag_inv : forall K gc l tl x,
-    K; empty |(false,gc)|= const_app (Const.tag l) tl ~: typ_fvar x ->
+  Lemma typing_tag_inv : forall K E gc l tl x,
+    K; E |(false,gc)|= const_app (Const.tag l) tl ~: typ_fvar x ->
     exists t, exists T, exists k,
-      tl = t :: nil /\  K; empty |(false,gc)|= t ~: T /\ binds x (Some k) K
+      tl = t :: nil /\  K; E |(false,gc)|= t ~: T /\ binds x (Some k) K
       /\ exists M, entails k (@Kind _ (Delta.valid_tag l) ((l, T) :: nil) M).
   Proof.
     introv Typv.
@@ -677,89 +755,39 @@ Module SndHyp.
     rewrite plus_comm.
     auto.
   Qed.
+ 
+  Definition delta_red c (cl : list clos) :=
+    match c with
+    | Const.tag _ => (clos_def, nil)
+    | Const.matches l nd =>
+      match last cl clos_def with
+      | clos_const (Const.tag t) (cl1 :: nil) =>
+        match get t (combine l cl) with
+        | Some cl2 => (cl2, cl1 :: nil)
+        | None => (clos_def, nil)
+        end
+      | _ => (clos_def, nil)
+      end
+    end.
+
+  Lemma delta_red_sound : forall c cls,
+    list_for_n clos_ok (S(Const.arity c)) cls ->
+    exists t1:trm, exists t2:trm, exists tl:list trm,
+    forall K E T,
+      K ; E |Gc|= const_app c (List.map clos2trm cls) ~: T ->
+      let (cl', cls') := delta_red c cls in
+      Delta.rule (length tl) t1 t2 /\ list_forall term tl /\
+      const_app c (List.map clos2trm cls) = trm_inst t1 tl /\
+      app2trm (clos2trm cl') cls' = trm_inst t2 tl /\
+      clos_ok cl' /\ list_forall clos_ok cls'.
+  Proof.
+    intros.
+    destruct c; simpl in *.
+      exists trm_def; exists trm_def; exists (@nil trm).
+      intros.
+      destruct (typing_tag_inv _ _ H0).
+      elim (tag_is_const _ _ _ H H1 H0).
 End SndHyp.
 
-Module Sound3 := Mk3(SndHyp).
+Module Sound3 := Infer2.Rename2.MyEval2.Mk3(SndHyp).
 
-Require Import ListSet.
-
-Section ListSet.
-  Variable A : Type.
-  Hypothesis eq_dec : forall x y:A, sumbool (x = y) (x <> y).
-
-  Definition set_incl : forall (s1 s2 : list A),
-    sumbool (incl s1 s2) (~incl s1 s2).
-    intros.
-    induction s1. left; intros x Hx. elim Hx.
-    case_eq (set_mem eq_dec a s2); intros.
-      destruct IHs1.
-        left; intros x Hx. simpl in Hx; destruct Hx.
-        subst; apply* set_mem_correct1. apply* i.
-      right. intro. elim n. intros x Hx. apply* H0.
-    right. intro; elim (set_mem_complete1 eq_dec _ _ H).
-    apply* H0.
-  Defined.
-End ListSet.
-
-Module Cstr2.
-  Definition unique := Cstr.cstr_low.
-  Lemma unique_ok : forall c l, In l (unique c) <-> Cstr.unique c l.
-  Proof.
-    unfold unique, Cstr.unique; split*.
-  Qed.
-
-  Definition lub c1 c2 :=
-    Cstr.C (set_union eq_var_dec (Cstr.cstr_low c1) (Cstr.cstr_low c2))
-    (match Cstr.cstr_high c1, Cstr.cstr_high c2 with
-     | None, h => h
-     | h, None => h
-     | Some s1, Some s2 => Some (set_inter eq_var_dec s1 s2)
-     end).
-
-  Hint Resolve incl_tran.
-  Lemma lub_ok : forall c1 c2 c,
-    (Cstr.entails c c1 /\ Cstr.entails c c2) <-> Cstr.entails c (lub c1 c2).
-  Proof.
-    unfold Cstr.entails, lub; simpl; split; intros.
-      intuition.
-        intros x Hx; destruct* (set_union_elim _ _ _ _ Hx).
-      case_rewrite R1 (Cstr.cstr_high c1);
-      case_rewrite R2 (Cstr.cstr_high c2);
-      try case_rewrite R3 (Cstr.cstr_high c); intuition.
-      intros x Hx; apply set_inter_intro. apply* H2. apply* H3.
-    destruct H.
-    split; split;
-      try (intros x Hx; apply H;
-           solve [ apply* set_union_intro2 | apply* set_union_intro1 ]);
-      case_rewrite R1 (Cstr.cstr_high c1);
-      case_rewrite R2 (Cstr.cstr_high c2);
-      try case_rewrite R3 (Cstr.cstr_high c); intuition;
-      intros x Hx; destruct* (set_inter_elim _ _ _ _ (H0 _ Hx)).
-  Qed.
-
-  Definition valid : forall c, sumbool (Cstr.valid c) (~Cstr.valid c).
-    intros.
-    unfold Cstr.valid.
-    case_eq (Cstr.cstr_high c); intros.
-      destruct* (set_incl eq_var_dec (Cstr.cstr_low c) l).
-    auto.
-  Defined.
-
-  Lemma entails_unique : forall c1 c2 v,
-    Cstr.entails c1 c2 -> Cstr.unique c2 v -> Cstr.unique c1 v.
-  Proof.
-    unfold Cstr.entails, Cstr.unique.
-    intros. auto*.
-  Qed.
-
-  Lemma entails_valid : forall c1 c2,
-    Cstr.entails c1 c2 -> Cstr.valid c1 -> Cstr.valid c2.
-  Proof.
-    unfold Cstr.entails, Cstr.valid.
-    intros. destruct H.
-    case_rewrite R1 (Cstr.cstr_high c1); case_rewrite R2 (Cstr.cstr_high c2);
-    auto*.
-  Qed.
-End Cstr2.
-
-Module Infer2 := Mk2(Delta)(Cstr2).

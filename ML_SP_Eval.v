@@ -17,8 +17,6 @@ Import Infra.
 Import Defs.
 Import Metatheory_Env.Env.
 
-Module Mk2(Delta:DeltaIntf).
-
 Inductive clos : Set :=
   | clos_abs : trm -> list clos -> clos
   | clos_const : Const.const -> list clos -> clos.
@@ -142,12 +140,6 @@ Proof.
   inversion* H1.
 Qed.
 
-Parameter delta_red : Const.const -> list clos -> clos.
-
-Section Eval.
-
-Variable fenv : env clos.
-
 Record frame : Set := Frame
   { frm_benv : list clos; frm_app : list clos; frm_trm : trm }.
 
@@ -204,6 +196,40 @@ Definition trm2app t :=
   | _             => None
   end.
 
+Module Mk2(Delta:DeltaIntf).
+
+Module Sound2 := Sound.Mk2(Delta).
+Import Sound2.
+Import Sound.
+Import JudgInfra.
+Import Judge.
+
+Definition Gc := (false, GcAny).
+
+Module Type SndHypIntf2.
+  Include Type SndHypIntf.
+  Parameter delta_red : Const.const -> list clos -> clos * list clos.
+  Parameter delta_red_sound : forall c cls,
+    list_for_n clos_ok (S(Const.arity c)) cls ->
+    exists t1:trm, exists t2:trm, exists tl:list trm,
+    forall K E T,
+      K ; E |Gc|= const_app c (List.map clos2trm cls) ~: T ->
+      let (cl', cls') := delta_red c cls in
+      Delta.rule (length tl) t1 t2 /\ list_forall term tl /\
+      const_app c (List.map clos2trm cls) = trm_inst t1 tl /\
+      app2trm (clos2trm cl') cls' = trm_inst t2 tl /\
+      clos_ok cl' /\ list_forall clos_ok cls'.
+End SndHypIntf2.
+
+Module Mk3(SH:SndHypIntf2).
+
+Module Sound3 := Sound2.Mk3(SH).
+Import Sound3.
+
+Section Eval.
+
+Variable fenv : env clos.
+
 Fixpoint eval (h:nat) (benv:list clos) (app:list clos) (t:trm)
   (stack : list frame) {struct h} : eval_res :=
   match h with
@@ -231,11 +257,11 @@ Fixpoint eval (h:nat) (benv:list clos) (app:list clos) (t:trm)
         let nred := S(Const.arity cst) in
         if le_lt_dec nred nargs then
           let (args, app') := cut nred (List.app l app) in
-          match delta_red cst args with
-          | clos_const cst' app'' =>
-            eval h nil (List.app app'' app') (trm_cst cst') stack
-          | clos_abs t1 benv =>
-            eval h benv app' (trm_abs t1) stack
+          match SH.delta_red cst args with
+          | (clos_const cst' app'', app3) =>
+            eval h nil (app'' ++ app3 ++ app') (trm_cst cst') stack
+          | (clos_abs t1 benv, app3) =>
+            eval h benv (app3 ++ app') (trm_abs t1) stack
           end
         else result (clos_const cst (l++app))
       end
@@ -268,29 +294,6 @@ Definition skk' := eval nil 3 nil nil
 Eval compute in skk'.
 Eval compute in res2trm skk'.
 *)
-
-Module Sound2 := Sound.Mk2(Delta).
-Import Sound2.
-Import Sound.
-Import JudgInfra.
-Import Judge.
-
-Definition gc := (false, GcAny).
-
-Parameter delta_red_sound : forall c cls,
-  list_for_n clos_ok (S(Const.arity c)) cls ->
-  exists t1:trm, exists t2:trm, exists tl:list trm,
-    forall K E T,
-      K ; E |gc|= const_app c (List.map clos2trm cls) ~: T ->
-      Delta.rule (length tl) t1 t2 /\ list_forall term tl /\
-      const_app c (List.map clos2trm cls) = trm_inst t1 tl /\
-      clos2trm (delta_red c cls) = trm_inst t2 tl /\
-      clos_ok (delta_red c cls).
-
-Module Mk3(SH:SndHypIntf).
-
-Module Sound3 := Sound2.Mk3(SH).
-Import Sound3.
 
 Lemma clos_ok_value : forall cl,
   clos_ok cl -> value (clos2trm cl).
@@ -388,7 +391,7 @@ Proof.
 Qed.
 
 Definition retypable E t1 t2 :=
-  forall K T, K; E |gc|= t1 ~: T -> K; E |gc|= t2 ~: T.
+  forall K T, K; E |Gc|= t1 ~: T -> K; E |Gc|= t2 ~: T.
 
 Lemma typing_app_abs_let : forall E t1 t2,
   retypable E (trm_app (trm_abs t2) t1) (trm_let t1 t2).
@@ -396,7 +399,7 @@ Proof.
   intros; intro; intros.
   inversions H; try discriminate; simpl in *.
   inversions H4; try discriminate; simpl in *.
-  apply (@typing_let gc (Sch S nil) {} L).
+  apply (@typing_let Gc (Sch S nil) {} L).
     simpl; intros.
     destruct Xs; try elim H0.
     unfold kinds_open_vars, kinds_open, sch_open_vars; simpl.
@@ -624,8 +627,8 @@ Qed.
 
 Lemma typing_app_trm_inv : forall K E t1 t2 T,
   is_abs t1 = false ->
-  K; E |gc|= app_trm t1 t2 ~: T ->
-  exists T1, K; E |gc|= t1 ~: T1.
+  K; E |Gc|= app_trm t1 t2 ~: T ->
+  exists T1, K; E |Gc|= t1 ~: T1.
 Proof.
   intros.
   rewrite (app_trm_false _ _ H) in H0.
@@ -633,9 +636,9 @@ Proof.
 Qed.
 
 Lemma typing_app2trm_inv : forall K E t1 cl T,
-  K; E |gc|= app2trm t1 cl ~: T ->
+  K; E |Gc|= app2trm t1 cl ~: T ->
   is_abs t1 = false ->
-  exists T1, K; E |gc|= t1 ~: T1.
+  exists T1, K; E |Gc|= t1 ~: T1.
 Proof.
   unfold app2trm.
   intros.
@@ -655,9 +658,9 @@ Qed.
 Hint Resolve is_bvar_app_trm.
 
 Lemma typing_stack2trm_inv : forall K E fl t1 T,
-  K; E |gc|= stack2trm t1 fl ~: T ->
+  K; E |Gc|= stack2trm t1 fl ~: T ->
   is_bvar t1 = false ->
-  exists T1, exists K, K; E |gc|= t1 ~: T1.
+  exists T1, exists K, K; E |Gc|= t1 ~: T1.
 Proof.
   induction fl; simpl; intros. auto*.
   destruct a as [benv args t].
@@ -701,7 +704,7 @@ Proof.
   apply* is_abs_app2trm.
 Qed.
 
-Section Eval.
+Section Soundness.
 
 Variables (E:Defs.env) (fenv:env clos).
 
@@ -710,19 +713,19 @@ Hypothesis E_ok : env_ok E.
 Hypothesis fenv_ok : forall x M,
   binds x M E ->
   exists cl, binds x cl fenv /\ clos_ok cl /\
-    has_scheme_vars gc {} empty empty (clos2trm cl) M.
+    has_scheme_vars Gc {} empty empty (clos2trm cl) M.
 
 Lemma concat_empty : forall (A:Set) (K:env A), empty & K = K.
 Proof. intros; symmetry; apply (app_nil_end K). Qed.
 
 Lemma has_scheme_from_vars' : forall K t M,
-  has_scheme_vars gc {} empty empty t M ->
+  has_scheme_vars Gc {} empty empty t M ->
   kenv_ok K -> env_ok E ->
-  has_scheme gc K E t M.
+  has_scheme Gc K E t M.
 Proof.
   clear fenv_ok.
   intros.
-  apply (@has_scheme_from_vars gc (dom K)).
+  apply (@has_scheme_from_vars Gc (dom K)).
   intro; intros.
   replace K with (empty & K) by apply concat_empty.
   apply typing_weaken_kinds.
@@ -798,7 +801,7 @@ Qed.
 Lemma clos_ok_trm : forall benv K t T,
   list_forall clos_ok benv ->
   closed_n (length benv) t ->
-  K;E |gc|= trm_inst t (List.map clos2trm benv) ~: T ->
+  K;E |Gc|= trm_inst t (List.map clos2trm benv) ~: T ->
   trm2app t = None ->
   clos_ok (trm2clos benv fenv t).
 Proof.
@@ -820,9 +823,9 @@ Theorem eval_sound_rec : forall h fl benv args K t T,
   list_forall clos_ok benv ->
   closed_n (length benv) t ->
   list_forall frame_ok fl ->
-  K ; E |gc|=
+  K ; E |Gc|=
     stack2trm (app2trm (trm_inst t (List.map clos2trm benv)) args) fl ~: T ->
-  K ; E |gc|= res2trm (eval fenv h benv args t fl) ~: T.
+  K ; E |Gc|= res2trm (eval fenv h benv args t fl) ~: T.
 Proof.
   induction h; introv; intros Hargs Hbenv Ht Hfl Typ.
     simpl*.
@@ -940,7 +943,7 @@ Proof.
     destruct H2.
     destruct* (typing_app2trm_inv _ _ H2).
     apply* clos_ok_trm.
-  assert (Typ': K; E |gc|= stack2trm
+  assert (Typ': K; E |Gc|= stack2trm
     (app2trm (clos2trm (trm2clos benv fenv t)) (arg :: args)) fl ~:  T).
     refine (retypable_stack2trm _ _ _ _ Typ); auto.
     unfold app2trm in *; simpl in *.
@@ -973,18 +976,20 @@ Proof.
       apply list_forall_in; intros; apply* (list_forall_out Hok).
     assert (Hok3: list_forall clos_ok l3).
       apply list_forall_in; intros; apply* (list_forall_out Hok).
-    destruct (@delta_red_sound c (c0 :: l2))
+    destruct (@SH.delta_red_sound c (c0 :: l2))
       as [t1 [t2 [tl Hd]]].
       split*. simpl; rewrite* H5.
     replace (app2trm (const_app c (List.map clos2trm l)) (arg :: args))
       with (app2trm (const_app c (List.map clos2trm (c0 :: l2))) l3)
         in Typ'.
-      assert (K; E |gc|=
-        stack2trm (app2trm (clos2trm (delta_red c (c0 :: l2))) l3) fl ~: T).
+      case_rewrite R (SH.delta_red c (c0 :: l2)).
+      assert (K; E |Gc|=
+        stack2trm (app2trm (clos2trm c1) (l1 ++ l3)) fl ~: T).
         assert (Habs: forall l, is_abs (const_app c l) = false).
           clear; unfold const_app.
           induction l using rev_ind. simpl*.
           rewrite fold_left_app. simpl*.
+        rewrite app2trm_app.
         refine (retypable_stack2trm _ _ _ _ Typ'); auto.
           apply* term_app2trm.
           unfold const_app. apply* term_fold_app.
@@ -995,8 +1000,8 @@ Proof.
         rewrite Ht1 in H6.
         rewrite Ht2.
         apply* SH.delta_typed. split*.
-      assert (clos_ok (delta_red c (c0 :: l2))).
-        clear -Typ' Hd.
+      assert (clos_ok c1 /\ list_forall clos_ok l1).
+        clear -Typ' Hd R.
         set (args := List.map clos2trm (c0 :: l2)) in *.
         destruct (typing_stack2trm_inv _ _ Typ').
           destruct (app2trm_cases (const_app c args) l3).
@@ -1011,10 +1016,9 @@ Proof.
           clear. unfold const_app; induction args using rev_ind. simpl*.
           rewrite fold_left_app; simpl*.
         destruct* (Hd _ _ _ H0).
-      case_rewrite R (delta_red c (c0 :: l2));
-        inversions H7; apply* IHh; clear IHh.
-        apply* list_forall_app.
-      simpl in *.
+      destruct H7.
+      destruct c1; inversions H7; apply* IHh; clear IHh;
+        repeat apply* list_forall_app.
       rewrite trm_inst_nil.
       rewrite app2trm_app.
       rewrite* app2trm_cst.
@@ -1054,8 +1058,8 @@ Proof.
 Qed.
 
 Theorem eval_sound : forall h K t T,
-  K ; E |gc|= t ~: T ->
-  K ; E |gc|= res2trm (eval fenv h nil nil t nil) ~: T.
+  K ; E |Gc|= t ~: T ->
+  K ; E |Gc|= res2trm (eval fenv h nil nil t nil) ~: T.
 Proof.
   intros.
   apply* eval_sound_rec.
@@ -1063,7 +1067,7 @@ Proof.
   rewrite* trm_inst_nil.
 Qed.
 
-End Eval.
+End Soundness.
 
 End Mk3.
 End Mk2.

@@ -13,12 +13,20 @@ Require Import Metatheory List Arith.
 Module Type CstrIntf.
   Parameter cstr : Set.
   Parameter valid : cstr -> Prop.
+  Parameter valid_dec : forall c, sumbool (valid c) (~valid c).
+  Parameter unique : cstr -> var -> bool.
+  Parameter lub : cstr -> cstr -> cstr.
   Parameter entails : cstr -> cstr -> Prop.
   Parameter entails_refl : forall c, entails c c.
+  Hint Resolve entails_refl.
   Parameter entails_trans : forall c1 c2 c3,
     entails c1 c2 -> entails c2 c3 -> entails c1 c3.
-  Parameter unique : cstr -> var -> Prop.
-  Hint Resolve entails_refl.
+  Parameter entails_lub : forall c1 c2 c,
+    (entails c c1 /\ entails c c2) <-> entails c (lub c1 c2).
+  Parameter entails_unique : forall c1 c2 v,
+    entails c1 c2 -> unique c2 v = true -> unique c1 v = true.
+  Parameter entails_valid : forall c1 c2,
+    entails c1 c2 -> valid c1 -> valid c2.
 End CstrIntf.
 
 Module Type CstIntf.
@@ -47,7 +55,7 @@ Definition typ_def := typ_bvar 0.
 (** Constraint domain *)
 
 Definition coherent kc (kr:list(var*typ)) := forall x T U,
-  Cstr.unique kc x -> In (x,T) kr -> In (x,U) kr -> T = U.
+  Cstr.unique kc x = true -> In (x,T) kr -> In (x,U) kr -> T = U.
 
 Record ckind : Set := Kind {
   kind_cstr : Cstr.cstr;

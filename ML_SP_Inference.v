@@ -20,7 +20,7 @@ Import Infra.
 Import Defs.
 Import Metatheory_Env.Env.
 
-Module Mk2(Delta:DeltaIntf)(Cstr2:Cstr2I).
+Module Mk2(Delta:DeltaIntf).
 
 Module Rename2 := Rename.Mk2(Delta).
 Import Rename2.
@@ -28,9 +28,7 @@ Import MyEval2.Sound2.
 Import Sound.
 Import JudgInfra.
 Import Judge.
-
-Module Body := Unify.Mk2(Cstr2).
-Import Body.
+Import Unify.
 
 Definition unify K T1 T2 S :=
   unify (1 + size_pairs S K ((T1,T2)::nil)) ((T1,T2)::nil) K S.
@@ -179,7 +177,7 @@ Lemma unify_rel_all_kind_types :
   let krs := kind_rel k ++ kind_rel k0 in
   All_kind_types P (Some (Kind v1 (unify_coherent krs))) /\
   (forall T1 T2,
-   In (T1, T2) (snd (unify_kind_rel krs nil (Cstr2.unique kc) nil)) ->
+   In (T1, T2) (snd (unify_kind_rel krs nil (Cstr.unique kc) nil)) ->
    P T1 /\ P T2).
 Proof.
   unfold All_kind_types; intros.
@@ -195,7 +193,7 @@ Proof.
   induction (kind_rel k ++ kind_rel k0); simpl; intros. auto.
   destruct a.
   inversion_clear H1.
-  destruct (In_dec eq_var_dec v (Cstr2.unique kc)).
+  case_eq (Cstr.unique kc v); introv R.
     case_eq (get v kr'); intros.
       apply* IHl.
       simpl; intros.
@@ -234,7 +232,7 @@ Qed.
 Hint Resolve kenv_ok_remove_env.
 
 Lemma unify_type : forall K' S' h pairs K S,
-  Body.unify h pairs K S = Some (K', S') ->
+  Unify.unify h pairs K S = Some (K', S') ->
   is_subst S ->
   env_prop type S ->
   kenv_ok K ->
@@ -273,7 +271,7 @@ Proof.
       simpl unify_kinds in H.
           destruct c as [kc kv kr kh].
           destruct c0 as [kc0 kv0 kr0 kh0].
-          destruct (Cstr2.valid (Cstr2.lub kc kc0)); try discriminate.
+          destruct (Cstr.valid_dec (Cstr.lub kc kc0)); try discriminate.
           replace kr with (kind_rel (Kind kv kh)) in H by simpl*.
           replace kr0 with (kind_rel (Kind kv0 kh0)) in H by simpl*.
           destruct* (unify_rel_all_kind_types v1 Aktc Aktc0).
@@ -777,7 +775,7 @@ Proof.
 Qed.
 
 Lemma unify_keep_fv' : forall K S E h pairs K0 S0,
-  Body.unify h pairs K0 S0 = Some (K, S) ->
+  Unify.unify h pairs K0 S0 = Some (K, S) ->
   is_subst S0 -> ok K0 ->
   fvs S K E << fvs S0 K0 E \u all_fv id pairs.
 Proof.
