@@ -605,6 +605,10 @@ module Env :
   val fv_in : ('a1 -> Variables.vars) -> 'a1 env -> Variables.vars
  end
 
+val cut : nat -> 'a1 list -> ('a1 list, 'a1 list) prod
+
+val mkset : Variables.var list -> Variables.vars
+
 module type CstrIntf = 
  sig 
   type cstr 
@@ -755,8 +759,6 @@ module MkDefs :
     val gc_lower : gc_info -> gc_info
    end
  end
-
-val mkset : Variables.var list -> Variables.vars
 
 module MkInfra : 
  functor (Cstr:CstrIntf) ->
@@ -912,8 +914,6 @@ module MkInfra :
   val trm_subst : Variables.var -> Defs.trm -> Defs.trm -> Defs.trm
   
   val const_app : Const.const -> Defs.trm list -> Defs.trm
-  
-  val map_get : Variables.var list -> 'a1 Env.env -> 'a1 list
   
   module MkJudgInfra : 
    functor (Delta:Defs.DeltaIntf) ->
@@ -1094,8 +1094,6 @@ module MkSound :
     
     val const_app : Const.const -> Defs.trm list -> Defs.trm
     
-    val map_get : Variables.var list -> 'a1 Env.env -> 'a1 list
-    
     module MkJudgInfra : 
      functor (Delta:Defs.DeltaIntf) ->
      sig 
@@ -1154,7 +1152,7 @@ module MkSound :
    end
  end
 
-module MkUnify : 
+module MkEval : 
  functor (Cstr:CstrIntf) ->
  functor (Const:CstIntf) ->
  sig 
@@ -1313,8 +1311,6 @@ module MkUnify :
       
       val const_app : Const.const -> Defs.trm list -> Defs.trm
       
-      val map_get : Variables.var list -> 'a1 Env.env -> 'a1 list
-      
       module MkJudgInfra : 
        functor (Delta:Defs.DeltaIntf) ->
        sig 
@@ -1373,100 +1369,128 @@ module MkUnify :
      end
    end
   
-  module type Cstr2I = 
-   sig 
-    val unique : Cstr.cstr -> Variables.var list
-    
-    val lub : Cstr.cstr -> Cstr.cstr -> Cstr.cstr
-    
-    val valid : Cstr.cstr -> sumbool
-   end
-  
   module Mk2 : 
-   functor (Cstr2:Cstr2I) ->
+   functor (Delta:Sound.Infra.Defs.DeltaIntf) ->
    sig 
-    val compose :
-      Sound.Infra.Defs.typ Env.env -> Sound.Infra.Defs.typ Env.env ->
-      Sound.Infra.subs
+    type clos =
+      | Coq_clos_abs of Sound.Infra.Defs.trm * clos list
+      | Coq_clos_const of Const.const * clos list
     
-    val unify_kind_rel :
-      (Variables.var, Sound.Infra.Defs.typ) prod list -> (Variables.var,
-      Sound.Infra.Defs.typ) prod list -> Variables.var list ->
-      (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list ->
-      ((Variables.var, Sound.Infra.Defs.typ) prod list,
-      (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list) prod
+    val clos_rect :
+      (Sound.Infra.Defs.trm -> clos list -> 'a1) -> (Const.const -> clos list
+      -> 'a1) -> clos -> 'a1
     
-    val remove_env : 'a1 Env.env -> Variables.var -> 'a1 Env.env
+    val clos_rec :
+      (Sound.Infra.Defs.trm -> clos list -> 'a1) -> (Const.const -> clos list
+      -> 'a1) -> clos -> 'a1
     
-    val unify_kinds :
-      Sound.Infra.Defs.kind -> Sound.Infra.Defs.kind ->
-      (Sound.Infra.Defs.kind, (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ)
-      prod list) prod option
+    val clos2trm : clos -> Sound.Infra.Defs.trm
     
-    val get_kind :
-      Variables.var -> Sound.Infra.Defs.kind Env.env -> Sound.Infra.Defs.kind
+    val delta_red : Const.const -> clos list -> clos
     
-    val unify_vars :
-      Sound.Infra.Defs.kenv -> Variables.var -> Variables.var ->
-      ((Variables.var, Sound.Infra.Defs.kind) prod list,
-      (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list) prod option
+    type frame = { frm_benv : clos list; frm_app : 
+                   clos list; frm_trm : Sound.Infra.Defs.trm }
     
-    val unify_nv :
-      (Sound.Infra.Defs.kenv -> Sound.Infra.subs -> (Sound.Infra.Defs.kenv,
-      Sound.Infra.subs) prod option) -> Sound.Infra.Defs.kind Env.env ->
-      Sound.Infra.Defs.typ Env.env -> Variables.VarSet.S.elt ->
-      Sound.Infra.Defs.typ -> (Sound.Infra.Defs.kenv, Sound.Infra.subs) prod
-      option
+    val frame_rect :
+      (clos list -> clos list -> Sound.Infra.Defs.trm -> 'a1) -> frame -> 'a1
     
-    val unify0 :
-      ((Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list ->
-      Sound.Infra.Defs.kenv -> Sound.Infra.subs -> (Sound.Infra.Defs.kenv,
-      Sound.Infra.subs) prod option) -> nat -> (Sound.Infra.Defs.typ,
-      Sound.Infra.Defs.typ) prod list -> Sound.Infra.Defs.kenv ->
-      Sound.Infra.subs -> (Sound.Infra.Defs.kenv, Sound.Infra.subs) prod
-      option
+    val frame_rec :
+      (clos list -> clos list -> Sound.Infra.Defs.trm -> 'a1) -> frame -> 'a1
     
-    val accum : ('a1 -> 'a2) -> ('a2 -> 'a2 -> 'a2) -> 'a2 -> 'a1 list -> 'a2
+    val frm_benv : frame -> clos list
     
-    val all_types :
-      Sound.Infra.subs -> (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod
-      list -> Sound.Infra.Defs.typ list
+    val frm_app : frame -> clos list
     
-    val typ_size : Sound.Infra.Defs.typ -> nat
+    val frm_trm : frame -> Sound.Infra.Defs.trm
     
-    val pairs_size :
-      Sound.Infra.subs -> (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod
-      list -> nat
+    val is_bvar : Sound.Infra.Defs.trm -> bool
     
-    val unify :
-      nat -> (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list ->
-      Sound.Infra.Defs.kenv -> Sound.Infra.subs -> (Sound.Infra.Defs.kenv,
-      Sound.Infra.subs) prod option
+    val app_trm :
+      Sound.Infra.Defs.trm -> Sound.Infra.Defs.trm -> Sound.Infra.Defs.trm
     
-    val id : Sound.Infra.Defs.typ Env.env
+    val app2trm : Sound.Infra.Defs.trm -> clos list -> Sound.Infra.Defs.trm
     
-    val all_fv :
-      Sound.Infra.subs -> (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod
-      list -> Variables.vars
+    val stack2trm :
+      Sound.Infra.Defs.trm -> frame list -> Sound.Infra.Defs.trm
     
-    val really_all_fv :
-      Sound.Infra.subs -> Sound.Infra.Defs.kind Env.env ->
-      (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list ->
-      Variables.VarSet.S.t
+    type eval_res =
+      | Result of clos
+      | Inter of frame list
     
-    val size_pairs :
-      Sound.Infra.subs -> Sound.Infra.Defs.kind Env.env ->
-      (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list -> nat
+    val eval_res_rect :
+      (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
+    
+    val eval_res_rec :
+      (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
+    
+    val res2trm : eval_res -> Sound.Infra.Defs.trm
+    
+    val clos_def : clos
+    
+    val trm2clos : clos list -> clos Env.env -> Sound.Infra.Defs.trm -> clos
+    
+    val trm2app :
+      Sound.Infra.Defs.trm -> (Sound.Infra.Defs.trm, Sound.Infra.Defs.trm)
+      prod option
+    
+    val eval :
+      clos Env.env -> nat -> clos list -> clos list -> Sound.Infra.Defs.trm
+      -> frame list -> eval_res
+    
+    module Sound2 : 
+     sig 
+      module JudgInfra : 
+       sig 
+        module Judge : 
+         sig 
+          type gc_kind =
+            | GcAny
+            | GcLet
+          
+          val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
+          
+          val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
+          
+          type gc_info = (bool, gc_kind) prod
+          
+          val gc_raise : gc_info -> gc_info
+          
+          val gc_lower : gc_info -> gc_info
+         end
+       end
+      
+      module type SndHypIntf = 
+       sig 
+        
+       end
+      
+      module Mk3 : 
+       functor (SH:SndHypIntf) ->
+       sig 
+        
+       end
+     end
+    
+    val gc : (bool, Sound2.JudgInfra.Judge.gc_kind) prod
+    
+    module Mk3 : 
+     functor (SH:Sound2.SndHypIntf) ->
+     sig 
+      module Sound3 : 
+       sig 
+        
+       end
+      
+      val is_abs : Sound.Infra.Defs.trm -> bool
+     end
    end
  end
 
-val index : ('a1 -> 'a1 -> sumbool) -> nat -> 'a1 -> 'a1 list -> nat option
-
-module MkRename : 
+module MkUnify : 
  functor (Cstr:CstrIntf) ->
  functor (Const:CstIntf) ->
  sig 
-  module Unify : 
+  module MyEval : 
    sig 
     module Sound : 
      sig 
@@ -1624,8 +1648,6 @@ module MkRename :
         
         val const_app : Const.const -> Defs.trm list -> Defs.trm
         
-        val map_get : Variables.var list -> 'a1 Env.env -> 'a1 list
-        
         module MkJudgInfra : 
          functor (Delta:Defs.DeltaIntf) ->
          sig 
@@ -1684,151 +1706,227 @@ module MkRename :
        end
      end
     
-    module type Cstr2I = 
-     sig 
-      val unique : Cstr.cstr -> Variables.var list
-      
-      val lub : Cstr.cstr -> Cstr.cstr -> Cstr.cstr
-      
-      val valid : Cstr.cstr -> sumbool
-     end
-    
     module Mk2 : 
-     functor (Cstr2:Cstr2I) ->
+     functor (Delta:Sound.Infra.Defs.DeltaIntf) ->
      sig 
-      val compose :
-        Sound.Infra.Defs.typ Env.env -> Sound.Infra.Defs.typ Env.env ->
-        Sound.Infra.subs
+      type clos =
+        | Coq_clos_abs of Sound.Infra.Defs.trm * clos list
+        | Coq_clos_const of Const.const * clos list
       
-      val unify_kind_rel :
-        (Variables.var, Sound.Infra.Defs.typ) prod list -> (Variables.var,
-        Sound.Infra.Defs.typ) prod list -> Variables.var list ->
-        (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list ->
-        ((Variables.var, Sound.Infra.Defs.typ) prod list,
-        (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list) prod
+      val clos_rect :
+        (Sound.Infra.Defs.trm -> clos list -> 'a1) -> (Const.const -> clos
+        list -> 'a1) -> clos -> 'a1
       
-      val remove_env : 'a1 Env.env -> Variables.var -> 'a1 Env.env
+      val clos_rec :
+        (Sound.Infra.Defs.trm -> clos list -> 'a1) -> (Const.const -> clos
+        list -> 'a1) -> clos -> 'a1
       
-      val unify_kinds :
-        Sound.Infra.Defs.kind -> Sound.Infra.Defs.kind ->
-        (Sound.Infra.Defs.kind, (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ)
-        prod list) prod option
+      val clos2trm : clos -> Sound.Infra.Defs.trm
       
-      val get_kind :
-        Variables.var -> Sound.Infra.Defs.kind Env.env ->
-        Sound.Infra.Defs.kind
+      val delta_red : Const.const -> clos list -> clos
       
-      val unify_vars :
-        Sound.Infra.Defs.kenv -> Variables.var -> Variables.var ->
-        ((Variables.var, Sound.Infra.Defs.kind) prod list,
-        (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list) prod option
+      type frame = { frm_benv : clos list; frm_app : 
+                     clos list; frm_trm : Sound.Infra.Defs.trm }
       
-      val unify_nv :
-        (Sound.Infra.Defs.kenv -> Sound.Infra.subs -> (Sound.Infra.Defs.kenv,
-        Sound.Infra.subs) prod option) -> Sound.Infra.Defs.kind Env.env ->
-        Sound.Infra.Defs.typ Env.env -> Variables.VarSet.S.elt ->
-        Sound.Infra.Defs.typ -> (Sound.Infra.Defs.kenv, Sound.Infra.subs)
+      val frame_rect :
+        (clos list -> clos list -> Sound.Infra.Defs.trm -> 'a1) -> frame ->
+        'a1
+      
+      val frame_rec :
+        (clos list -> clos list -> Sound.Infra.Defs.trm -> 'a1) -> frame ->
+        'a1
+      
+      val frm_benv : frame -> clos list
+      
+      val frm_app : frame -> clos list
+      
+      val frm_trm : frame -> Sound.Infra.Defs.trm
+      
+      val is_bvar : Sound.Infra.Defs.trm -> bool
+      
+      val app_trm :
+        Sound.Infra.Defs.trm -> Sound.Infra.Defs.trm -> Sound.Infra.Defs.trm
+      
+      val app2trm : Sound.Infra.Defs.trm -> clos list -> Sound.Infra.Defs.trm
+      
+      val stack2trm :
+        Sound.Infra.Defs.trm -> frame list -> Sound.Infra.Defs.trm
+      
+      type eval_res =
+        | Result of clos
+        | Inter of frame list
+      
+      val eval_res_rect :
+        (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
+      
+      val eval_res_rec :
+        (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
+      
+      val res2trm : eval_res -> Sound.Infra.Defs.trm
+      
+      val clos_def : clos
+      
+      val trm2clos :
+        clos list -> clos Env.env -> Sound.Infra.Defs.trm -> clos
+      
+      val trm2app :
+        Sound.Infra.Defs.trm -> (Sound.Infra.Defs.trm, Sound.Infra.Defs.trm)
         prod option
       
-      val unify0 :
-        ((Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list ->
-        Sound.Infra.Defs.kenv -> Sound.Infra.subs -> (Sound.Infra.Defs.kenv,
-        Sound.Infra.subs) prod option) -> nat -> (Sound.Infra.Defs.typ,
-        Sound.Infra.Defs.typ) prod list -> Sound.Infra.Defs.kenv ->
-        Sound.Infra.subs -> (Sound.Infra.Defs.kenv, Sound.Infra.subs) prod
-        option
+      val eval :
+        clos Env.env -> nat -> clos list -> clos list -> Sound.Infra.Defs.trm
+        -> frame list -> eval_res
       
-      val accum :
-        ('a1 -> 'a2) -> ('a2 -> 'a2 -> 'a2) -> 'a2 -> 'a1 list -> 'a2
-      
-      val all_types :
-        Sound.Infra.subs -> (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod
-        list -> Sound.Infra.Defs.typ list
-      
-      val typ_size : Sound.Infra.Defs.typ -> nat
-      
-      val pairs_size :
-        Sound.Infra.subs -> (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod
-        list -> nat
-      
-      val unify :
-        nat -> (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list ->
-        Sound.Infra.Defs.kenv -> Sound.Infra.subs -> (Sound.Infra.Defs.kenv,
-        Sound.Infra.subs) prod option
-      
-      val id : Sound.Infra.Defs.typ Env.env
-      
-      val all_fv :
-        Sound.Infra.subs -> (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod
-        list -> Variables.vars
-      
-      val really_all_fv :
-        Sound.Infra.subs -> Sound.Infra.Defs.kind Env.env ->
-        (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list ->
-        Variables.VarSet.S.t
-      
-      val size_pairs :
-        Sound.Infra.subs -> Sound.Infra.Defs.kind Env.env ->
-        (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list -> nat
-     end
-   end
-  
-  module Mk2 : 
-   functor (Delta:Unify.Sound.Infra.Defs.DeltaIntf) ->
-   sig 
-    module Sound : 
-     sig 
-      module JudgInfra : 
+      module Sound2 : 
        sig 
-        module Judge : 
+        module JudgInfra : 
          sig 
-          type gc_kind =
-            | GcAny
-            | GcLet
+          module Judge : 
+           sig 
+            type gc_kind =
+              | GcAny
+              | GcLet
+            
+            val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
+            
+            val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
+            
+            type gc_info = (bool, gc_kind) prod
+            
+            val gc_raise : gc_info -> gc_info
+            
+            val gc_lower : gc_info -> gc_info
+           end
+         end
+        
+        module type SndHypIntf = 
+         sig 
           
-          val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
+         end
+        
+        module Mk3 : 
+         functor (SH:SndHypIntf) ->
+         sig 
           
-          val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
-          
-          type gc_info = (bool, gc_kind) prod
-          
-          val gc_raise : gc_info -> gc_info
-          
-          val gc_lower : gc_info -> gc_info
          end
        end
       
-      module type SndHypIntf = 
-       sig 
-        
-       end
+      val gc : (bool, Sound2.JudgInfra.Judge.gc_kind) prod
       
       module Mk3 : 
-       functor (SH:SndHypIntf) ->
+       functor (SH:Sound2.SndHypIntf) ->
        sig 
+        module Sound3 : 
+         sig 
+          
+         end
         
+        val is_abs : Sound.Infra.Defs.trm -> bool
        end
      end
+   end
+  
+  module type Cstr2I = 
+   sig 
+    val unique : Cstr.cstr -> Variables.var list
     
-    val typ_generalize :
-      Variables.var list -> Unify.Sound.Infra.Defs.typ ->
-      Unify.Sound.Infra.Defs.typ
+    val lub : Cstr.cstr -> Cstr.cstr -> Cstr.cstr
     
-    val sch_generalize :
-      Variables.var list -> Unify.Sound.Infra.Defs.typ ->
-      Unify.Sound.Infra.Defs.kind list -> Unify.Sound.Infra.Defs.sch
+    val valid : Cstr.cstr -> sumbool
+   end
+  
+  module Mk2 : 
+   functor (Cstr2:Cstr2I) ->
+   sig 
+    val compose :
+      MyEval.Sound.Infra.Defs.typ Env.env -> MyEval.Sound.Infra.Defs.typ
+      Env.env -> MyEval.Sound.Infra.subs
     
-    val list_fst : ('a1, 'a2) prod list -> 'a1 list
+    val unify_kind_rel :
+      (Variables.var, MyEval.Sound.Infra.Defs.typ) prod list ->
+      (Variables.var, MyEval.Sound.Infra.Defs.typ) prod list -> Variables.var
+      list -> (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod
+      list -> ((Variables.var, MyEval.Sound.Infra.Defs.typ) prod list,
+      (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod list)
+      prod
+    
+    val remove_env : 'a1 Env.env -> Variables.var -> 'a1 Env.env
+    
+    val unify_kinds :
+      MyEval.Sound.Infra.Defs.kind -> MyEval.Sound.Infra.Defs.kind ->
+      (MyEval.Sound.Infra.Defs.kind, (MyEval.Sound.Infra.Defs.typ,
+      MyEval.Sound.Infra.Defs.typ) prod list) prod option
+    
+    val get_kind :
+      Variables.var -> MyEval.Sound.Infra.Defs.kind Env.env ->
+      MyEval.Sound.Infra.Defs.kind
+    
+    val unify_vars :
+      MyEval.Sound.Infra.Defs.kenv -> Variables.var -> Variables.var ->
+      ((Variables.var, MyEval.Sound.Infra.Defs.kind) prod list,
+      (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod list)
+      prod option
+    
+    val unify_nv :
+      (MyEval.Sound.Infra.Defs.kenv -> MyEval.Sound.Infra.subs ->
+      (MyEval.Sound.Infra.Defs.kenv, MyEval.Sound.Infra.subs) prod option) ->
+      MyEval.Sound.Infra.Defs.kind Env.env -> MyEval.Sound.Infra.Defs.typ
+      Env.env -> Variables.VarSet.S.elt -> MyEval.Sound.Infra.Defs.typ ->
+      (MyEval.Sound.Infra.Defs.kenv, MyEval.Sound.Infra.subs) prod option
+    
+    val unify0 :
+      ((MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod list
+      -> MyEval.Sound.Infra.Defs.kenv -> MyEval.Sound.Infra.subs ->
+      (MyEval.Sound.Infra.Defs.kenv, MyEval.Sound.Infra.subs) prod option) ->
+      nat -> (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod
+      list -> MyEval.Sound.Infra.Defs.kenv -> MyEval.Sound.Infra.subs ->
+      (MyEval.Sound.Infra.Defs.kenv, MyEval.Sound.Infra.subs) prod option
+    
+    val accum : ('a1 -> 'a2) -> ('a2 -> 'a2 -> 'a2) -> 'a2 -> 'a1 list -> 'a2
+    
+    val all_types :
+      MyEval.Sound.Infra.subs -> (MyEval.Sound.Infra.Defs.typ,
+      MyEval.Sound.Infra.Defs.typ) prod list -> MyEval.Sound.Infra.Defs.typ
+      list
+    
+    val typ_size : MyEval.Sound.Infra.Defs.typ -> nat
+    
+    val pairs_size :
+      MyEval.Sound.Infra.subs -> (MyEval.Sound.Infra.Defs.typ,
+      MyEval.Sound.Infra.Defs.typ) prod list -> nat
+    
+    val unify :
+      nat -> (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod
+      list -> MyEval.Sound.Infra.Defs.kenv -> MyEval.Sound.Infra.subs ->
+      (MyEval.Sound.Infra.Defs.kenv, MyEval.Sound.Infra.subs) prod option
+    
+    val id : MyEval.Sound.Infra.Defs.typ Env.env
+    
+    val all_fv :
+      MyEval.Sound.Infra.subs -> (MyEval.Sound.Infra.Defs.typ,
+      MyEval.Sound.Infra.Defs.typ) prod list -> Variables.vars
+    
+    val really_all_fv :
+      MyEval.Sound.Infra.subs -> MyEval.Sound.Infra.Defs.kind Env.env ->
+      (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod list ->
+      Variables.VarSet.S.t
+    
+    val size_pairs :
+      MyEval.Sound.Infra.subs -> MyEval.Sound.Infra.Defs.kind Env.env ->
+      (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod list ->
+      nat
    end
  end
 
-module MkInfer : 
+val index : ('a1 -> 'a1 -> sumbool) -> nat -> 'a1 -> 'a1 list -> nat option
+
+module MkRename : 
  functor (Cstr:CstrIntf) ->
  functor (Const:CstIntf) ->
  sig 
-  module Rename : 
+  module Unify : 
    sig 
-    module Unify : 
+    module MyEval : 
      sig 
       module Sound : 
        sig 
@@ -1986,8 +2084,6 @@ module MkInfer :
           
           val const_app : Const.const -> Defs.trm list -> Defs.trm
           
-          val map_get : Variables.var list -> 'a1 Env.env -> 'a1 list
-          
           module MkJudgInfra : 
            functor (Delta:Defs.DeltaIntf) ->
            sig 
@@ -2046,6 +2142,711 @@ module MkInfer :
          end
        end
       
+      module Mk2 : 
+       functor (Delta:Sound.Infra.Defs.DeltaIntf) ->
+       sig 
+        type clos =
+          | Coq_clos_abs of Sound.Infra.Defs.trm * clos list
+          | Coq_clos_const of Const.const * clos list
+        
+        val clos_rect :
+          (Sound.Infra.Defs.trm -> clos list -> 'a1) -> (Const.const -> clos
+          list -> 'a1) -> clos -> 'a1
+        
+        val clos_rec :
+          (Sound.Infra.Defs.trm -> clos list -> 'a1) -> (Const.const -> clos
+          list -> 'a1) -> clos -> 'a1
+        
+        val clos2trm : clos -> Sound.Infra.Defs.trm
+        
+        val delta_red : Const.const -> clos list -> clos
+        
+        type frame = { frm_benv : clos list; frm_app : 
+                       clos list; frm_trm : Sound.Infra.Defs.trm }
+        
+        val frame_rect :
+          (clos list -> clos list -> Sound.Infra.Defs.trm -> 'a1) -> frame ->
+          'a1
+        
+        val frame_rec :
+          (clos list -> clos list -> Sound.Infra.Defs.trm -> 'a1) -> frame ->
+          'a1
+        
+        val frm_benv : frame -> clos list
+        
+        val frm_app : frame -> clos list
+        
+        val frm_trm : frame -> Sound.Infra.Defs.trm
+        
+        val is_bvar : Sound.Infra.Defs.trm -> bool
+        
+        val app_trm :
+          Sound.Infra.Defs.trm -> Sound.Infra.Defs.trm ->
+          Sound.Infra.Defs.trm
+        
+        val app2trm :
+          Sound.Infra.Defs.trm -> clos list -> Sound.Infra.Defs.trm
+        
+        val stack2trm :
+          Sound.Infra.Defs.trm -> frame list -> Sound.Infra.Defs.trm
+        
+        type eval_res =
+          | Result of clos
+          | Inter of frame list
+        
+        val eval_res_rect :
+          (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
+        
+        val eval_res_rec :
+          (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
+        
+        val res2trm : eval_res -> Sound.Infra.Defs.trm
+        
+        val clos_def : clos
+        
+        val trm2clos :
+          clos list -> clos Env.env -> Sound.Infra.Defs.trm -> clos
+        
+        val trm2app :
+          Sound.Infra.Defs.trm -> (Sound.Infra.Defs.trm,
+          Sound.Infra.Defs.trm) prod option
+        
+        val eval :
+          clos Env.env -> nat -> clos list -> clos list ->
+          Sound.Infra.Defs.trm -> frame list -> eval_res
+        
+        module Sound2 : 
+         sig 
+          module JudgInfra : 
+           sig 
+            module Judge : 
+             sig 
+              type gc_kind =
+                | GcAny
+                | GcLet
+              
+              val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
+              
+              val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
+              
+              type gc_info = (bool, gc_kind) prod
+              
+              val gc_raise : gc_info -> gc_info
+              
+              val gc_lower : gc_info -> gc_info
+             end
+           end
+          
+          module type SndHypIntf = 
+           sig 
+            
+           end
+          
+          module Mk3 : 
+           functor (SH:SndHypIntf) ->
+           sig 
+            
+           end
+         end
+        
+        val gc : (bool, Sound2.JudgInfra.Judge.gc_kind) prod
+        
+        module Mk3 : 
+         functor (SH:Sound2.SndHypIntf) ->
+         sig 
+          module Sound3 : 
+           sig 
+            
+           end
+          
+          val is_abs : Sound.Infra.Defs.trm -> bool
+         end
+       end
+     end
+    
+    module type Cstr2I = 
+     sig 
+      val unique : Cstr.cstr -> Variables.var list
+      
+      val lub : Cstr.cstr -> Cstr.cstr -> Cstr.cstr
+      
+      val valid : Cstr.cstr -> sumbool
+     end
+    
+    module Mk2 : 
+     functor (Cstr2:Cstr2I) ->
+     sig 
+      val compose :
+        MyEval.Sound.Infra.Defs.typ Env.env -> MyEval.Sound.Infra.Defs.typ
+        Env.env -> MyEval.Sound.Infra.subs
+      
+      val unify_kind_rel :
+        (Variables.var, MyEval.Sound.Infra.Defs.typ) prod list ->
+        (Variables.var, MyEval.Sound.Infra.Defs.typ) prod list ->
+        Variables.var list -> (MyEval.Sound.Infra.Defs.typ,
+        MyEval.Sound.Infra.Defs.typ) prod list -> ((Variables.var,
+        MyEval.Sound.Infra.Defs.typ) prod list, (MyEval.Sound.Infra.Defs.typ,
+        MyEval.Sound.Infra.Defs.typ) prod list) prod
+      
+      val remove_env : 'a1 Env.env -> Variables.var -> 'a1 Env.env
+      
+      val unify_kinds :
+        MyEval.Sound.Infra.Defs.kind -> MyEval.Sound.Infra.Defs.kind ->
+        (MyEval.Sound.Infra.Defs.kind, (MyEval.Sound.Infra.Defs.typ,
+        MyEval.Sound.Infra.Defs.typ) prod list) prod option
+      
+      val get_kind :
+        Variables.var -> MyEval.Sound.Infra.Defs.kind Env.env ->
+        MyEval.Sound.Infra.Defs.kind
+      
+      val unify_vars :
+        MyEval.Sound.Infra.Defs.kenv -> Variables.var -> Variables.var ->
+        ((Variables.var, MyEval.Sound.Infra.Defs.kind) prod list,
+        (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod list)
+        prod option
+      
+      val unify_nv :
+        (MyEval.Sound.Infra.Defs.kenv -> MyEval.Sound.Infra.subs ->
+        (MyEval.Sound.Infra.Defs.kenv, MyEval.Sound.Infra.subs) prod option)
+        -> MyEval.Sound.Infra.Defs.kind Env.env ->
+        MyEval.Sound.Infra.Defs.typ Env.env -> Variables.VarSet.S.elt ->
+        MyEval.Sound.Infra.Defs.typ -> (MyEval.Sound.Infra.Defs.kenv,
+        MyEval.Sound.Infra.subs) prod option
+      
+      val unify0 :
+        ((MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod list
+        -> MyEval.Sound.Infra.Defs.kenv -> MyEval.Sound.Infra.subs ->
+        (MyEval.Sound.Infra.Defs.kenv, MyEval.Sound.Infra.subs) prod option)
+        -> nat -> (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ)
+        prod list -> MyEval.Sound.Infra.Defs.kenv -> MyEval.Sound.Infra.subs
+        -> (MyEval.Sound.Infra.Defs.kenv, MyEval.Sound.Infra.subs) prod
+        option
+      
+      val accum :
+        ('a1 -> 'a2) -> ('a2 -> 'a2 -> 'a2) -> 'a2 -> 'a1 list -> 'a2
+      
+      val all_types :
+        MyEval.Sound.Infra.subs -> (MyEval.Sound.Infra.Defs.typ,
+        MyEval.Sound.Infra.Defs.typ) prod list -> MyEval.Sound.Infra.Defs.typ
+        list
+      
+      val typ_size : MyEval.Sound.Infra.Defs.typ -> nat
+      
+      val pairs_size :
+        MyEval.Sound.Infra.subs -> (MyEval.Sound.Infra.Defs.typ,
+        MyEval.Sound.Infra.Defs.typ) prod list -> nat
+      
+      val unify :
+        nat -> (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ)
+        prod list -> MyEval.Sound.Infra.Defs.kenv -> MyEval.Sound.Infra.subs
+        -> (MyEval.Sound.Infra.Defs.kenv, MyEval.Sound.Infra.subs) prod
+        option
+      
+      val id : MyEval.Sound.Infra.Defs.typ Env.env
+      
+      val all_fv :
+        MyEval.Sound.Infra.subs -> (MyEval.Sound.Infra.Defs.typ,
+        MyEval.Sound.Infra.Defs.typ) prod list -> Variables.vars
+      
+      val really_all_fv :
+        MyEval.Sound.Infra.subs -> MyEval.Sound.Infra.Defs.kind Env.env ->
+        (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod list
+        -> Variables.VarSet.S.t
+      
+      val size_pairs :
+        MyEval.Sound.Infra.subs -> MyEval.Sound.Infra.Defs.kind Env.env ->
+        (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod list
+        -> nat
+     end
+   end
+  
+  module Mk2 : 
+   functor (Delta:Unify.MyEval.Sound.Infra.Defs.DeltaIntf) ->
+   sig 
+    module MyEval2 : 
+     sig 
+      type clos =
+        | Coq_clos_abs of Unify.MyEval.Sound.Infra.Defs.trm * clos list
+        | Coq_clos_const of Const.const * clos list
+      
+      val clos_rect :
+        (Unify.MyEval.Sound.Infra.Defs.trm -> clos list -> 'a1) ->
+        (Const.const -> clos list -> 'a1) -> clos -> 'a1
+      
+      val clos_rec :
+        (Unify.MyEval.Sound.Infra.Defs.trm -> clos list -> 'a1) ->
+        (Const.const -> clos list -> 'a1) -> clos -> 'a1
+      
+      val clos2trm : clos -> Unify.MyEval.Sound.Infra.Defs.trm
+      
+      val delta_red : Const.const -> clos list -> clos
+      
+      type frame = { frm_benv : clos list; frm_app : 
+                     clos list; frm_trm : Unify.MyEval.Sound.Infra.Defs.trm }
+      
+      val frame_rect :
+        (clos list -> clos list -> Unify.MyEval.Sound.Infra.Defs.trm -> 'a1)
+        -> frame -> 'a1
+      
+      val frame_rec :
+        (clos list -> clos list -> Unify.MyEval.Sound.Infra.Defs.trm -> 'a1)
+        -> frame -> 'a1
+      
+      val frm_benv : frame -> clos list
+      
+      val frm_app : frame -> clos list
+      
+      val frm_trm : frame -> Unify.MyEval.Sound.Infra.Defs.trm
+      
+      val is_bvar : Unify.MyEval.Sound.Infra.Defs.trm -> bool
+      
+      val app_trm :
+        Unify.MyEval.Sound.Infra.Defs.trm ->
+        Unify.MyEval.Sound.Infra.Defs.trm ->
+        Unify.MyEval.Sound.Infra.Defs.trm
+      
+      val app2trm :
+        Unify.MyEval.Sound.Infra.Defs.trm -> clos list ->
+        Unify.MyEval.Sound.Infra.Defs.trm
+      
+      val stack2trm :
+        Unify.MyEval.Sound.Infra.Defs.trm -> frame list ->
+        Unify.MyEval.Sound.Infra.Defs.trm
+      
+      type eval_res =
+        | Result of clos
+        | Inter of frame list
+      
+      val eval_res_rect :
+        (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
+      
+      val eval_res_rec :
+        (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
+      
+      val res2trm : eval_res -> Unify.MyEval.Sound.Infra.Defs.trm
+      
+      val clos_def : clos
+      
+      val trm2clos :
+        clos list -> clos Env.env -> Unify.MyEval.Sound.Infra.Defs.trm ->
+        clos
+      
+      val trm2app :
+        Unify.MyEval.Sound.Infra.Defs.trm ->
+        (Unify.MyEval.Sound.Infra.Defs.trm,
+        Unify.MyEval.Sound.Infra.Defs.trm) prod option
+      
+      val eval :
+        clos Env.env -> nat -> clos list -> clos list ->
+        Unify.MyEval.Sound.Infra.Defs.trm -> frame list -> eval_res
+      
+      module Sound2 : 
+       sig 
+        module JudgInfra : 
+         sig 
+          module Judge : 
+           sig 
+            type gc_kind =
+              | GcAny
+              | GcLet
+            
+            val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
+            
+            val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
+            
+            type gc_info = (bool, gc_kind) prod
+            
+            val gc_raise : gc_info -> gc_info
+            
+            val gc_lower : gc_info -> gc_info
+           end
+         end
+        
+        module type SndHypIntf = 
+         sig 
+          
+         end
+        
+        module Mk3 : 
+         functor (SH:SndHypIntf) ->
+         sig 
+          
+         end
+       end
+      
+      val gc : (bool, Sound2.JudgInfra.Judge.gc_kind) prod
+      
+      module Mk3 : 
+       functor (SH:Sound2.SndHypIntf) ->
+       sig 
+        module Sound3 : 
+         sig 
+          
+         end
+        
+        val is_abs : Unify.MyEval.Sound.Infra.Defs.trm -> bool
+       end
+     end
+    
+    val typ_generalize :
+      Variables.var list -> Unify.MyEval.Sound.Infra.Defs.typ ->
+      Unify.MyEval.Sound.Infra.Defs.typ
+    
+    val sch_generalize :
+      Variables.var list -> Unify.MyEval.Sound.Infra.Defs.typ ->
+      Unify.MyEval.Sound.Infra.Defs.kind list ->
+      Unify.MyEval.Sound.Infra.Defs.sch
+    
+    val list_fst : ('a1, 'a2) prod list -> 'a1 list
+   end
+ end
+
+module MkInfer : 
+ functor (Cstr:CstrIntf) ->
+ functor (Const:CstIntf) ->
+ sig 
+  module Rename : 
+   sig 
+    module Unify : 
+     sig 
+      module MyEval : 
+       sig 
+        module Sound : 
+         sig 
+          module Infra : 
+           sig 
+            module Defs : 
+             sig 
+              type typ =
+                | Coq_typ_bvar of nat
+                | Coq_typ_fvar of Variables.var
+                | Coq_typ_arrow of typ * typ
+              
+              val typ_rect :
+                (nat -> 'a1) -> (Variables.var -> 'a1) -> (typ -> 'a1 -> typ
+                -> 'a1 -> 'a1) -> typ -> 'a1
+              
+              val typ_rec :
+                (nat -> 'a1) -> (Variables.var -> 'a1) -> (typ -> 'a1 -> typ
+                -> 'a1 -> 'a1) -> typ -> 'a1
+              
+              val typ_def : typ
+              
+              type ckind = { kind_cstr : Cstr.cstr;
+                             kind_rel : (Variables.var, typ) prod list }
+              
+              val ckind_rect :
+                (Cstr.cstr -> __ -> (Variables.var, typ) prod list -> __ ->
+                'a1) -> ckind -> 'a1
+              
+              val ckind_rec :
+                (Cstr.cstr -> __ -> (Variables.var, typ) prod list -> __ ->
+                'a1) -> ckind -> 'a1
+              
+              val kind_cstr : ckind -> Cstr.cstr
+              
+              val kind_rel : ckind -> (Variables.var, typ) prod list
+              
+              type kind = ckind option
+              
+              type sch = { sch_type : typ; sch_kinds : kind list }
+              
+              val sch_rect : (typ -> kind list -> 'a1) -> sch -> 'a1
+              
+              val sch_rec : (typ -> kind list -> 'a1) -> sch -> 'a1
+              
+              val sch_type : sch -> typ
+              
+              val sch_kinds : sch -> kind list
+              
+              val typ_open : typ -> typ list -> typ
+              
+              val typ_fvars : Variables.var list -> typ list
+              
+              val typ_open_vars : typ -> Variables.var list -> typ
+              
+              val sch_open : sch -> typ list -> typ
+              
+              val sch_open_vars : sch -> Variables.var list -> typ
+              
+              val kind_types : kind -> typ list
+              
+              val ckind_map_spec : (typ -> typ) -> ckind -> ckind
+              
+              val ckind_map : (typ -> typ) -> ckind -> ckind
+              
+              val kind_map : (typ -> typ) -> kind -> kind
+              
+              val kind_open : kind -> typ list -> kind
+              
+              type trm =
+                | Coq_trm_bvar of nat
+                | Coq_trm_fvar of Variables.var
+                | Coq_trm_abs of trm
+                | Coq_trm_let of trm * trm
+                | Coq_trm_app of trm * trm
+                | Coq_trm_cst of Const.const
+              
+              val trm_rect :
+                (nat -> 'a1) -> (Variables.var -> 'a1) -> (trm -> 'a1 -> 'a1)
+                -> (trm -> 'a1 -> trm -> 'a1 -> 'a1) -> (trm -> 'a1 -> trm ->
+                'a1 -> 'a1) -> (Const.const -> 'a1) -> trm -> 'a1
+              
+              val trm_rec :
+                (nat -> 'a1) -> (Variables.var -> 'a1) -> (trm -> 'a1 -> 'a1)
+                -> (trm -> 'a1 -> trm -> 'a1 -> 'a1) -> (trm -> 'a1 -> trm ->
+                'a1 -> 'a1) -> (Const.const -> 'a1) -> trm -> 'a1
+              
+              val trm_open_rec : nat -> trm -> trm -> trm
+              
+              val trm_open : trm -> trm -> trm
+              
+              val trm_def : trm
+              
+              val trm_inst_rec : nat -> trm list -> trm -> trm
+              
+              val trm_inst : trm -> trm list -> trm
+              
+              type kenv = kind Env.env
+              
+              val kinds_open : kind list -> typ list -> kind list
+              
+              val kinds_open_vars :
+                kind list -> Variables.var list -> (Variables.var, kind) prod
+                list
+              
+              type env = sch Env.env
+              
+              val typ_fv : typ -> Variables.vars
+              
+              val typ_fv_list : typ list -> Variables.VarSet.S.t
+              
+              val kind_fv : kind -> Variables.VarSet.S.t
+              
+              val kind_fv_list : kind list -> Variables.VarSet.S.t
+              
+              val sch_fv : sch -> Variables.VarSet.S.t
+              
+              val env_fv : sch Env.env -> Variables.vars
+              
+              module type DeltaIntf = 
+               sig 
+                val coq_type : Const.const -> sch
+               end
+              
+              module MkJudge : 
+               functor (Delta:DeltaIntf) ->
+               sig 
+                type gc_kind =
+                  | GcAny
+                  | GcLet
+                
+                val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
+                
+                val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
+                
+                type gc_info = (bool, gc_kind) prod
+                
+                val gc_raise : gc_info -> gc_info
+                
+                val gc_lower : gc_info -> gc_info
+               end
+             end
+            
+            val trm_fv : Defs.trm -> Variables.vars
+            
+            type subs = Defs.typ Env.env
+            
+            val typ_subst : subs -> Defs.typ -> Defs.typ
+            
+            val kind_subst : subs -> Defs.kind -> Defs.kind
+            
+            val sch_subst : subs -> Defs.sch -> Defs.sch
+            
+            val trm_subst : Variables.var -> Defs.trm -> Defs.trm -> Defs.trm
+            
+            val const_app : Const.const -> Defs.trm list -> Defs.trm
+            
+            module MkJudgInfra : 
+             functor (Delta:Defs.DeltaIntf) ->
+             sig 
+              module Judge : 
+               sig 
+                type gc_kind =
+                  | GcAny
+                  | GcLet
+                
+                val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
+                
+                val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
+                
+                type gc_info = (bool, gc_kind) prod
+                
+                val gc_raise : gc_info -> gc_info
+                
+                val gc_lower : gc_info -> gc_info
+               end
+             end
+           end
+          
+          module Mk2 : 
+           functor (Delta:Infra.Defs.DeltaIntf) ->
+           sig 
+            module JudgInfra : 
+             sig 
+              module Judge : 
+               sig 
+                type gc_kind =
+                  | GcAny
+                  | GcLet
+                
+                val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
+                
+                val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
+                
+                type gc_info = (bool, gc_kind) prod
+                
+                val gc_raise : gc_info -> gc_info
+                
+                val gc_lower : gc_info -> gc_info
+               end
+             end
+            
+            module type SndHypIntf = 
+             sig 
+              
+             end
+            
+            module Mk3 : 
+             functor (SH:SndHypIntf) ->
+             sig 
+              
+             end
+           end
+         end
+        
+        module Mk2 : 
+         functor (Delta:Sound.Infra.Defs.DeltaIntf) ->
+         sig 
+          type clos =
+            | Coq_clos_abs of Sound.Infra.Defs.trm * clos list
+            | Coq_clos_const of Const.const * clos list
+          
+          val clos_rect :
+            (Sound.Infra.Defs.trm -> clos list -> 'a1) -> (Const.const ->
+            clos list -> 'a1) -> clos -> 'a1
+          
+          val clos_rec :
+            (Sound.Infra.Defs.trm -> clos list -> 'a1) -> (Const.const ->
+            clos list -> 'a1) -> clos -> 'a1
+          
+          val clos2trm : clos -> Sound.Infra.Defs.trm
+          
+          val delta_red : Const.const -> clos list -> clos
+          
+          type frame = { frm_benv : clos list; frm_app : 
+                         clos list; frm_trm : Sound.Infra.Defs.trm }
+          
+          val frame_rect :
+            (clos list -> clos list -> Sound.Infra.Defs.trm -> 'a1) -> frame
+            -> 'a1
+          
+          val frame_rec :
+            (clos list -> clos list -> Sound.Infra.Defs.trm -> 'a1) -> frame
+            -> 'a1
+          
+          val frm_benv : frame -> clos list
+          
+          val frm_app : frame -> clos list
+          
+          val frm_trm : frame -> Sound.Infra.Defs.trm
+          
+          val is_bvar : Sound.Infra.Defs.trm -> bool
+          
+          val app_trm :
+            Sound.Infra.Defs.trm -> Sound.Infra.Defs.trm ->
+            Sound.Infra.Defs.trm
+          
+          val app2trm :
+            Sound.Infra.Defs.trm -> clos list -> Sound.Infra.Defs.trm
+          
+          val stack2trm :
+            Sound.Infra.Defs.trm -> frame list -> Sound.Infra.Defs.trm
+          
+          type eval_res =
+            | Result of clos
+            | Inter of frame list
+          
+          val eval_res_rect :
+            (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
+          
+          val eval_res_rec :
+            (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
+          
+          val res2trm : eval_res -> Sound.Infra.Defs.trm
+          
+          val clos_def : clos
+          
+          val trm2clos :
+            clos list -> clos Env.env -> Sound.Infra.Defs.trm -> clos
+          
+          val trm2app :
+            Sound.Infra.Defs.trm -> (Sound.Infra.Defs.trm,
+            Sound.Infra.Defs.trm) prod option
+          
+          val eval :
+            clos Env.env -> nat -> clos list -> clos list ->
+            Sound.Infra.Defs.trm -> frame list -> eval_res
+          
+          module Sound2 : 
+           sig 
+            module JudgInfra : 
+             sig 
+              module Judge : 
+               sig 
+                type gc_kind =
+                  | GcAny
+                  | GcLet
+                
+                val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
+                
+                val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
+                
+                type gc_info = (bool, gc_kind) prod
+                
+                val gc_raise : gc_info -> gc_info
+                
+                val gc_lower : gc_info -> gc_info
+               end
+             end
+            
+            module type SndHypIntf = 
+             sig 
+              
+             end
+            
+            module Mk3 : 
+             functor (SH:SndHypIntf) ->
+             sig 
+              
+             end
+           end
+          
+          val gc : (bool, Sound2.JudgInfra.Judge.gc_kind) prod
+          
+          module Mk3 : 
+           functor (SH:Sound2.SndHypIntf) ->
+           sig 
+            module Sound3 : 
+             sig 
+              
+             end
+            
+            val is_abs : Sound.Infra.Defs.trm -> bool
+           end
+         end
+       end
+      
       module type Cstr2I = 
        sig 
         val unique : Cstr.cstr -> Variables.var list
@@ -2059,179 +2860,372 @@ module MkInfer :
        functor (Cstr2:Cstr2I) ->
        sig 
         val compose :
-          Sound.Infra.Defs.typ Env.env -> Sound.Infra.Defs.typ Env.env ->
-          Sound.Infra.subs
+          MyEval.Sound.Infra.Defs.typ Env.env -> MyEval.Sound.Infra.Defs.typ
+          Env.env -> MyEval.Sound.Infra.subs
         
         val unify_kind_rel :
-          (Variables.var, Sound.Infra.Defs.typ) prod list -> (Variables.var,
-          Sound.Infra.Defs.typ) prod list -> Variables.var list ->
-          (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list ->
-          ((Variables.var, Sound.Infra.Defs.typ) prod list,
-          (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list) prod
+          (Variables.var, MyEval.Sound.Infra.Defs.typ) prod list ->
+          (Variables.var, MyEval.Sound.Infra.Defs.typ) prod list ->
+          Variables.var list -> (MyEval.Sound.Infra.Defs.typ,
+          MyEval.Sound.Infra.Defs.typ) prod list -> ((Variables.var,
+          MyEval.Sound.Infra.Defs.typ) prod list,
+          (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod
+          list) prod
         
         val remove_env : 'a1 Env.env -> Variables.var -> 'a1 Env.env
         
         val unify_kinds :
-          Sound.Infra.Defs.kind -> Sound.Infra.Defs.kind ->
-          (Sound.Infra.Defs.kind, (Sound.Infra.Defs.typ,
-          Sound.Infra.Defs.typ) prod list) prod option
+          MyEval.Sound.Infra.Defs.kind -> MyEval.Sound.Infra.Defs.kind ->
+          (MyEval.Sound.Infra.Defs.kind, (MyEval.Sound.Infra.Defs.typ,
+          MyEval.Sound.Infra.Defs.typ) prod list) prod option
         
         val get_kind :
-          Variables.var -> Sound.Infra.Defs.kind Env.env ->
-          Sound.Infra.Defs.kind
+          Variables.var -> MyEval.Sound.Infra.Defs.kind Env.env ->
+          MyEval.Sound.Infra.Defs.kind
         
         val unify_vars :
-          Sound.Infra.Defs.kenv -> Variables.var -> Variables.var ->
-          ((Variables.var, Sound.Infra.Defs.kind) prod list,
-          (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list) prod option
+          MyEval.Sound.Infra.Defs.kenv -> Variables.var -> Variables.var ->
+          ((Variables.var, MyEval.Sound.Infra.Defs.kind) prod list,
+          (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod
+          list) prod option
         
         val unify_nv :
-          (Sound.Infra.Defs.kenv -> Sound.Infra.subs ->
-          (Sound.Infra.Defs.kenv, Sound.Infra.subs) prod option) ->
-          Sound.Infra.Defs.kind Env.env -> Sound.Infra.Defs.typ Env.env ->
-          Variables.VarSet.S.elt -> Sound.Infra.Defs.typ ->
-          (Sound.Infra.Defs.kenv, Sound.Infra.subs) prod option
+          (MyEval.Sound.Infra.Defs.kenv -> MyEval.Sound.Infra.subs ->
+          (MyEval.Sound.Infra.Defs.kenv, MyEval.Sound.Infra.subs) prod
+          option) -> MyEval.Sound.Infra.Defs.kind Env.env ->
+          MyEval.Sound.Infra.Defs.typ Env.env -> Variables.VarSet.S.elt ->
+          MyEval.Sound.Infra.Defs.typ -> (MyEval.Sound.Infra.Defs.kenv,
+          MyEval.Sound.Infra.subs) prod option
         
         val unify0 :
-          ((Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list ->
-          Sound.Infra.Defs.kenv -> Sound.Infra.subs ->
-          (Sound.Infra.Defs.kenv, Sound.Infra.subs) prod option) -> nat ->
-          (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list ->
-          Sound.Infra.Defs.kenv -> Sound.Infra.subs ->
-          (Sound.Infra.Defs.kenv, Sound.Infra.subs) prod option
+          ((MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod
+          list -> MyEval.Sound.Infra.Defs.kenv -> MyEval.Sound.Infra.subs ->
+          (MyEval.Sound.Infra.Defs.kenv, MyEval.Sound.Infra.subs) prod
+          option) -> nat -> (MyEval.Sound.Infra.Defs.typ,
+          MyEval.Sound.Infra.Defs.typ) prod list ->
+          MyEval.Sound.Infra.Defs.kenv -> MyEval.Sound.Infra.subs ->
+          (MyEval.Sound.Infra.Defs.kenv, MyEval.Sound.Infra.subs) prod option
         
         val accum :
           ('a1 -> 'a2) -> ('a2 -> 'a2 -> 'a2) -> 'a2 -> 'a1 list -> 'a2
         
         val all_types :
-          Sound.Infra.subs -> (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ)
-          prod list -> Sound.Infra.Defs.typ list
+          MyEval.Sound.Infra.subs -> (MyEval.Sound.Infra.Defs.typ,
+          MyEval.Sound.Infra.Defs.typ) prod list ->
+          MyEval.Sound.Infra.Defs.typ list
         
-        val typ_size : Sound.Infra.Defs.typ -> nat
+        val typ_size : MyEval.Sound.Infra.Defs.typ -> nat
         
         val pairs_size :
-          Sound.Infra.subs -> (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ)
-          prod list -> nat
+          MyEval.Sound.Infra.subs -> (MyEval.Sound.Infra.Defs.typ,
+          MyEval.Sound.Infra.Defs.typ) prod list -> nat
         
         val unify :
-          nat -> (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list ->
-          Sound.Infra.Defs.kenv -> Sound.Infra.subs ->
-          (Sound.Infra.Defs.kenv, Sound.Infra.subs) prod option
+          nat -> (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ)
+          prod list -> MyEval.Sound.Infra.Defs.kenv ->
+          MyEval.Sound.Infra.subs -> (MyEval.Sound.Infra.Defs.kenv,
+          MyEval.Sound.Infra.subs) prod option
         
-        val id : Sound.Infra.Defs.typ Env.env
+        val id : MyEval.Sound.Infra.Defs.typ Env.env
         
         val all_fv :
-          Sound.Infra.subs -> (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ)
-          prod list -> Variables.vars
+          MyEval.Sound.Infra.subs -> (MyEval.Sound.Infra.Defs.typ,
+          MyEval.Sound.Infra.Defs.typ) prod list -> Variables.vars
         
         val really_all_fv :
-          Sound.Infra.subs -> Sound.Infra.Defs.kind Env.env ->
-          (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list ->
-          Variables.VarSet.S.t
+          MyEval.Sound.Infra.subs -> MyEval.Sound.Infra.Defs.kind Env.env ->
+          (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod
+          list -> Variables.VarSet.S.t
         
         val size_pairs :
-          Sound.Infra.subs -> Sound.Infra.Defs.kind Env.env ->
-          (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list -> nat
+          MyEval.Sound.Infra.subs -> MyEval.Sound.Infra.Defs.kind Env.env ->
+          (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod
+          list -> nat
        end
      end
     
     module Mk2 : 
-     functor (Delta:Unify.Sound.Infra.Defs.DeltaIntf) ->
+     functor (Delta:Unify.MyEval.Sound.Infra.Defs.DeltaIntf) ->
      sig 
-      module Sound : 
+      module MyEval2 : 
        sig 
-        module JudgInfra : 
+        type clos =
+          | Coq_clos_abs of Unify.MyEval.Sound.Infra.Defs.trm * clos list
+          | Coq_clos_const of Const.const * clos list
+        
+        val clos_rect :
+          (Unify.MyEval.Sound.Infra.Defs.trm -> clos list -> 'a1) ->
+          (Const.const -> clos list -> 'a1) -> clos -> 'a1
+        
+        val clos_rec :
+          (Unify.MyEval.Sound.Infra.Defs.trm -> clos list -> 'a1) ->
+          (Const.const -> clos list -> 'a1) -> clos -> 'a1
+        
+        val clos2trm : clos -> Unify.MyEval.Sound.Infra.Defs.trm
+        
+        val delta_red : Const.const -> clos list -> clos
+        
+        type frame = { frm_benv : clos list; frm_app : 
+                       clos list; frm_trm : Unify.MyEval.Sound.Infra.Defs.trm }
+        
+        val frame_rect :
+          (clos list -> clos list -> Unify.MyEval.Sound.Infra.Defs.trm ->
+          'a1) -> frame -> 'a1
+        
+        val frame_rec :
+          (clos list -> clos list -> Unify.MyEval.Sound.Infra.Defs.trm ->
+          'a1) -> frame -> 'a1
+        
+        val frm_benv : frame -> clos list
+        
+        val frm_app : frame -> clos list
+        
+        val frm_trm : frame -> Unify.MyEval.Sound.Infra.Defs.trm
+        
+        val is_bvar : Unify.MyEval.Sound.Infra.Defs.trm -> bool
+        
+        val app_trm :
+          Unify.MyEval.Sound.Infra.Defs.trm ->
+          Unify.MyEval.Sound.Infra.Defs.trm ->
+          Unify.MyEval.Sound.Infra.Defs.trm
+        
+        val app2trm :
+          Unify.MyEval.Sound.Infra.Defs.trm -> clos list ->
+          Unify.MyEval.Sound.Infra.Defs.trm
+        
+        val stack2trm :
+          Unify.MyEval.Sound.Infra.Defs.trm -> frame list ->
+          Unify.MyEval.Sound.Infra.Defs.trm
+        
+        type eval_res =
+          | Result of clos
+          | Inter of frame list
+        
+        val eval_res_rect :
+          (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
+        
+        val eval_res_rec :
+          (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
+        
+        val res2trm : eval_res -> Unify.MyEval.Sound.Infra.Defs.trm
+        
+        val clos_def : clos
+        
+        val trm2clos :
+          clos list -> clos Env.env -> Unify.MyEval.Sound.Infra.Defs.trm ->
+          clos
+        
+        val trm2app :
+          Unify.MyEval.Sound.Infra.Defs.trm ->
+          (Unify.MyEval.Sound.Infra.Defs.trm,
+          Unify.MyEval.Sound.Infra.Defs.trm) prod option
+        
+        val eval :
+          clos Env.env -> nat -> clos list -> clos list ->
+          Unify.MyEval.Sound.Infra.Defs.trm -> frame list -> eval_res
+        
+        module Sound2 : 
          sig 
-          module Judge : 
+          module JudgInfra : 
            sig 
-            type gc_kind =
-              | GcAny
-              | GcLet
+            module Judge : 
+             sig 
+              type gc_kind =
+                | GcAny
+                | GcLet
+              
+              val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
+              
+              val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
+              
+              type gc_info = (bool, gc_kind) prod
+              
+              val gc_raise : gc_info -> gc_info
+              
+              val gc_lower : gc_info -> gc_info
+             end
+           end
+          
+          module type SndHypIntf = 
+           sig 
             
-            val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
+           end
+          
+          module Mk3 : 
+           functor (SH:SndHypIntf) ->
+           sig 
             
-            val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
-            
-            type gc_info = (bool, gc_kind) prod
-            
-            val gc_raise : gc_info -> gc_info
-            
-            val gc_lower : gc_info -> gc_info
            end
          end
         
-        module type SndHypIntf = 
-         sig 
-          
-         end
+        val gc : (bool, Sound2.JudgInfra.Judge.gc_kind) prod
         
         module Mk3 : 
-         functor (SH:SndHypIntf) ->
+         functor (SH:Sound2.SndHypIntf) ->
          sig 
+          module Sound3 : 
+           sig 
+            
+           end
           
+          val is_abs : Unify.MyEval.Sound.Infra.Defs.trm -> bool
          end
        end
       
       val typ_generalize :
-        Variables.var list -> Unify.Sound.Infra.Defs.typ ->
-        Unify.Sound.Infra.Defs.typ
+        Variables.var list -> Unify.MyEval.Sound.Infra.Defs.typ ->
+        Unify.MyEval.Sound.Infra.Defs.typ
       
       val sch_generalize :
-        Variables.var list -> Unify.Sound.Infra.Defs.typ ->
-        Unify.Sound.Infra.Defs.kind list -> Unify.Sound.Infra.Defs.sch
+        Variables.var list -> Unify.MyEval.Sound.Infra.Defs.typ ->
+        Unify.MyEval.Sound.Infra.Defs.kind list ->
+        Unify.MyEval.Sound.Infra.Defs.sch
       
       val list_fst : ('a1, 'a2) prod list -> 'a1 list
      end
    end
   
   module Mk2 : 
-   functor (Delta:Rename.Unify.Sound.Infra.Defs.DeltaIntf) ->
+   functor (Delta:Rename.Unify.MyEval.Sound.Infra.Defs.DeltaIntf) ->
    functor (Cstr2:Rename.Unify.Cstr2I) ->
    sig 
     module Rename2 : 
      sig 
-      module Sound : 
+      module MyEval2 : 
        sig 
-        module JudgInfra : 
+        type clos =
+          | Coq_clos_abs of Rename.Unify.MyEval.Sound.Infra.Defs.trm
+             * clos list
+          | Coq_clos_const of Const.const * clos list
+        
+        val clos_rect :
+          (Rename.Unify.MyEval.Sound.Infra.Defs.trm -> clos list -> 'a1) ->
+          (Const.const -> clos list -> 'a1) -> clos -> 'a1
+        
+        val clos_rec :
+          (Rename.Unify.MyEval.Sound.Infra.Defs.trm -> clos list -> 'a1) ->
+          (Const.const -> clos list -> 'a1) -> clos -> 'a1
+        
+        val clos2trm : clos -> Rename.Unify.MyEval.Sound.Infra.Defs.trm
+        
+        val delta_red : Const.const -> clos list -> clos
+        
+        type frame = { frm_benv : clos list; frm_app : 
+                       clos list;
+                       frm_trm : Rename.Unify.MyEval.Sound.Infra.Defs.trm }
+        
+        val frame_rect :
+          (clos list -> clos list -> Rename.Unify.MyEval.Sound.Infra.Defs.trm
+          -> 'a1) -> frame -> 'a1
+        
+        val frame_rec :
+          (clos list -> clos list -> Rename.Unify.MyEval.Sound.Infra.Defs.trm
+          -> 'a1) -> frame -> 'a1
+        
+        val frm_benv : frame -> clos list
+        
+        val frm_app : frame -> clos list
+        
+        val frm_trm : frame -> Rename.Unify.MyEval.Sound.Infra.Defs.trm
+        
+        val is_bvar : Rename.Unify.MyEval.Sound.Infra.Defs.trm -> bool
+        
+        val app_trm :
+          Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+          Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+          Rename.Unify.MyEval.Sound.Infra.Defs.trm
+        
+        val app2trm :
+          Rename.Unify.MyEval.Sound.Infra.Defs.trm -> clos list ->
+          Rename.Unify.MyEval.Sound.Infra.Defs.trm
+        
+        val stack2trm :
+          Rename.Unify.MyEval.Sound.Infra.Defs.trm -> frame list ->
+          Rename.Unify.MyEval.Sound.Infra.Defs.trm
+        
+        type eval_res =
+          | Result of clos
+          | Inter of frame list
+        
+        val eval_res_rect :
+          (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
+        
+        val eval_res_rec :
+          (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
+        
+        val res2trm : eval_res -> Rename.Unify.MyEval.Sound.Infra.Defs.trm
+        
+        val clos_def : clos
+        
+        val trm2clos :
+          clos list -> clos Env.env ->
+          Rename.Unify.MyEval.Sound.Infra.Defs.trm -> clos
+        
+        val trm2app :
+          Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+          (Rename.Unify.MyEval.Sound.Infra.Defs.trm,
+          Rename.Unify.MyEval.Sound.Infra.Defs.trm) prod option
+        
+        val eval :
+          clos Env.env -> nat -> clos list -> clos list ->
+          Rename.Unify.MyEval.Sound.Infra.Defs.trm -> frame list -> eval_res
+        
+        module Sound2 : 
          sig 
-          module Judge : 
+          module JudgInfra : 
            sig 
-            type gc_kind =
-              | GcAny
-              | GcLet
+            module Judge : 
+             sig 
+              type gc_kind =
+                | GcAny
+                | GcLet
+              
+              val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
+              
+              val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
+              
+              type gc_info = (bool, gc_kind) prod
+              
+              val gc_raise : gc_info -> gc_info
+              
+              val gc_lower : gc_info -> gc_info
+             end
+           end
+          
+          module type SndHypIntf = 
+           sig 
             
-            val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
+           end
+          
+          module Mk3 : 
+           functor (SH:SndHypIntf) ->
+           sig 
             
-            val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
-            
-            type gc_info = (bool, gc_kind) prod
-            
-            val gc_raise : gc_info -> gc_info
-            
-            val gc_lower : gc_info -> gc_info
            end
          end
         
-        module type SndHypIntf = 
-         sig 
-          
-         end
+        val gc : (bool, Sound2.JudgInfra.Judge.gc_kind) prod
         
         module Mk3 : 
-         functor (SH:SndHypIntf) ->
+         functor (SH:Sound2.SndHypIntf) ->
          sig 
+          module Sound3 : 
+           sig 
+            
+           end
           
+          val is_abs : Rename.Unify.MyEval.Sound.Infra.Defs.trm -> bool
          end
        end
       
       val typ_generalize :
-        Variables.var list -> Rename.Unify.Sound.Infra.Defs.typ ->
-        Rename.Unify.Sound.Infra.Defs.typ
+        Variables.var list -> Rename.Unify.MyEval.Sound.Infra.Defs.typ ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ
       
       val sch_generalize :
-        Variables.var list -> Rename.Unify.Sound.Infra.Defs.typ ->
-        Rename.Unify.Sound.Infra.Defs.kind list ->
-        Rename.Unify.Sound.Infra.Defs.sch
+        Variables.var list -> Rename.Unify.MyEval.Sound.Infra.Defs.typ ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.kind list ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.sch
       
       val list_fst : ('a1, 'a2) prod list -> 'a1 list
      end
@@ -2239,150 +3233,165 @@ module MkInfer :
     module Body : 
      sig 
       val compose :
-        Rename.Unify.Sound.Infra.Defs.typ Env.env ->
-        Rename.Unify.Sound.Infra.Defs.typ Env.env ->
-        Rename.Unify.Sound.Infra.subs
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ Env.env ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ Env.env ->
+        Rename.Unify.MyEval.Sound.Infra.subs
       
       val unify_kind_rel :
-        (Variables.var, Rename.Unify.Sound.Infra.Defs.typ) prod list ->
-        (Variables.var, Rename.Unify.Sound.Infra.Defs.typ) prod list ->
-        Variables.var list -> (Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list -> ((Variables.var,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list,
-        (Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list) prod
+        (Variables.var, Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list
+        -> (Variables.var, Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod
+        list -> Variables.var list ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list ->
+        ((Variables.var, Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list,
+        (Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list) prod
       
       val remove_env : 'a1 Env.env -> Variables.var -> 'a1 Env.env
       
       val unify_kinds :
-        Rename.Unify.Sound.Infra.Defs.kind ->
-        Rename.Unify.Sound.Infra.Defs.kind ->
-        (Rename.Unify.Sound.Infra.Defs.kind,
-        (Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list) prod option
+        Rename.Unify.MyEval.Sound.Infra.Defs.kind ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.kind ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.kind,
+        (Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list) prod option
       
       val get_kind :
-        Variables.var -> Rename.Unify.Sound.Infra.Defs.kind Env.env ->
-        Rename.Unify.Sound.Infra.Defs.kind
+        Variables.var -> Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.kind
       
       val unify_vars :
-        Rename.Unify.Sound.Infra.Defs.kenv -> Variables.var -> Variables.var
-        -> ((Variables.var, Rename.Unify.Sound.Infra.Defs.kind) prod list,
-        (Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list) prod option
+        Rename.Unify.MyEval.Sound.Infra.Defs.kenv -> Variables.var ->
+        Variables.var -> ((Variables.var,
+        Rename.Unify.MyEval.Sound.Infra.Defs.kind) prod list,
+        (Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list) prod option
       
       val unify_nv :
-        (Rename.Unify.Sound.Infra.Defs.kenv -> Rename.Unify.Sound.Infra.subs
-        -> (Rename.Unify.Sound.Infra.Defs.kenv,
-        Rename.Unify.Sound.Infra.subs) prod option) ->
-        Rename.Unify.Sound.Infra.Defs.kind Env.env ->
-        Rename.Unify.Sound.Infra.Defs.typ Env.env -> Variables.VarSet.S.elt
-        -> Rename.Unify.Sound.Infra.Defs.typ ->
-        (Rename.Unify.Sound.Infra.Defs.kenv, Rename.Unify.Sound.Infra.subs)
-        prod option
+        (Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
+        Rename.Unify.MyEval.Sound.Infra.subs ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+        Rename.Unify.MyEval.Sound.Infra.subs) prod option) ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ Env.env ->
+        Variables.VarSet.S.elt -> Rename.Unify.MyEval.Sound.Infra.Defs.typ ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+        Rename.Unify.MyEval.Sound.Infra.subs) prod option
       
       val unify0 :
-        ((Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list ->
-        Rename.Unify.Sound.Infra.Defs.kenv -> Rename.Unify.Sound.Infra.subs
-        -> (Rename.Unify.Sound.Infra.Defs.kenv,
-        Rename.Unify.Sound.Infra.subs) prod option) -> nat ->
-        (Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list ->
-        Rename.Unify.Sound.Infra.Defs.kenv -> Rename.Unify.Sound.Infra.subs
-        -> (Rename.Unify.Sound.Infra.Defs.kenv,
-        Rename.Unify.Sound.Infra.subs) prod option
+        ((Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
+        Rename.Unify.MyEval.Sound.Infra.subs ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+        Rename.Unify.MyEval.Sound.Infra.subs) prod option) -> nat ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
+        Rename.Unify.MyEval.Sound.Infra.subs ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+        Rename.Unify.MyEval.Sound.Infra.subs) prod option
       
       val accum :
         ('a1 -> 'a2) -> ('a2 -> 'a2 -> 'a2) -> 'a2 -> 'a1 list -> 'a2
       
       val all_types :
-        Rename.Unify.Sound.Infra.subs -> (Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list ->
-        Rename.Unify.Sound.Infra.Defs.typ list
+        Rename.Unify.MyEval.Sound.Infra.subs ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ list
       
-      val typ_size : Rename.Unify.Sound.Infra.Defs.typ -> nat
+      val typ_size : Rename.Unify.MyEval.Sound.Infra.Defs.typ -> nat
       
       val pairs_size :
-        Rename.Unify.Sound.Infra.subs -> (Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list -> nat
+        Rename.Unify.MyEval.Sound.Infra.subs ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list -> nat
       
       val unify :
-        nat -> (Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list ->
-        Rename.Unify.Sound.Infra.Defs.kenv -> Rename.Unify.Sound.Infra.subs
-        -> (Rename.Unify.Sound.Infra.Defs.kenv,
-        Rename.Unify.Sound.Infra.subs) prod option
+        nat -> (Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
+        Rename.Unify.MyEval.Sound.Infra.subs ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+        Rename.Unify.MyEval.Sound.Infra.subs) prod option
       
-      val id : Rename.Unify.Sound.Infra.Defs.typ Env.env
+      val id : Rename.Unify.MyEval.Sound.Infra.Defs.typ Env.env
       
       val all_fv :
-        Rename.Unify.Sound.Infra.subs -> (Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list -> Variables.vars
+        Rename.Unify.MyEval.Sound.Infra.subs ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list -> Variables.vars
       
       val really_all_fv :
-        Rename.Unify.Sound.Infra.subs -> Rename.Unify.Sound.Infra.Defs.kind
-        Env.env -> (Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list -> Variables.VarSet.S.t
+        Rename.Unify.MyEval.Sound.Infra.subs ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list ->
+        Variables.VarSet.S.t
       
       val size_pairs :
-        Rename.Unify.Sound.Infra.subs -> Rename.Unify.Sound.Infra.Defs.kind
-        Env.env -> (Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list -> nat
+        Rename.Unify.MyEval.Sound.Infra.subs ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list -> nat
      end
     
     val unify :
-      Rename.Unify.Sound.Infra.Defs.kind Env.env ->
-      Rename.Unify.Sound.Infra.Defs.typ -> Rename.Unify.Sound.Infra.Defs.typ
-      -> Rename.Unify.Sound.Infra.subs ->
-      (Rename.Unify.Sound.Infra.Defs.kenv, Rename.Unify.Sound.Infra.subs)
-      prod option
+      Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.typ ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.typ ->
+      Rename.Unify.MyEval.Sound.Infra.subs ->
+      (Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+      Rename.Unify.MyEval.Sound.Infra.subs) prod option
     
     val fvs :
-      Rename.Unify.Sound.Infra.Defs.typ Env.env ->
-      Rename.Unify.Sound.Infra.Defs.kind Env.env ->
-      Rename.Unify.Sound.Infra.Defs.sch Env.env -> Variables.VarSet.S.t
+      Rename.Unify.MyEval.Sound.Infra.Defs.typ Env.env ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.sch Env.env ->
+      Variables.VarSet.S.t
     
     val close_fvars :
-      nat -> Rename.Unify.Sound.Infra.Defs.kenv -> Variables.vars ->
+      nat -> Rename.Unify.MyEval.Sound.Infra.Defs.kenv -> Variables.vars ->
       Variables.vars -> Variables.vars
     
     val close_fvk :
-      (Variables.var, Rename.Unify.Sound.Infra.Defs.kind) prod list ->
+      (Variables.var, Rename.Unify.MyEval.Sound.Infra.Defs.kind) prod list ->
       Variables.vars -> Variables.vars
     
     val split_env :
       Variables.vars -> 'a1 Env.env -> ('a1 Env.env, 'a1 Env.env) prod
     
     val vars_subst :
-      Rename.Unify.Sound.Infra.subs -> Variables.VarSet.S.t ->
+      Rename.Unify.MyEval.Sound.Infra.subs -> Variables.VarSet.S.t ->
       Variables.VarSet.S.t
     
     val typinf_generalize :
-      (Variables.var, Rename.Unify.Sound.Infra.Defs.kind) prod list ->
-      Rename.Unify.Sound.Infra.Defs.sch Env.env -> Variables.vars ->
-      Rename.Unify.Sound.Infra.Defs.typ -> ((Variables.var,
-      Rename.Unify.Sound.Infra.Defs.kind) prod list,
-      Rename.Unify.Sound.Infra.Defs.sch) prod
+      (Variables.var, Rename.Unify.MyEval.Sound.Infra.Defs.kind) prod list ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.sch Env.env -> Variables.vars ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.typ -> ((Variables.var,
+      Rename.Unify.MyEval.Sound.Infra.Defs.kind) prod list,
+      Rename.Unify.MyEval.Sound.Infra.Defs.sch) prod
     
-    val kdom : Rename.Unify.Sound.Infra.Defs.kenv -> Variables.vars
+    val kdom : Rename.Unify.MyEval.Sound.Infra.Defs.kenv -> Variables.vars
     
     val typinf :
-      Rename.Unify.Sound.Infra.Defs.kenv -> Rename.Unify.Sound.Infra.Defs.env
-      -> Rename.Unify.Sound.Infra.Defs.trm ->
-      Rename.Unify.Sound.Infra.Defs.typ -> Variables.vars ->
-      Rename.Unify.Sound.Infra.subs -> nat ->
-      ((Rename.Unify.Sound.Infra.Defs.kenv, Rename.Unify.Sound.Infra.subs)
-      prod option, Variables.vars) prod
+      Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.env ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.typ -> Variables.vars ->
+      Rename.Unify.MyEval.Sound.Infra.subs -> nat ->
+      ((Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+      Rename.Unify.MyEval.Sound.Infra.subs) prod option, Variables.vars) prod
     
-    val trm_depth : Rename.Unify.Sound.Infra.Defs.trm -> nat
+    val trm_depth : Rename.Unify.MyEval.Sound.Infra.Defs.trm -> nat
     
     val typinf' :
-      Rename.Unify.Sound.Infra.Defs.trm ->
-      (Rename.Unify.Sound.Infra.Defs.kind Env.env,
-      Rename.Unify.Sound.Infra.Defs.typ) prod option
+      Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+      (Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env,
+      Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod option
     
-    val coq_Gc : (bool, Rename2.Sound.JudgInfra.Judge.gc_kind) prod
+    val coq_Gc : (bool, Rename2.MyEval2.Sound2.JudgInfra.Judge.gc_kind) prod
    end
  end
 
@@ -2439,188 +3448,522 @@ module Infer :
    sig 
     module Unify : 
      sig 
-      module Sound : 
+      module MyEval : 
        sig 
-        module Infra : 
+        module Sound : 
          sig 
-          module Defs : 
+          module Infra : 
            sig 
-            type typ =
-              | Coq_typ_bvar of nat
-              | Coq_typ_fvar of Variables.var
-              | Coq_typ_arrow of typ * typ
-            
-            val typ_rect :
-              (nat -> 'a1) -> (Variables.var -> 'a1) -> (typ -> 'a1 -> typ ->
-              'a1 -> 'a1) -> typ -> 'a1
-            
-            val typ_rec :
-              (nat -> 'a1) -> (Variables.var -> 'a1) -> (typ -> 'a1 -> typ ->
-              'a1 -> 'a1) -> typ -> 'a1
-            
-            val typ_def : typ
-            
-            type ckind = { kind_cstr : Cstr.cstr;
-                           kind_rel : (Variables.var, typ) prod list }
-            
-            val ckind_rect :
-              (Cstr.cstr -> __ -> (Variables.var, typ) prod list -> __ ->
-              'a1) -> ckind -> 'a1
-            
-            val ckind_rec :
-              (Cstr.cstr -> __ -> (Variables.var, typ) prod list -> __ ->
-              'a1) -> ckind -> 'a1
-            
-            val kind_cstr : ckind -> Cstr.cstr
-            
-            val kind_rel : ckind -> (Variables.var, typ) prod list
-            
-            type kind = ckind option
-            
-            type sch = { sch_type : typ; sch_kinds : kind list }
-            
-            val sch_rect : (typ -> kind list -> 'a1) -> sch -> 'a1
-            
-            val sch_rec : (typ -> kind list -> 'a1) -> sch -> 'a1
-            
-            val sch_type : sch -> typ
-            
-            val sch_kinds : sch -> kind list
-            
-            val typ_open : typ -> typ list -> typ
-            
-            val typ_fvars : Variables.var list -> typ list
-            
-            val typ_open_vars : typ -> Variables.var list -> typ
-            
-            val sch_open : sch -> typ list -> typ
-            
-            val sch_open_vars : sch -> Variables.var list -> typ
-            
-            val kind_types : kind -> typ list
-            
-            val ckind_map_spec : (typ -> typ) -> ckind -> ckind
-            
-            val ckind_map : (typ -> typ) -> ckind -> ckind
-            
-            val kind_map : (typ -> typ) -> kind -> kind
-            
-            val kind_open : kind -> typ list -> kind
-            
-            type trm =
-              | Coq_trm_bvar of nat
-              | Coq_trm_fvar of Variables.var
-              | Coq_trm_abs of trm
-              | Coq_trm_let of trm * trm
-              | Coq_trm_app of trm * trm
-              | Coq_trm_cst of Const.const
-            
-            val trm_rect :
-              (nat -> 'a1) -> (Variables.var -> 'a1) -> (trm -> 'a1 -> 'a1)
-              -> (trm -> 'a1 -> trm -> 'a1 -> 'a1) -> (trm -> 'a1 -> trm ->
-              'a1 -> 'a1) -> (Const.const -> 'a1) -> trm -> 'a1
-            
-            val trm_rec :
-              (nat -> 'a1) -> (Variables.var -> 'a1) -> (trm -> 'a1 -> 'a1)
-              -> (trm -> 'a1 -> trm -> 'a1 -> 'a1) -> (trm -> 'a1 -> trm ->
-              'a1 -> 'a1) -> (Const.const -> 'a1) -> trm -> 'a1
-            
-            val trm_open_rec : nat -> trm -> trm -> trm
-            
-            val trm_open : trm -> trm -> trm
-            
-            val trm_def : trm
-            
-            val trm_inst_rec : nat -> trm list -> trm -> trm
-            
-            val trm_inst : trm -> trm list -> trm
-            
-            type kenv = kind Env.env
-            
-            val kinds_open : kind list -> typ list -> kind list
-            
-            val kinds_open_vars :
-              kind list -> Variables.var list -> (Variables.var, kind) prod
-              list
-            
-            type env = sch Env.env
-            
-            val typ_fv : typ -> Variables.vars
-            
-            val typ_fv_list : typ list -> Variables.VarSet.S.t
-            
-            val kind_fv : kind -> Variables.VarSet.S.t
-            
-            val kind_fv_list : kind list -> Variables.VarSet.S.t
-            
-            val sch_fv : sch -> Variables.VarSet.S.t
-            
-            val env_fv : sch Env.env -> Variables.vars
-            
-            module type DeltaIntf = 
+            module Defs : 
              sig 
-              val coq_type : Const.const -> sch
+              type typ =
+                | Coq_typ_bvar of nat
+                | Coq_typ_fvar of Variables.var
+                | Coq_typ_arrow of typ * typ
+              
+              val typ_rect :
+                (nat -> 'a1) -> (Variables.var -> 'a1) -> (typ -> 'a1 -> typ
+                -> 'a1 -> 'a1) -> typ -> 'a1
+              
+              val typ_rec :
+                (nat -> 'a1) -> (Variables.var -> 'a1) -> (typ -> 'a1 -> typ
+                -> 'a1 -> 'a1) -> typ -> 'a1
+              
+              val typ_def : typ
+              
+              type ckind = { kind_cstr : Cstr.cstr;
+                             kind_rel : (Variables.var, typ) prod list }
+              
+              val ckind_rect :
+                (Cstr.cstr -> __ -> (Variables.var, typ) prod list -> __ ->
+                'a1) -> ckind -> 'a1
+              
+              val ckind_rec :
+                (Cstr.cstr -> __ -> (Variables.var, typ) prod list -> __ ->
+                'a1) -> ckind -> 'a1
+              
+              val kind_cstr : ckind -> Cstr.cstr
+              
+              val kind_rel : ckind -> (Variables.var, typ) prod list
+              
+              type kind = ckind option
+              
+              type sch = { sch_type : typ; sch_kinds : kind list }
+              
+              val sch_rect : (typ -> kind list -> 'a1) -> sch -> 'a1
+              
+              val sch_rec : (typ -> kind list -> 'a1) -> sch -> 'a1
+              
+              val sch_type : sch -> typ
+              
+              val sch_kinds : sch -> kind list
+              
+              val typ_open : typ -> typ list -> typ
+              
+              val typ_fvars : Variables.var list -> typ list
+              
+              val typ_open_vars : typ -> Variables.var list -> typ
+              
+              val sch_open : sch -> typ list -> typ
+              
+              val sch_open_vars : sch -> Variables.var list -> typ
+              
+              val kind_types : kind -> typ list
+              
+              val ckind_map_spec : (typ -> typ) -> ckind -> ckind
+              
+              val ckind_map : (typ -> typ) -> ckind -> ckind
+              
+              val kind_map : (typ -> typ) -> kind -> kind
+              
+              val kind_open : kind -> typ list -> kind
+              
+              type trm =
+                | Coq_trm_bvar of nat
+                | Coq_trm_fvar of Variables.var
+                | Coq_trm_abs of trm
+                | Coq_trm_let of trm * trm
+                | Coq_trm_app of trm * trm
+                | Coq_trm_cst of Const.const
+              
+              val trm_rect :
+                (nat -> 'a1) -> (Variables.var -> 'a1) -> (trm -> 'a1 -> 'a1)
+                -> (trm -> 'a1 -> trm -> 'a1 -> 'a1) -> (trm -> 'a1 -> trm ->
+                'a1 -> 'a1) -> (Const.const -> 'a1) -> trm -> 'a1
+              
+              val trm_rec :
+                (nat -> 'a1) -> (Variables.var -> 'a1) -> (trm -> 'a1 -> 'a1)
+                -> (trm -> 'a1 -> trm -> 'a1 -> 'a1) -> (trm -> 'a1 -> trm ->
+                'a1 -> 'a1) -> (Const.const -> 'a1) -> trm -> 'a1
+              
+              val trm_open_rec : nat -> trm -> trm -> trm
+              
+              val trm_open : trm -> trm -> trm
+              
+              val trm_def : trm
+              
+              val trm_inst_rec : nat -> trm list -> trm -> trm
+              
+              val trm_inst : trm -> trm list -> trm
+              
+              type kenv = kind Env.env
+              
+              val kinds_open : kind list -> typ list -> kind list
+              
+              val kinds_open_vars :
+                kind list -> Variables.var list -> (Variables.var, kind) prod
+                list
+              
+              type env = sch Env.env
+              
+              val typ_fv : typ -> Variables.vars
+              
+              val typ_fv_list : typ list -> Variables.VarSet.S.t
+              
+              val kind_fv : kind -> Variables.VarSet.S.t
+              
+              val kind_fv_list : kind list -> Variables.VarSet.S.t
+              
+              val sch_fv : sch -> Variables.VarSet.S.t
+              
+              val env_fv : sch Env.env -> Variables.vars
+              
+              module type DeltaIntf = 
+               sig 
+                val coq_type : Const.const -> sch
+               end
+              
+              module MkJudge : 
+               functor (Delta:DeltaIntf) ->
+               sig 
+                type gc_kind =
+                  | GcAny
+                  | GcLet
+                
+                val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
+                
+                val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
+                
+                type gc_info = (bool, gc_kind) prod
+                
+                val gc_raise : gc_info -> gc_info
+                
+                val gc_lower : gc_info -> gc_info
+               end
              end
             
-            module MkJudge : 
-             functor (Delta:DeltaIntf) ->
+            val trm_fv : Defs.trm -> Variables.vars
+            
+            type subs = Defs.typ Env.env
+            
+            val typ_subst : subs -> Defs.typ -> Defs.typ
+            
+            val kind_subst : subs -> Defs.kind -> Defs.kind
+            
+            val sch_subst : subs -> Defs.sch -> Defs.sch
+            
+            val trm_subst : Variables.var -> Defs.trm -> Defs.trm -> Defs.trm
+            
+            val const_app : Const.const -> Defs.trm list -> Defs.trm
+            
+            module MkJudgInfra : 
+             functor (Delta:Defs.DeltaIntf) ->
              sig 
-              type gc_kind =
-                | GcAny
-                | GcLet
-              
-              val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
-              
-              val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
-              
-              type gc_info = (bool, gc_kind) prod
-              
-              val gc_raise : gc_info -> gc_info
-              
-              val gc_lower : gc_info -> gc_info
+              module Judge : 
+               sig 
+                type gc_kind =
+                  | GcAny
+                  | GcLet
+                
+                val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
+                
+                val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
+                
+                type gc_info = (bool, gc_kind) prod
+                
+                val gc_raise : gc_info -> gc_info
+                
+                val gc_lower : gc_info -> gc_info
+               end
              end
            end
           
-          val trm_fv : Defs.trm -> Variables.vars
-          
-          type subs = Defs.typ Env.env
-          
-          val typ_subst : subs -> Defs.typ -> Defs.typ
-          
-          val kind_subst : subs -> Defs.kind -> Defs.kind
-          
-          val sch_subst : subs -> Defs.sch -> Defs.sch
-          
-          val trm_subst : Variables.var -> Defs.trm -> Defs.trm -> Defs.trm
-          
-          val const_app : Const.const -> Defs.trm list -> Defs.trm
-          
-          val map_get : Variables.var list -> 'a1 Env.env -> 'a1 list
-          
-          module MkJudgInfra : 
-           functor (Delta:Defs.DeltaIntf) ->
+          module Mk2 : 
+           functor (Delta:Infra.Defs.DeltaIntf) ->
            sig 
-            module Judge : 
+            module JudgInfra : 
              sig 
-              type gc_kind =
-                | GcAny
-                | GcLet
+              module Judge : 
+               sig 
+                type gc_kind =
+                  | GcAny
+                  | GcLet
+                
+                val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
+                
+                val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
+                
+                type gc_info = (bool, gc_kind) prod
+                
+                val gc_raise : gc_info -> gc_info
+                
+                val gc_lower : gc_info -> gc_info
+               end
+             end
+            
+            module type SndHypIntf = 
+             sig 
               
-              val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
+             end
+            
+            module Mk3 : 
+             functor (SH:SndHypIntf) ->
+             sig 
               
-              val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
-              
-              type gc_info = (bool, gc_kind) prod
-              
-              val gc_raise : gc_info -> gc_info
-              
-              val gc_lower : gc_info -> gc_info
              end
            end
          end
         
         module Mk2 : 
-         functor (Delta:Infra.Defs.DeltaIntf) ->
+         functor (Delta:Sound.Infra.Defs.DeltaIntf) ->
+         sig 
+          type clos =
+            | Coq_clos_abs of Sound.Infra.Defs.trm * clos list
+            | Coq_clos_const of Const.const * clos list
+          
+          val clos_rect :
+            (Sound.Infra.Defs.trm -> clos list -> 'a1) -> (Const.const ->
+            clos list -> 'a1) -> clos -> 'a1
+          
+          val clos_rec :
+            (Sound.Infra.Defs.trm -> clos list -> 'a1) -> (Const.const ->
+            clos list -> 'a1) -> clos -> 'a1
+          
+          val clos2trm : clos -> Sound.Infra.Defs.trm
+          
+          val delta_red : Const.const -> clos list -> clos
+          
+          type frame = { frm_benv : clos list; frm_app : 
+                         clos list; frm_trm : Sound.Infra.Defs.trm }
+          
+          val frame_rect :
+            (clos list -> clos list -> Sound.Infra.Defs.trm -> 'a1) -> frame
+            -> 'a1
+          
+          val frame_rec :
+            (clos list -> clos list -> Sound.Infra.Defs.trm -> 'a1) -> frame
+            -> 'a1
+          
+          val frm_benv : frame -> clos list
+          
+          val frm_app : frame -> clos list
+          
+          val frm_trm : frame -> Sound.Infra.Defs.trm
+          
+          val is_bvar : Sound.Infra.Defs.trm -> bool
+          
+          val app_trm :
+            Sound.Infra.Defs.trm -> Sound.Infra.Defs.trm ->
+            Sound.Infra.Defs.trm
+          
+          val app2trm :
+            Sound.Infra.Defs.trm -> clos list -> Sound.Infra.Defs.trm
+          
+          val stack2trm :
+            Sound.Infra.Defs.trm -> frame list -> Sound.Infra.Defs.trm
+          
+          type eval_res =
+            | Result of clos
+            | Inter of frame list
+          
+          val eval_res_rect :
+            (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
+          
+          val eval_res_rec :
+            (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
+          
+          val res2trm : eval_res -> Sound.Infra.Defs.trm
+          
+          val clos_def : clos
+          
+          val trm2clos :
+            clos list -> clos Env.env -> Sound.Infra.Defs.trm -> clos
+          
+          val trm2app :
+            Sound.Infra.Defs.trm -> (Sound.Infra.Defs.trm,
+            Sound.Infra.Defs.trm) prod option
+          
+          val eval :
+            clos Env.env -> nat -> clos list -> clos list ->
+            Sound.Infra.Defs.trm -> frame list -> eval_res
+          
+          module Sound2 : 
+           sig 
+            module JudgInfra : 
+             sig 
+              module Judge : 
+               sig 
+                type gc_kind =
+                  | GcAny
+                  | GcLet
+                
+                val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
+                
+                val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
+                
+                type gc_info = (bool, gc_kind) prod
+                
+                val gc_raise : gc_info -> gc_info
+                
+                val gc_lower : gc_info -> gc_info
+               end
+             end
+            
+            module type SndHypIntf = 
+             sig 
+              
+             end
+            
+            module Mk3 : 
+             functor (SH:SndHypIntf) ->
+             sig 
+              
+             end
+           end
+          
+          val gc : (bool, Sound2.JudgInfra.Judge.gc_kind) prod
+          
+          module Mk3 : 
+           functor (SH:Sound2.SndHypIntf) ->
+           sig 
+            module Sound3 : 
+             sig 
+              
+             end
+            
+            val is_abs : Sound.Infra.Defs.trm -> bool
+           end
+         end
+       end
+      
+      module type Cstr2I = 
+       sig 
+        val unique : Cstr.cstr -> Variables.var list
+        
+        val lub : Cstr.cstr -> Cstr.cstr -> Cstr.cstr
+        
+        val valid : Cstr.cstr -> sumbool
+       end
+      
+      module Mk2 : 
+       functor (Cstr2:Cstr2I) ->
+       sig 
+        val compose :
+          MyEval.Sound.Infra.Defs.typ Env.env -> MyEval.Sound.Infra.Defs.typ
+          Env.env -> MyEval.Sound.Infra.subs
+        
+        val unify_kind_rel :
+          (Variables.var, MyEval.Sound.Infra.Defs.typ) prod list ->
+          (Variables.var, MyEval.Sound.Infra.Defs.typ) prod list ->
+          Variables.var list -> (MyEval.Sound.Infra.Defs.typ,
+          MyEval.Sound.Infra.Defs.typ) prod list -> ((Variables.var,
+          MyEval.Sound.Infra.Defs.typ) prod list,
+          (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod
+          list) prod
+        
+        val remove_env : 'a1 Env.env -> Variables.var -> 'a1 Env.env
+        
+        val unify_kinds :
+          MyEval.Sound.Infra.Defs.kind -> MyEval.Sound.Infra.Defs.kind ->
+          (MyEval.Sound.Infra.Defs.kind, (MyEval.Sound.Infra.Defs.typ,
+          MyEval.Sound.Infra.Defs.typ) prod list) prod option
+        
+        val get_kind :
+          Variables.var -> MyEval.Sound.Infra.Defs.kind Env.env ->
+          MyEval.Sound.Infra.Defs.kind
+        
+        val unify_vars :
+          MyEval.Sound.Infra.Defs.kenv -> Variables.var -> Variables.var ->
+          ((Variables.var, MyEval.Sound.Infra.Defs.kind) prod list,
+          (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod
+          list) prod option
+        
+        val unify_nv :
+          (MyEval.Sound.Infra.Defs.kenv -> MyEval.Sound.Infra.subs ->
+          (MyEval.Sound.Infra.Defs.kenv, MyEval.Sound.Infra.subs) prod
+          option) -> MyEval.Sound.Infra.Defs.kind Env.env ->
+          MyEval.Sound.Infra.Defs.typ Env.env -> Variables.VarSet.S.elt ->
+          MyEval.Sound.Infra.Defs.typ -> (MyEval.Sound.Infra.Defs.kenv,
+          MyEval.Sound.Infra.subs) prod option
+        
+        val unify0 :
+          ((MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod
+          list -> MyEval.Sound.Infra.Defs.kenv -> MyEval.Sound.Infra.subs ->
+          (MyEval.Sound.Infra.Defs.kenv, MyEval.Sound.Infra.subs) prod
+          option) -> nat -> (MyEval.Sound.Infra.Defs.typ,
+          MyEval.Sound.Infra.Defs.typ) prod list ->
+          MyEval.Sound.Infra.Defs.kenv -> MyEval.Sound.Infra.subs ->
+          (MyEval.Sound.Infra.Defs.kenv, MyEval.Sound.Infra.subs) prod option
+        
+        val accum :
+          ('a1 -> 'a2) -> ('a2 -> 'a2 -> 'a2) -> 'a2 -> 'a1 list -> 'a2
+        
+        val all_types :
+          MyEval.Sound.Infra.subs -> (MyEval.Sound.Infra.Defs.typ,
+          MyEval.Sound.Infra.Defs.typ) prod list ->
+          MyEval.Sound.Infra.Defs.typ list
+        
+        val typ_size : MyEval.Sound.Infra.Defs.typ -> nat
+        
+        val pairs_size :
+          MyEval.Sound.Infra.subs -> (MyEval.Sound.Infra.Defs.typ,
+          MyEval.Sound.Infra.Defs.typ) prod list -> nat
+        
+        val unify :
+          nat -> (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ)
+          prod list -> MyEval.Sound.Infra.Defs.kenv ->
+          MyEval.Sound.Infra.subs -> (MyEval.Sound.Infra.Defs.kenv,
+          MyEval.Sound.Infra.subs) prod option
+        
+        val id : MyEval.Sound.Infra.Defs.typ Env.env
+        
+        val all_fv :
+          MyEval.Sound.Infra.subs -> (MyEval.Sound.Infra.Defs.typ,
+          MyEval.Sound.Infra.Defs.typ) prod list -> Variables.vars
+        
+        val really_all_fv :
+          MyEval.Sound.Infra.subs -> MyEval.Sound.Infra.Defs.kind Env.env ->
+          (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod
+          list -> Variables.VarSet.S.t
+        
+        val size_pairs :
+          MyEval.Sound.Infra.subs -> MyEval.Sound.Infra.Defs.kind Env.env ->
+          (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod
+          list -> nat
+       end
+     end
+    
+    module Mk2 : 
+     functor (Delta:Unify.MyEval.Sound.Infra.Defs.DeltaIntf) ->
+     sig 
+      module MyEval2 : 
+       sig 
+        type clos =
+          | Coq_clos_abs of Unify.MyEval.Sound.Infra.Defs.trm * clos list
+          | Coq_clos_const of Const.const * clos list
+        
+        val clos_rect :
+          (Unify.MyEval.Sound.Infra.Defs.trm -> clos list -> 'a1) ->
+          (Const.const -> clos list -> 'a1) -> clos -> 'a1
+        
+        val clos_rec :
+          (Unify.MyEval.Sound.Infra.Defs.trm -> clos list -> 'a1) ->
+          (Const.const -> clos list -> 'a1) -> clos -> 'a1
+        
+        val clos2trm : clos -> Unify.MyEval.Sound.Infra.Defs.trm
+        
+        val delta_red : Const.const -> clos list -> clos
+        
+        type frame = { frm_benv : clos list; frm_app : 
+                       clos list; frm_trm : Unify.MyEval.Sound.Infra.Defs.trm }
+        
+        val frame_rect :
+          (clos list -> clos list -> Unify.MyEval.Sound.Infra.Defs.trm ->
+          'a1) -> frame -> 'a1
+        
+        val frame_rec :
+          (clos list -> clos list -> Unify.MyEval.Sound.Infra.Defs.trm ->
+          'a1) -> frame -> 'a1
+        
+        val frm_benv : frame -> clos list
+        
+        val frm_app : frame -> clos list
+        
+        val frm_trm : frame -> Unify.MyEval.Sound.Infra.Defs.trm
+        
+        val is_bvar : Unify.MyEval.Sound.Infra.Defs.trm -> bool
+        
+        val app_trm :
+          Unify.MyEval.Sound.Infra.Defs.trm ->
+          Unify.MyEval.Sound.Infra.Defs.trm ->
+          Unify.MyEval.Sound.Infra.Defs.trm
+        
+        val app2trm :
+          Unify.MyEval.Sound.Infra.Defs.trm -> clos list ->
+          Unify.MyEval.Sound.Infra.Defs.trm
+        
+        val stack2trm :
+          Unify.MyEval.Sound.Infra.Defs.trm -> frame list ->
+          Unify.MyEval.Sound.Infra.Defs.trm
+        
+        type eval_res =
+          | Result of clos
+          | Inter of frame list
+        
+        val eval_res_rect :
+          (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
+        
+        val eval_res_rec :
+          (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
+        
+        val res2trm : eval_res -> Unify.MyEval.Sound.Infra.Defs.trm
+        
+        val clos_def : clos
+        
+        val trm2clos :
+          clos list -> clos Env.env -> Unify.MyEval.Sound.Infra.Defs.trm ->
+          clos
+        
+        val trm2app :
+          Unify.MyEval.Sound.Infra.Defs.trm ->
+          (Unify.MyEval.Sound.Infra.Defs.trm,
+          Unify.MyEval.Sound.Infra.Defs.trm) prod option
+        
+        val eval :
+          clos Env.env -> nat -> clos list -> clos list ->
+          Unify.MyEval.Sound.Infra.Defs.trm -> frame list -> eval_res
+        
+        module Sound2 : 
          sig 
           module JudgInfra : 
            sig 
@@ -2653,194 +3996,175 @@ module Infer :
             
            end
          end
-       end
-      
-      module type Cstr2I = 
-       sig 
-        val unique : Cstr.cstr -> Variables.var list
         
-        val lub : Cstr.cstr -> Cstr.cstr -> Cstr.cstr
-        
-        val valid : Cstr.cstr -> sumbool
-       end
-      
-      module Mk2 : 
-       functor (Cstr2:Cstr2I) ->
-       sig 
-        val compose :
-          Sound.Infra.Defs.typ Env.env -> Sound.Infra.Defs.typ Env.env ->
-          Sound.Infra.subs
-        
-        val unify_kind_rel :
-          (Variables.var, Sound.Infra.Defs.typ) prod list -> (Variables.var,
-          Sound.Infra.Defs.typ) prod list -> Variables.var list ->
-          (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list ->
-          ((Variables.var, Sound.Infra.Defs.typ) prod list,
-          (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list) prod
-        
-        val remove_env : 'a1 Env.env -> Variables.var -> 'a1 Env.env
-        
-        val unify_kinds :
-          Sound.Infra.Defs.kind -> Sound.Infra.Defs.kind ->
-          (Sound.Infra.Defs.kind, (Sound.Infra.Defs.typ,
-          Sound.Infra.Defs.typ) prod list) prod option
-        
-        val get_kind :
-          Variables.var -> Sound.Infra.Defs.kind Env.env ->
-          Sound.Infra.Defs.kind
-        
-        val unify_vars :
-          Sound.Infra.Defs.kenv -> Variables.var -> Variables.var ->
-          ((Variables.var, Sound.Infra.Defs.kind) prod list,
-          (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list) prod option
-        
-        val unify_nv :
-          (Sound.Infra.Defs.kenv -> Sound.Infra.subs ->
-          (Sound.Infra.Defs.kenv, Sound.Infra.subs) prod option) ->
-          Sound.Infra.Defs.kind Env.env -> Sound.Infra.Defs.typ Env.env ->
-          Variables.VarSet.S.elt -> Sound.Infra.Defs.typ ->
-          (Sound.Infra.Defs.kenv, Sound.Infra.subs) prod option
-        
-        val unify0 :
-          ((Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list ->
-          Sound.Infra.Defs.kenv -> Sound.Infra.subs ->
-          (Sound.Infra.Defs.kenv, Sound.Infra.subs) prod option) -> nat ->
-          (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list ->
-          Sound.Infra.Defs.kenv -> Sound.Infra.subs ->
-          (Sound.Infra.Defs.kenv, Sound.Infra.subs) prod option
-        
-        val accum :
-          ('a1 -> 'a2) -> ('a2 -> 'a2 -> 'a2) -> 'a2 -> 'a1 list -> 'a2
-        
-        val all_types :
-          Sound.Infra.subs -> (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ)
-          prod list -> Sound.Infra.Defs.typ list
-        
-        val typ_size : Sound.Infra.Defs.typ -> nat
-        
-        val pairs_size :
-          Sound.Infra.subs -> (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ)
-          prod list -> nat
-        
-        val unify :
-          nat -> (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list ->
-          Sound.Infra.Defs.kenv -> Sound.Infra.subs ->
-          (Sound.Infra.Defs.kenv, Sound.Infra.subs) prod option
-        
-        val id : Sound.Infra.Defs.typ Env.env
-        
-        val all_fv :
-          Sound.Infra.subs -> (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ)
-          prod list -> Variables.vars
-        
-        val really_all_fv :
-          Sound.Infra.subs -> Sound.Infra.Defs.kind Env.env ->
-          (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list ->
-          Variables.VarSet.S.t
-        
-        val size_pairs :
-          Sound.Infra.subs -> Sound.Infra.Defs.kind Env.env ->
-          (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list -> nat
-       end
-     end
-    
-    module Mk2 : 
-     functor (Delta:Unify.Sound.Infra.Defs.DeltaIntf) ->
-     sig 
-      module Sound : 
-       sig 
-        module JudgInfra : 
-         sig 
-          module Judge : 
-           sig 
-            type gc_kind =
-              | GcAny
-              | GcLet
-            
-            val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
-            
-            val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
-            
-            type gc_info = (bool, gc_kind) prod
-            
-            val gc_raise : gc_info -> gc_info
-            
-            val gc_lower : gc_info -> gc_info
-           end
-         end
-        
-        module type SndHypIntf = 
-         sig 
-          
-         end
+        val gc : (bool, Sound2.JudgInfra.Judge.gc_kind) prod
         
         module Mk3 : 
-         functor (SH:SndHypIntf) ->
+         functor (SH:Sound2.SndHypIntf) ->
          sig 
+          module Sound3 : 
+           sig 
+            
+           end
           
+          val is_abs : Unify.MyEval.Sound.Infra.Defs.trm -> bool
          end
        end
       
       val typ_generalize :
-        Variables.var list -> Unify.Sound.Infra.Defs.typ ->
-        Unify.Sound.Infra.Defs.typ
+        Variables.var list -> Unify.MyEval.Sound.Infra.Defs.typ ->
+        Unify.MyEval.Sound.Infra.Defs.typ
       
       val sch_generalize :
-        Variables.var list -> Unify.Sound.Infra.Defs.typ ->
-        Unify.Sound.Infra.Defs.kind list -> Unify.Sound.Infra.Defs.sch
+        Variables.var list -> Unify.MyEval.Sound.Infra.Defs.typ ->
+        Unify.MyEval.Sound.Infra.Defs.kind list ->
+        Unify.MyEval.Sound.Infra.Defs.sch
       
       val list_fst : ('a1, 'a2) prod list -> 'a1 list
      end
    end
   
   module Mk2 : 
-   functor (Delta:Rename.Unify.Sound.Infra.Defs.DeltaIntf) ->
+   functor (Delta:Rename.Unify.MyEval.Sound.Infra.Defs.DeltaIntf) ->
    functor (Cstr2:Rename.Unify.Cstr2I) ->
    sig 
     module Rename2 : 
      sig 
-      module Sound : 
+      module MyEval2 : 
        sig 
-        module JudgInfra : 
+        type clos =
+          | Coq_clos_abs of Rename.Unify.MyEval.Sound.Infra.Defs.trm
+             * clos list
+          | Coq_clos_const of Const.const * clos list
+        
+        val clos_rect :
+          (Rename.Unify.MyEval.Sound.Infra.Defs.trm -> clos list -> 'a1) ->
+          (Const.const -> clos list -> 'a1) -> clos -> 'a1
+        
+        val clos_rec :
+          (Rename.Unify.MyEval.Sound.Infra.Defs.trm -> clos list -> 'a1) ->
+          (Const.const -> clos list -> 'a1) -> clos -> 'a1
+        
+        val clos2trm : clos -> Rename.Unify.MyEval.Sound.Infra.Defs.trm
+        
+        val delta_red : Const.const -> clos list -> clos
+        
+        type frame = { frm_benv : clos list; frm_app : 
+                       clos list;
+                       frm_trm : Rename.Unify.MyEval.Sound.Infra.Defs.trm }
+        
+        val frame_rect :
+          (clos list -> clos list -> Rename.Unify.MyEval.Sound.Infra.Defs.trm
+          -> 'a1) -> frame -> 'a1
+        
+        val frame_rec :
+          (clos list -> clos list -> Rename.Unify.MyEval.Sound.Infra.Defs.trm
+          -> 'a1) -> frame -> 'a1
+        
+        val frm_benv : frame -> clos list
+        
+        val frm_app : frame -> clos list
+        
+        val frm_trm : frame -> Rename.Unify.MyEval.Sound.Infra.Defs.trm
+        
+        val is_bvar : Rename.Unify.MyEval.Sound.Infra.Defs.trm -> bool
+        
+        val app_trm :
+          Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+          Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+          Rename.Unify.MyEval.Sound.Infra.Defs.trm
+        
+        val app2trm :
+          Rename.Unify.MyEval.Sound.Infra.Defs.trm -> clos list ->
+          Rename.Unify.MyEval.Sound.Infra.Defs.trm
+        
+        val stack2trm :
+          Rename.Unify.MyEval.Sound.Infra.Defs.trm -> frame list ->
+          Rename.Unify.MyEval.Sound.Infra.Defs.trm
+        
+        type eval_res =
+          | Result of clos
+          | Inter of frame list
+        
+        val eval_res_rect :
+          (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
+        
+        val eval_res_rec :
+          (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
+        
+        val res2trm : eval_res -> Rename.Unify.MyEval.Sound.Infra.Defs.trm
+        
+        val clos_def : clos
+        
+        val trm2clos :
+          clos list -> clos Env.env ->
+          Rename.Unify.MyEval.Sound.Infra.Defs.trm -> clos
+        
+        val trm2app :
+          Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+          (Rename.Unify.MyEval.Sound.Infra.Defs.trm,
+          Rename.Unify.MyEval.Sound.Infra.Defs.trm) prod option
+        
+        val eval :
+          clos Env.env -> nat -> clos list -> clos list ->
+          Rename.Unify.MyEval.Sound.Infra.Defs.trm -> frame list -> eval_res
+        
+        module Sound2 : 
          sig 
-          module Judge : 
+          module JudgInfra : 
            sig 
-            type gc_kind =
-              | GcAny
-              | GcLet
+            module Judge : 
+             sig 
+              type gc_kind =
+                | GcAny
+                | GcLet
+              
+              val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
+              
+              val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
+              
+              type gc_info = (bool, gc_kind) prod
+              
+              val gc_raise : gc_info -> gc_info
+              
+              val gc_lower : gc_info -> gc_info
+             end
+           end
+          
+          module type SndHypIntf = 
+           sig 
             
-            val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
+           end
+          
+          module Mk3 : 
+           functor (SH:SndHypIntf) ->
+           sig 
             
-            val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
-            
-            type gc_info = (bool, gc_kind) prod
-            
-            val gc_raise : gc_info -> gc_info
-            
-            val gc_lower : gc_info -> gc_info
            end
          end
         
-        module type SndHypIntf = 
-         sig 
-          
-         end
+        val gc : (bool, Sound2.JudgInfra.Judge.gc_kind) prod
         
         module Mk3 : 
-         functor (SH:SndHypIntf) ->
+         functor (SH:Sound2.SndHypIntf) ->
          sig 
+          module Sound3 : 
+           sig 
+            
+           end
           
+          val is_abs : Rename.Unify.MyEval.Sound.Infra.Defs.trm -> bool
          end
        end
       
       val typ_generalize :
-        Variables.var list -> Rename.Unify.Sound.Infra.Defs.typ ->
-        Rename.Unify.Sound.Infra.Defs.typ
+        Variables.var list -> Rename.Unify.MyEval.Sound.Infra.Defs.typ ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ
       
       val sch_generalize :
-        Variables.var list -> Rename.Unify.Sound.Infra.Defs.typ ->
-        Rename.Unify.Sound.Infra.Defs.kind list ->
-        Rename.Unify.Sound.Infra.Defs.sch
+        Variables.var list -> Rename.Unify.MyEval.Sound.Infra.Defs.typ ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.kind list ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.sch
       
       val list_fst : ('a1, 'a2) prod list -> 'a1 list
      end
@@ -2848,163 +4172,180 @@ module Infer :
     module Body : 
      sig 
       val compose :
-        Rename.Unify.Sound.Infra.Defs.typ Env.env ->
-        Rename.Unify.Sound.Infra.Defs.typ Env.env ->
-        Rename.Unify.Sound.Infra.subs
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ Env.env ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ Env.env ->
+        Rename.Unify.MyEval.Sound.Infra.subs
       
       val unify_kind_rel :
-        (Variables.var, Rename.Unify.Sound.Infra.Defs.typ) prod list ->
-        (Variables.var, Rename.Unify.Sound.Infra.Defs.typ) prod list ->
-        Variables.var list -> (Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list -> ((Variables.var,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list,
-        (Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list) prod
+        (Variables.var, Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list
+        -> (Variables.var, Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod
+        list -> Variables.var list ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list ->
+        ((Variables.var, Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list,
+        (Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list) prod
       
       val remove_env : 'a1 Env.env -> Variables.var -> 'a1 Env.env
       
       val unify_kinds :
-        Rename.Unify.Sound.Infra.Defs.kind ->
-        Rename.Unify.Sound.Infra.Defs.kind ->
-        (Rename.Unify.Sound.Infra.Defs.kind,
-        (Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list) prod option
+        Rename.Unify.MyEval.Sound.Infra.Defs.kind ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.kind ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.kind,
+        (Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list) prod option
       
       val get_kind :
-        Variables.var -> Rename.Unify.Sound.Infra.Defs.kind Env.env ->
-        Rename.Unify.Sound.Infra.Defs.kind
+        Variables.var -> Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.kind
       
       val unify_vars :
-        Rename.Unify.Sound.Infra.Defs.kenv -> Variables.var -> Variables.var
-        -> ((Variables.var, Rename.Unify.Sound.Infra.Defs.kind) prod list,
-        (Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list) prod option
+        Rename.Unify.MyEval.Sound.Infra.Defs.kenv -> Variables.var ->
+        Variables.var -> ((Variables.var,
+        Rename.Unify.MyEval.Sound.Infra.Defs.kind) prod list,
+        (Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list) prod option
       
       val unify_nv :
-        (Rename.Unify.Sound.Infra.Defs.kenv -> Rename.Unify.Sound.Infra.subs
-        -> (Rename.Unify.Sound.Infra.Defs.kenv,
-        Rename.Unify.Sound.Infra.subs) prod option) ->
-        Rename.Unify.Sound.Infra.Defs.kind Env.env ->
-        Rename.Unify.Sound.Infra.Defs.typ Env.env -> Variables.VarSet.S.elt
-        -> Rename.Unify.Sound.Infra.Defs.typ ->
-        (Rename.Unify.Sound.Infra.Defs.kenv, Rename.Unify.Sound.Infra.subs)
-        prod option
+        (Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
+        Rename.Unify.MyEval.Sound.Infra.subs ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+        Rename.Unify.MyEval.Sound.Infra.subs) prod option) ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ Env.env ->
+        Variables.VarSet.S.elt -> Rename.Unify.MyEval.Sound.Infra.Defs.typ ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+        Rename.Unify.MyEval.Sound.Infra.subs) prod option
       
       val unify0 :
-        ((Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list ->
-        Rename.Unify.Sound.Infra.Defs.kenv -> Rename.Unify.Sound.Infra.subs
-        -> (Rename.Unify.Sound.Infra.Defs.kenv,
-        Rename.Unify.Sound.Infra.subs) prod option) -> nat ->
-        (Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list ->
-        Rename.Unify.Sound.Infra.Defs.kenv -> Rename.Unify.Sound.Infra.subs
-        -> (Rename.Unify.Sound.Infra.Defs.kenv,
-        Rename.Unify.Sound.Infra.subs) prod option
+        ((Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
+        Rename.Unify.MyEval.Sound.Infra.subs ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+        Rename.Unify.MyEval.Sound.Infra.subs) prod option) -> nat ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
+        Rename.Unify.MyEval.Sound.Infra.subs ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+        Rename.Unify.MyEval.Sound.Infra.subs) prod option
       
       val accum :
         ('a1 -> 'a2) -> ('a2 -> 'a2 -> 'a2) -> 'a2 -> 'a1 list -> 'a2
       
       val all_types :
-        Rename.Unify.Sound.Infra.subs -> (Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list ->
-        Rename.Unify.Sound.Infra.Defs.typ list
+        Rename.Unify.MyEval.Sound.Infra.subs ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ list
       
-      val typ_size : Rename.Unify.Sound.Infra.Defs.typ -> nat
+      val typ_size : Rename.Unify.MyEval.Sound.Infra.Defs.typ -> nat
       
       val pairs_size :
-        Rename.Unify.Sound.Infra.subs -> (Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list -> nat
+        Rename.Unify.MyEval.Sound.Infra.subs ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list -> nat
       
       val unify :
-        nat -> (Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list ->
-        Rename.Unify.Sound.Infra.Defs.kenv -> Rename.Unify.Sound.Infra.subs
-        -> (Rename.Unify.Sound.Infra.Defs.kenv,
-        Rename.Unify.Sound.Infra.subs) prod option
+        nat -> (Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
+        Rename.Unify.MyEval.Sound.Infra.subs ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+        Rename.Unify.MyEval.Sound.Infra.subs) prod option
       
-      val id : Rename.Unify.Sound.Infra.Defs.typ Env.env
+      val id : Rename.Unify.MyEval.Sound.Infra.Defs.typ Env.env
       
       val all_fv :
-        Rename.Unify.Sound.Infra.subs -> (Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list -> Variables.vars
+        Rename.Unify.MyEval.Sound.Infra.subs ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list -> Variables.vars
       
       val really_all_fv :
-        Rename.Unify.Sound.Infra.subs -> Rename.Unify.Sound.Infra.Defs.kind
-        Env.env -> (Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list -> Variables.VarSet.S.t
+        Rename.Unify.MyEval.Sound.Infra.subs ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list ->
+        Variables.VarSet.S.t
       
       val size_pairs :
-        Rename.Unify.Sound.Infra.subs -> Rename.Unify.Sound.Infra.Defs.kind
-        Env.env -> (Rename.Unify.Sound.Infra.Defs.typ,
-        Rename.Unify.Sound.Infra.Defs.typ) prod list -> nat
+        Rename.Unify.MyEval.Sound.Infra.subs ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list -> nat
      end
     
     val unify :
-      Rename.Unify.Sound.Infra.Defs.kind Env.env ->
-      Rename.Unify.Sound.Infra.Defs.typ -> Rename.Unify.Sound.Infra.Defs.typ
-      -> Rename.Unify.Sound.Infra.subs ->
-      (Rename.Unify.Sound.Infra.Defs.kenv, Rename.Unify.Sound.Infra.subs)
-      prod option
+      Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.typ ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.typ ->
+      Rename.Unify.MyEval.Sound.Infra.subs ->
+      (Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+      Rename.Unify.MyEval.Sound.Infra.subs) prod option
     
     val fvs :
-      Rename.Unify.Sound.Infra.Defs.typ Env.env ->
-      Rename.Unify.Sound.Infra.Defs.kind Env.env ->
-      Rename.Unify.Sound.Infra.Defs.sch Env.env -> Variables.VarSet.S.t
+      Rename.Unify.MyEval.Sound.Infra.Defs.typ Env.env ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.sch Env.env ->
+      Variables.VarSet.S.t
     
     val close_fvars :
-      nat -> Rename.Unify.Sound.Infra.Defs.kenv -> Variables.vars ->
+      nat -> Rename.Unify.MyEval.Sound.Infra.Defs.kenv -> Variables.vars ->
       Variables.vars -> Variables.vars
     
     val close_fvk :
-      (Variables.var, Rename.Unify.Sound.Infra.Defs.kind) prod list ->
+      (Variables.var, Rename.Unify.MyEval.Sound.Infra.Defs.kind) prod list ->
       Variables.vars -> Variables.vars
     
     val split_env :
       Variables.vars -> 'a1 Env.env -> ('a1 Env.env, 'a1 Env.env) prod
     
     val vars_subst :
-      Rename.Unify.Sound.Infra.subs -> Variables.VarSet.S.t ->
+      Rename.Unify.MyEval.Sound.Infra.subs -> Variables.VarSet.S.t ->
       Variables.VarSet.S.t
     
     val typinf_generalize :
-      (Variables.var, Rename.Unify.Sound.Infra.Defs.kind) prod list ->
-      Rename.Unify.Sound.Infra.Defs.sch Env.env -> Variables.vars ->
-      Rename.Unify.Sound.Infra.Defs.typ -> ((Variables.var,
-      Rename.Unify.Sound.Infra.Defs.kind) prod list,
-      Rename.Unify.Sound.Infra.Defs.sch) prod
+      (Variables.var, Rename.Unify.MyEval.Sound.Infra.Defs.kind) prod list ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.sch Env.env -> Variables.vars ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.typ -> ((Variables.var,
+      Rename.Unify.MyEval.Sound.Infra.Defs.kind) prod list,
+      Rename.Unify.MyEval.Sound.Infra.Defs.sch) prod
     
-    val kdom : Rename.Unify.Sound.Infra.Defs.kenv -> Variables.vars
+    val kdom : Rename.Unify.MyEval.Sound.Infra.Defs.kenv -> Variables.vars
     
     val typinf :
-      Rename.Unify.Sound.Infra.Defs.kenv -> Rename.Unify.Sound.Infra.Defs.env
-      -> Rename.Unify.Sound.Infra.Defs.trm ->
-      Rename.Unify.Sound.Infra.Defs.typ -> Variables.vars ->
-      Rename.Unify.Sound.Infra.subs -> nat ->
-      ((Rename.Unify.Sound.Infra.Defs.kenv, Rename.Unify.Sound.Infra.subs)
-      prod option, Variables.vars) prod
+      Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.env ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.typ -> Variables.vars ->
+      Rename.Unify.MyEval.Sound.Infra.subs -> nat ->
+      ((Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+      Rename.Unify.MyEval.Sound.Infra.subs) prod option, Variables.vars) prod
     
-    val trm_depth : Rename.Unify.Sound.Infra.Defs.trm -> nat
+    val trm_depth : Rename.Unify.MyEval.Sound.Infra.Defs.trm -> nat
     
     val typinf' :
-      Rename.Unify.Sound.Infra.Defs.trm ->
-      (Rename.Unify.Sound.Infra.Defs.kind Env.env,
-      Rename.Unify.Sound.Infra.Defs.typ) prod option
+      Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+      (Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env,
+      Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod option
     
-    val coq_Gc : (bool, Rename2.Sound.JudgInfra.Judge.gc_kind) prod
+    val coq_Gc : (bool, Rename2.MyEval2.Sound2.JudgInfra.Judge.gc_kind) prod
    end
  end
 
 module Delta : 
  sig 
-  val matches_arg : nat -> Infer.Rename.Unify.Sound.Infra.Defs.typ
+  val matches_arg : nat -> Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ
   
-  val coq_type : Const.const -> Infer.Rename.Unify.Sound.Infra.Defs.sch
+  val coq_type :
+    Const.const -> Infer.Rename.Unify.MyEval.Sound.Infra.Defs.sch
   
   val matches_lhs :
-    Variables.var list -> nat -> Infer.Rename.Unify.Sound.Infra.Defs.trm
+    Variables.var list -> nat ->
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm
   
-  val matches_rhs : nat -> Infer.Rename.Unify.Sound.Infra.Defs.trm
+  val matches_rhs : nat -> Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm
  end
 
 module Cstr2 : 
@@ -3020,48 +4361,145 @@ module Infer2 :
  sig 
   module Rename2 : 
    sig 
-    module Sound : 
+    module MyEval2 : 
      sig 
-      module JudgInfra : 
+      type clos =
+        | Coq_clos_abs of Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm
+           * clos list
+        | Coq_clos_const of Const.const * clos list
+      
+      val clos_rect :
+        (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm -> clos list -> 'a1)
+        -> (Const.const -> clos list -> 'a1) -> clos -> 'a1
+      
+      val clos_rec :
+        (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm -> clos list -> 'a1)
+        -> (Const.const -> clos list -> 'a1) -> clos -> 'a1
+      
+      val clos2trm : clos -> Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm
+      
+      val delta_red : Const.const -> clos list -> clos
+      
+      type frame = { frm_benv : clos list; frm_app : 
+                     clos list;
+                     frm_trm : Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm }
+      
+      val frame_rect :
+        (clos list -> clos list ->
+        Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm -> 'a1) -> frame ->
+        'a1
+      
+      val frame_rec :
+        (clos list -> clos list ->
+        Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm -> 'a1) -> frame ->
+        'a1
+      
+      val frm_benv : frame -> clos list
+      
+      val frm_app : frame -> clos list
+      
+      val frm_trm : frame -> Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm
+      
+      val is_bvar : Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm -> bool
+      
+      val app_trm :
+        Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+        Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+        Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm
+      
+      val app2trm :
+        Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm -> clos list ->
+        Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm
+      
+      val stack2trm :
+        Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm -> frame list ->
+        Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm
+      
+      type eval_res =
+        | Result of clos
+        | Inter of frame list
+      
+      val eval_res_rect :
+        (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
+      
+      val eval_res_rec :
+        (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
+      
+      val res2trm :
+        eval_res -> Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm
+      
+      val clos_def : clos
+      
+      val trm2clos :
+        clos list -> clos Env.env ->
+        Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm -> clos
+      
+      val trm2app :
+        Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+        (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm,
+        Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm) prod option
+      
+      val eval :
+        clos Env.env -> nat -> clos list -> clos list ->
+        Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm -> frame list ->
+        eval_res
+      
+      module Sound2 : 
        sig 
-        module Judge : 
+        module JudgInfra : 
          sig 
-          type gc_kind =
-            | GcAny
-            | GcLet
+          module Judge : 
+           sig 
+            type gc_kind =
+              | GcAny
+              | GcLet
+            
+            val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
+            
+            val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
+            
+            type gc_info = (bool, gc_kind) prod
+            
+            val gc_raise : gc_info -> gc_info
+            
+            val gc_lower : gc_info -> gc_info
+           end
+         end
+        
+        module type SndHypIntf = 
+         sig 
           
-          val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
+         end
+        
+        module Mk3 : 
+         functor (SH:SndHypIntf) ->
+         sig 
           
-          val gc_kind_rec : 'a1 -> 'a1 -> gc_kind -> 'a1
-          
-          type gc_info = (bool, gc_kind) prod
-          
-          val gc_raise : gc_info -> gc_info
-          
-          val gc_lower : gc_info -> gc_info
          end
        end
       
-      module type SndHypIntf = 
-       sig 
-        
-       end
+      val gc : (bool, Sound2.JudgInfra.Judge.gc_kind) prod
       
       module Mk3 : 
-       functor (SH:SndHypIntf) ->
+       functor (SH:Sound2.SndHypIntf) ->
        sig 
+        module Sound3 : 
+         sig 
+          
+         end
         
+        val is_abs : Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm -> bool
        end
      end
     
     val typ_generalize :
-      Variables.var list -> Infer.Rename.Unify.Sound.Infra.Defs.typ ->
-      Infer.Rename.Unify.Sound.Infra.Defs.typ
+      Variables.var list -> Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ ->
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ
     
     val sch_generalize :
-      Variables.var list -> Infer.Rename.Unify.Sound.Infra.Defs.typ ->
-      Infer.Rename.Unify.Sound.Infra.Defs.kind list ->
-      Infer.Rename.Unify.Sound.Infra.Defs.sch
+      Variables.var list -> Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ ->
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kind list ->
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.sch
     
     val list_fst : ('a1, 'a2) prod list -> 'a1 list
    end
@@ -3069,161 +4507,167 @@ module Infer2 :
   module Body : 
    sig 
     val compose :
-      Infer.Rename.Unify.Sound.Infra.Defs.typ Env.env ->
-      Infer.Rename.Unify.Sound.Infra.Defs.typ Env.env ->
-      Infer.Rename.Unify.Sound.Infra.subs
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ Env.env ->
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ Env.env ->
+      Infer.Rename.Unify.MyEval.Sound.Infra.subs
     
     val unify_kind_rel :
-      (Variables.var, Infer.Rename.Unify.Sound.Infra.Defs.typ) prod list ->
-      (Variables.var, Infer.Rename.Unify.Sound.Infra.Defs.typ) prod list ->
-      Variables.var list -> (Infer.Rename.Unify.Sound.Infra.Defs.typ,
-      Infer.Rename.Unify.Sound.Infra.Defs.typ) prod list -> ((Variables.var,
-      Infer.Rename.Unify.Sound.Infra.Defs.typ) prod list,
-      (Infer.Rename.Unify.Sound.Infra.Defs.typ,
-      Infer.Rename.Unify.Sound.Infra.Defs.typ) prod list) prod
+      (Variables.var, Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod
+      list -> (Variables.var, Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ)
+      prod list -> Variables.var list ->
+      (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list ->
+      ((Variables.var, Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod
+      list, (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list) prod
     
     val remove_env : 'a1 Env.env -> Variables.var -> 'a1 Env.env
     
     val unify_kinds :
-      Infer.Rename.Unify.Sound.Infra.Defs.kind ->
-      Infer.Rename.Unify.Sound.Infra.Defs.kind ->
-      (Infer.Rename.Unify.Sound.Infra.Defs.kind,
-      (Infer.Rename.Unify.Sound.Infra.Defs.typ,
-      Infer.Rename.Unify.Sound.Infra.Defs.typ) prod list) prod option
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kind ->
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kind ->
+      (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kind,
+      (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list) prod option
     
     val get_kind :
-      Variables.var -> Infer.Rename.Unify.Sound.Infra.Defs.kind Env.env ->
-      Infer.Rename.Unify.Sound.Infra.Defs.kind
+      Variables.var -> Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kind
+      Env.env -> Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kind
     
     val unify_vars :
-      Infer.Rename.Unify.Sound.Infra.Defs.kenv -> Variables.var ->
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kenv -> Variables.var ->
       Variables.var -> ((Variables.var,
-      Infer.Rename.Unify.Sound.Infra.Defs.kind) prod list,
-      (Infer.Rename.Unify.Sound.Infra.Defs.typ,
-      Infer.Rename.Unify.Sound.Infra.Defs.typ) prod list) prod option
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kind) prod list,
+      (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list) prod option
     
     val unify_nv :
-      (Infer.Rename.Unify.Sound.Infra.Defs.kenv ->
-      Infer.Rename.Unify.Sound.Infra.subs ->
-      (Infer.Rename.Unify.Sound.Infra.Defs.kenv,
-      Infer.Rename.Unify.Sound.Infra.subs) prod option) ->
-      Infer.Rename.Unify.Sound.Infra.Defs.kind Env.env ->
-      Infer.Rename.Unify.Sound.Infra.Defs.typ Env.env ->
-      Variables.VarSet.S.elt -> Infer.Rename.Unify.Sound.Infra.Defs.typ ->
-      (Infer.Rename.Unify.Sound.Infra.Defs.kenv,
-      Infer.Rename.Unify.Sound.Infra.subs) prod option
+      (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
+      Infer.Rename.Unify.MyEval.Sound.Infra.subs ->
+      (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+      Infer.Rename.Unify.MyEval.Sound.Infra.subs) prod option) ->
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env ->
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ Env.env ->
+      Variables.VarSet.S.elt ->
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ ->
+      (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+      Infer.Rename.Unify.MyEval.Sound.Infra.subs) prod option
     
     val unify0 :
-      ((Infer.Rename.Unify.Sound.Infra.Defs.typ,
-      Infer.Rename.Unify.Sound.Infra.Defs.typ) prod list ->
-      Infer.Rename.Unify.Sound.Infra.Defs.kenv ->
-      Infer.Rename.Unify.Sound.Infra.subs ->
-      (Infer.Rename.Unify.Sound.Infra.Defs.kenv,
-      Infer.Rename.Unify.Sound.Infra.subs) prod option) -> nat ->
-      (Infer.Rename.Unify.Sound.Infra.Defs.typ,
-      Infer.Rename.Unify.Sound.Infra.Defs.typ) prod list ->
-      Infer.Rename.Unify.Sound.Infra.Defs.kenv ->
-      Infer.Rename.Unify.Sound.Infra.subs ->
-      (Infer.Rename.Unify.Sound.Infra.Defs.kenv,
-      Infer.Rename.Unify.Sound.Infra.subs) prod option
+      ((Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list ->
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
+      Infer.Rename.Unify.MyEval.Sound.Infra.subs ->
+      (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+      Infer.Rename.Unify.MyEval.Sound.Infra.subs) prod option) -> nat ->
+      (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list ->
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
+      Infer.Rename.Unify.MyEval.Sound.Infra.subs ->
+      (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+      Infer.Rename.Unify.MyEval.Sound.Infra.subs) prod option
     
     val accum : ('a1 -> 'a2) -> ('a2 -> 'a2 -> 'a2) -> 'a2 -> 'a1 list -> 'a2
     
     val all_types :
-      Infer.Rename.Unify.Sound.Infra.subs ->
-      (Infer.Rename.Unify.Sound.Infra.Defs.typ,
-      Infer.Rename.Unify.Sound.Infra.Defs.typ) prod list ->
-      Infer.Rename.Unify.Sound.Infra.Defs.typ list
+      Infer.Rename.Unify.MyEval.Sound.Infra.subs ->
+      (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list ->
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ list
     
-    val typ_size : Infer.Rename.Unify.Sound.Infra.Defs.typ -> nat
+    val typ_size : Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ -> nat
     
     val pairs_size :
-      Infer.Rename.Unify.Sound.Infra.subs ->
-      (Infer.Rename.Unify.Sound.Infra.Defs.typ,
-      Infer.Rename.Unify.Sound.Infra.Defs.typ) prod list -> nat
+      Infer.Rename.Unify.MyEval.Sound.Infra.subs ->
+      (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list -> nat
     
     val unify :
-      nat -> (Infer.Rename.Unify.Sound.Infra.Defs.typ,
-      Infer.Rename.Unify.Sound.Infra.Defs.typ) prod list ->
-      Infer.Rename.Unify.Sound.Infra.Defs.kenv ->
-      Infer.Rename.Unify.Sound.Infra.subs ->
-      (Infer.Rename.Unify.Sound.Infra.Defs.kenv,
-      Infer.Rename.Unify.Sound.Infra.subs) prod option
+      nat -> (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list ->
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
+      Infer.Rename.Unify.MyEval.Sound.Infra.subs ->
+      (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+      Infer.Rename.Unify.MyEval.Sound.Infra.subs) prod option
     
-    val id : Infer.Rename.Unify.Sound.Infra.Defs.typ Env.env
+    val id : Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ Env.env
     
     val all_fv :
-      Infer.Rename.Unify.Sound.Infra.subs ->
-      (Infer.Rename.Unify.Sound.Infra.Defs.typ,
-      Infer.Rename.Unify.Sound.Infra.Defs.typ) prod list -> Variables.vars
+      Infer.Rename.Unify.MyEval.Sound.Infra.subs ->
+      (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list ->
+      Variables.vars
     
     val really_all_fv :
-      Infer.Rename.Unify.Sound.Infra.subs ->
-      Infer.Rename.Unify.Sound.Infra.Defs.kind Env.env ->
-      (Infer.Rename.Unify.Sound.Infra.Defs.typ,
-      Infer.Rename.Unify.Sound.Infra.Defs.typ) prod list ->
+      Infer.Rename.Unify.MyEval.Sound.Infra.subs ->
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env ->
+      (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list ->
       Variables.VarSet.S.t
     
     val size_pairs :
-      Infer.Rename.Unify.Sound.Infra.subs ->
-      Infer.Rename.Unify.Sound.Infra.Defs.kind Env.env ->
-      (Infer.Rename.Unify.Sound.Infra.Defs.typ,
-      Infer.Rename.Unify.Sound.Infra.Defs.typ) prod list -> nat
+      Infer.Rename.Unify.MyEval.Sound.Infra.subs ->
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env ->
+      (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ,
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod list -> nat
    end
   
   val unify :
-    Infer.Rename.Unify.Sound.Infra.Defs.kind Env.env ->
-    Infer.Rename.Unify.Sound.Infra.Defs.typ ->
-    Infer.Rename.Unify.Sound.Infra.Defs.typ ->
-    Infer.Rename.Unify.Sound.Infra.subs ->
-    (Infer.Rename.Unify.Sound.Infra.Defs.kenv,
-    Infer.Rename.Unify.Sound.Infra.subs) prod option
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env ->
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ ->
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ ->
+    Infer.Rename.Unify.MyEval.Sound.Infra.subs ->
+    (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+    Infer.Rename.Unify.MyEval.Sound.Infra.subs) prod option
   
   val fvs :
-    Infer.Rename.Unify.Sound.Infra.Defs.typ Env.env ->
-    Infer.Rename.Unify.Sound.Infra.Defs.kind Env.env ->
-    Infer.Rename.Unify.Sound.Infra.Defs.sch Env.env -> Variables.VarSet.S.t
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ Env.env ->
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env ->
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.sch Env.env ->
+    Variables.VarSet.S.t
   
   val close_fvars :
-    nat -> Infer.Rename.Unify.Sound.Infra.Defs.kenv -> Variables.vars ->
-    Variables.vars -> Variables.vars
+    nat -> Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kenv -> Variables.vars
+    -> Variables.vars -> Variables.vars
   
   val close_fvk :
-    (Variables.var, Infer.Rename.Unify.Sound.Infra.Defs.kind) prod list ->
-    Variables.vars -> Variables.vars
+    (Variables.var, Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kind) prod
+    list -> Variables.vars -> Variables.vars
   
   val split_env :
     Variables.vars -> 'a1 Env.env -> ('a1 Env.env, 'a1 Env.env) prod
   
   val vars_subst :
-    Infer.Rename.Unify.Sound.Infra.subs -> Variables.VarSet.S.t ->
+    Infer.Rename.Unify.MyEval.Sound.Infra.subs -> Variables.VarSet.S.t ->
     Variables.VarSet.S.t
   
   val typinf_generalize :
-    (Variables.var, Infer.Rename.Unify.Sound.Infra.Defs.kind) prod list ->
-    Infer.Rename.Unify.Sound.Infra.Defs.sch Env.env -> Variables.vars ->
-    Infer.Rename.Unify.Sound.Infra.Defs.typ -> ((Variables.var,
-    Infer.Rename.Unify.Sound.Infra.Defs.kind) prod list,
-    Infer.Rename.Unify.Sound.Infra.Defs.sch) prod
+    (Variables.var, Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kind) prod
+    list -> Infer.Rename.Unify.MyEval.Sound.Infra.Defs.sch Env.env ->
+    Variables.vars -> Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ ->
+    ((Variables.var, Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kind) prod
+    list, Infer.Rename.Unify.MyEval.Sound.Infra.Defs.sch) prod
   
-  val kdom : Infer.Rename.Unify.Sound.Infra.Defs.kenv -> Variables.vars
+  val kdom :
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kenv -> Variables.vars
   
   val typinf :
-    Infer.Rename.Unify.Sound.Infra.Defs.kenv ->
-    Infer.Rename.Unify.Sound.Infra.Defs.env ->
-    Infer.Rename.Unify.Sound.Infra.Defs.trm ->
-    Infer.Rename.Unify.Sound.Infra.Defs.typ -> Variables.vars ->
-    Infer.Rename.Unify.Sound.Infra.subs -> nat ->
-    ((Infer.Rename.Unify.Sound.Infra.Defs.kenv,
-    Infer.Rename.Unify.Sound.Infra.subs) prod option, Variables.vars) prod
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.env ->
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ -> Variables.vars ->
+    Infer.Rename.Unify.MyEval.Sound.Infra.subs -> nat ->
+    ((Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+    Infer.Rename.Unify.MyEval.Sound.Infra.subs) prod option, Variables.vars)
+    prod
   
-  val trm_depth : Infer.Rename.Unify.Sound.Infra.Defs.trm -> nat
+  val trm_depth : Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm -> nat
   
   val typinf' :
-    Infer.Rename.Unify.Sound.Infra.Defs.trm ->
-    (Infer.Rename.Unify.Sound.Infra.Defs.kind Env.env,
-    Infer.Rename.Unify.Sound.Infra.Defs.typ) prod option
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+    (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env,
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod option
   
-  val coq_Gc : (bool, Rename2.Sound.JudgInfra.Judge.gc_kind) prod
+  val coq_Gc : (bool, Rename2.MyEval2.Sound2.JudgInfra.Judge.gc_kind) prod
  end
 

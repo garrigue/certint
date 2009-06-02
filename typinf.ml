@@ -857,6 +857,24 @@ module Env =
         let Pair (x, a) = p in Variables.VarSet.S.union (fv a) (fv_in fv e')
  end
 
+(** val cut : nat -> 'a1 list -> ('a1 list, 'a1 list) prod **)
+
+let rec cut n l =
+  match n with
+    | O -> Pair (Nil, l)
+    | S n0 ->
+        (match l with
+           | Nil -> Pair (Nil, Nil)
+           | Cons (a, l0) ->
+               let Pair (l1, l2) = cut n0 l0 in Pair ((Cons (a, l1)), l2))
+
+(** val mkset : Variables.var list -> Variables.vars **)
+
+let rec mkset = function
+  | Nil -> Variables.VarSet.S.empty
+  | Cons (h, t0) ->
+      Variables.VarSet.S.union (Variables.VarSet.S.singleton h) (mkset t0)
+
 module type CstrIntf = 
  sig 
   type cstr 
@@ -1186,26 +1204,19 @@ module MkDefs =
     
     (** val gc_raise : gc_info -> gc_info **)
     
-    let rec gc_raise gc =
-      match snd gc with
-        | GcAny -> gc
+    let rec gc_raise gc0 =
+      match snd gc0 with
+        | GcAny -> gc0
         | GcLet -> Pair (True, GcLet)
     
     (** val gc_lower : gc_info -> gc_info **)
     
-    let rec gc_lower gc =
-      match snd gc with
-        | GcAny -> gc
+    let rec gc_lower gc0 =
+      match snd gc0 with
+        | GcAny -> gc0
         | GcLet -> Pair (False, GcLet)
    end
  end
-
-(** val mkset : Variables.var list -> Variables.vars **)
-
-let rec mkset = function
-  | Nil -> Variables.VarSet.S.empty
-  | Cons (h, t0) ->
-      Variables.VarSet.S.union (Variables.VarSet.S.singleton h) (mkset t0)
 
 module MkInfra = 
  functor (Cstr:CstrIntf) ->
@@ -1268,16 +1279,6 @@ module MkInfra =
   let const_app c vl =
     fold_left (fun x x0 -> Defs.Coq_trm_app (x, x0)) vl (Defs.Coq_trm_cst c)
   
-  (** val map_get : Variables.var list -> 'a1 Env.env -> 'a1 list **)
-  
-  let rec map_get l e =
-    match l with
-      | Nil -> Nil
-      | Cons (h, t0) ->
-          (match Env.get h e with
-             | Some x -> Cons (x, (map_get t0 e))
-             | None -> map_get t0 e)
-  
   module MkJudgInfra = 
    functor (Delta:Defs.DeltaIntf) ->
    struct 
@@ -1309,11 +1310,294 @@ module MkSound =
    end
  end
 
-module MkUnify = 
+module MkEval = 
  functor (Cstr:CstrIntf) ->
  functor (Const:CstIntf) ->
  struct 
   module Sound = MkSound(Cstr)(Const)
+  
+  module Mk2 = 
+   functor (Delta:Sound.Infra.Defs.DeltaIntf) ->
+   struct 
+    type clos =
+      | Coq_clos_abs of Sound.Infra.Defs.trm * clos list
+      | Coq_clos_const of Const.const * clos list
+    
+    (** val clos_rect :
+        (Sound.Infra.Defs.trm -> clos list -> 'a1) -> (Const.const -> clos
+        list -> 'a1) -> clos -> 'a1 **)
+    
+    let clos_rect f f0 = function
+      | Coq_clos_abs (x, x0) -> f x x0
+      | Coq_clos_const (x, x0) -> f0 x x0
+    
+    (** val clos_rec :
+        (Sound.Infra.Defs.trm -> clos list -> 'a1) -> (Const.const -> clos
+        list -> 'a1) -> clos -> 'a1 **)
+    
+    let clos_rec f f0 = function
+      | Coq_clos_abs (x, x0) -> f x x0
+      | Coq_clos_const (x, x0) -> f0 x x0
+    
+    (** val clos2trm : clos -> Sound.Infra.Defs.trm **)
+    
+    let rec clos2trm = function
+      | Coq_clos_abs (t0, l) ->
+          Sound.Infra.Defs.trm_inst (Sound.Infra.Defs.Coq_trm_abs t0)
+            (map clos2trm l)
+      | Coq_clos_const (cst, l) -> Sound.Infra.const_app cst (map clos2trm l)
+    
+    (** val delta_red : Const.const -> clos list -> clos **)
+    
+    let delta_red =
+      failwith "AXIOM TO BE REALIZED"
+    
+    type frame = { frm_benv : clos list; frm_app : 
+                   clos list; frm_trm : Sound.Infra.Defs.trm }
+    
+    (** val frame_rect :
+        (clos list -> clos list -> Sound.Infra.Defs.trm -> 'a1) -> frame ->
+        'a1 **)
+    
+    let frame_rect f f0 =
+      let { frm_benv = x; frm_app = x0; frm_trm = x1 } = f0 in f x x0 x1
+    
+    (** val frame_rec :
+        (clos list -> clos list -> Sound.Infra.Defs.trm -> 'a1) -> frame ->
+        'a1 **)
+    
+    let frame_rec f f0 =
+      let { frm_benv = x; frm_app = x0; frm_trm = x1 } = f0 in f x x0 x1
+    
+    (** val frm_benv : frame -> clos list **)
+    
+    let frm_benv f =
+      f.frm_benv
+    
+    (** val frm_app : frame -> clos list **)
+    
+    let frm_app f =
+      f.frm_app
+    
+    (** val frm_trm : frame -> Sound.Infra.Defs.trm **)
+    
+    let frm_trm f =
+      f.frm_trm
+    
+    (** val is_bvar : Sound.Infra.Defs.trm -> bool **)
+    
+    let is_bvar = function
+      | Sound.Infra.Defs.Coq_trm_bvar n -> True
+      | _ -> False
+    
+    (** val app_trm :
+        Sound.Infra.Defs.trm -> Sound.Infra.Defs.trm -> Sound.Infra.Defs.trm **)
+    
+    let app_trm t1 t2 =
+      match t1 with
+        | Sound.Infra.Defs.Coq_trm_abs t0 -> Sound.Infra.Defs.Coq_trm_let
+            (t2, t0)
+        | _ -> Sound.Infra.Defs.Coq_trm_app (t1, t2)
+    
+    (** val app2trm :
+        Sound.Infra.Defs.trm -> clos list -> Sound.Infra.Defs.trm **)
+    
+    let app2trm t0 args =
+      fold_left app_trm (map clos2trm args) t0
+    
+    (** val stack2trm :
+        Sound.Infra.Defs.trm -> frame list -> Sound.Infra.Defs.trm **)
+    
+    let rec stack2trm t0 = function
+      | Nil -> t0
+      | Cons (f, rem) ->
+          let { frm_benv = benv; frm_app = args; frm_trm = t1 } = f in
+          stack2trm
+            (app2trm
+              (match is_bvar t0 with
+                 | True -> Sound.Infra.Defs.trm_inst t1 (map clos2trm benv)
+                 | False ->
+                     app_trm
+                       (Sound.Infra.Defs.trm_inst t1 (map clos2trm benv)) t0)
+              args) rem
+    
+    type eval_res =
+      | Result of clos
+      | Inter of frame list
+    
+    (** val eval_res_rect :
+        (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1 **)
+    
+    let eval_res_rect f f0 = function
+      | Result x -> f x
+      | Inter x -> f0 x
+    
+    (** val eval_res_rec :
+        (clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1 **)
+    
+    let eval_res_rec f f0 = function
+      | Result x -> f x
+      | Inter x -> f0 x
+    
+    (** val res2trm : eval_res -> Sound.Infra.Defs.trm **)
+    
+    let res2trm = function
+      | Result cl -> clos2trm cl
+      | Inter l -> stack2trm Sound.Infra.Defs.trm_def l
+    
+    (** val clos_def : clos **)
+    
+    let clos_def =
+      Coq_clos_abs (Sound.Infra.Defs.trm_def, Nil)
+    
+    (** val trm2clos :
+        clos list -> clos Env.env -> Sound.Infra.Defs.trm -> clos **)
+    
+    let trm2clos benv fenv = function
+      | Sound.Infra.Defs.Coq_trm_bvar n -> nth n benv clos_def
+      | Sound.Infra.Defs.Coq_trm_fvar v ->
+          (match Env.get v fenv with
+             | Some c -> c
+             | None -> clos_def)
+      | Sound.Infra.Defs.Coq_trm_abs t1 -> Coq_clos_abs (t1, benv)
+      | Sound.Infra.Defs.Coq_trm_cst c -> Coq_clos_const (c, Nil)
+      | _ -> clos_def
+    
+    (** val trm2app :
+        Sound.Infra.Defs.trm -> (Sound.Infra.Defs.trm, Sound.Infra.Defs.trm)
+        prod option **)
+    
+    let trm2app = function
+      | Sound.Infra.Defs.Coq_trm_let (t2, t1) -> Some (Pair
+          ((Sound.Infra.Defs.Coq_trm_abs t1), t2))
+      | Sound.Infra.Defs.Coq_trm_app (t1, t2) -> Some (Pair (t1, t2))
+      | _ -> None
+    
+    (** val eval :
+        clos Env.env -> nat -> clos list -> clos list -> Sound.Infra.Defs.trm
+        -> frame list -> eval_res **)
+    
+    let rec eval fenv h benv app0 t0 stack =
+      match h with
+        | O -> Inter (Cons ({ frm_benv = benv; frm_app = app0; frm_trm =
+            t0 }, stack))
+        | S h0 ->
+            (match trm2app t0 with
+               | Some p ->
+                   let Pair (t1, t2) = p in
+                   eval fenv h0 benv Nil t2 (Cons ({ frm_benv = benv;
+                     frm_app = app0; frm_trm = t1 }, stack))
+               | None ->
+                   (match app0 with
+                      | Nil ->
+                          (match stack with
+                             | Nil -> Result
+                                 (match t0 with
+                                    | Sound.Infra.Defs.Coq_trm_bvar n ->
+                                        nth n benv clos_def
+                                    | Sound.Infra.Defs.Coq_trm_fvar v ->
+                                        (match Env.get v fenv with
+                                           | Some c -> c
+                                           | None -> clos_def)
+                                    | Sound.Infra.Defs.Coq_trm_abs t1 ->
+                                        Coq_clos_abs (t1, benv)
+                                    | Sound.Infra.Defs.Coq_trm_cst c ->
+                                        Coq_clos_const (c, Nil)
+                                    | _ -> clos_def)
+                             | Cons (f, rem) ->
+                                 let { frm_benv = benv'; frm_app = app';
+                                   frm_trm = t1 } = f
+                                 in
+                                 eval fenv h0 benv' (Cons
+                                   ((match t0 with
+                                       | Sound.Infra.Defs.Coq_trm_bvar n ->
+                                           nth n benv clos_def
+                                       | Sound.Infra.Defs.Coq_trm_fvar v ->
+                                           (match Env.get v fenv with
+                                              | Some c -> c
+                                              | None -> clos_def)
+                                       | Sound.Infra.Defs.Coq_trm_abs t2 ->
+                                           Coq_clos_abs (t2, benv)
+                                       | Sound.Infra.Defs.Coq_trm_cst c ->
+                                           Coq_clos_const (c, Nil)
+                                       | _ -> clos_def), app')) t1 rem)
+                      | Cons (c1, rem) ->
+                          (match match t0 with
+                                   | Sound.Infra.Defs.Coq_trm_bvar n ->
+                                       nth n benv clos_def
+                                   | Sound.Infra.Defs.Coq_trm_fvar v ->
+                                       (match Env.get v fenv with
+                                          | Some c -> c
+                                          | None -> clos_def)
+                                   | Sound.Infra.Defs.Coq_trm_abs t1 ->
+                                       Coq_clos_abs (t1, benv)
+                                   | Sound.Infra.Defs.Coq_trm_cst c ->
+                                       Coq_clos_const (c, Nil)
+                                   | _ -> clos_def with
+                             | Coq_clos_abs (t1, benv0) ->
+                                 eval fenv h0 (Cons (c1, benv0)) rem t1 stack
+                             | Coq_clos_const (cst, l) ->
+                                 let nred = S (Const.arity cst) in
+                                 (match le_lt_dec nred
+                                          (plus (length l) (length app0)) with
+                                    | Left ->
+                                        let Pair (args, app') =
+                                          cut nred (app l app0)
+                                        in
+                                        (match delta_red cst args with
+                                           | Coq_clos_abs (
+                                               t1, benv0) ->
+                                               eval fenv h0 benv0 app'
+                                                 (Sound.Infra.Defs.Coq_trm_abs
+                                                 t1) stack
+                                           | Coq_clos_const (
+                                               cst', app'') ->
+                                               eval fenv h0 Nil
+                                                 (app app'' app')
+                                                 (Sound.Infra.Defs.Coq_trm_cst
+                                                 cst') stack)
+                                    | Right ->
+                                        (match stack with
+                                           | Nil -> Result (Coq_clos_const
+                                               (cst, 
+                                               (app l app0)))
+                                           | Cons (
+                                               f, rem0) ->
+                                               let { frm_benv = benv';
+                                                 frm_app = app'; frm_trm =
+                                                 t1 } = f
+                                               in
+                                               eval fenv h0 benv' (Cons
+                                                 ((Coq_clos_const (cst,
+                                                 (app l app0))), app')) t1
+                                                 rem0)))))
+    
+    module Sound2 = Sound.Mk2(Delta)
+    
+    (** val gc : (bool, Sound2.JudgInfra.Judge.gc_kind) prod **)
+    
+    let gc =
+      Pair (False, Sound2.JudgInfra.Judge.GcAny)
+    
+    module Mk3 = 
+     functor (SH:Sound2.SndHypIntf) ->
+     struct 
+      module Sound3 = Sound2.Mk3(SH)
+      
+      (** val is_abs : Sound.Infra.Defs.trm -> bool **)
+      
+      let is_abs = function
+        | Sound.Infra.Defs.Coq_trm_abs t1 -> True
+        | _ -> False
+     end
+   end
+ end
+
+module MkUnify = 
+ functor (Cstr:CstrIntf) ->
+ functor (Const:CstIntf) ->
+ struct 
+  module MyEval = MkEval(Cstr)(Const)
   
   module type Cstr2I = 
    sig 
@@ -1328,18 +1612,19 @@ module MkUnify =
    functor (Cstr2:Cstr2I) ->
    struct 
     (** val compose :
-        Sound.Infra.Defs.typ Env.env -> Sound.Infra.Defs.typ Env.env ->
-        Sound.Infra.subs **)
+        MyEval.Sound.Infra.Defs.typ Env.env -> MyEval.Sound.Infra.Defs.typ
+        Env.env -> MyEval.Sound.Infra.subs **)
     
     let compose s1 s2 =
-      Env.concat s1 (Env.map (Sound.Infra.typ_subst s1) s2)
+      Env.concat s1 (Env.map (MyEval.Sound.Infra.typ_subst s1) s2)
     
     (** val unify_kind_rel :
-        (Variables.var, Sound.Infra.Defs.typ) prod list -> (Variables.var,
-        Sound.Infra.Defs.typ) prod list -> Variables.var list ->
-        (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list ->
-        ((Variables.var, Sound.Infra.Defs.typ) prod list,
-        (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list) prod **)
+        (Variables.var, MyEval.Sound.Infra.Defs.typ) prod list ->
+        (Variables.var, MyEval.Sound.Infra.Defs.typ) prod list ->
+        Variables.var list -> (MyEval.Sound.Infra.Defs.typ,
+        MyEval.Sound.Infra.Defs.typ) prod list -> ((Variables.var,
+        MyEval.Sound.Infra.Defs.typ) prod list, (MyEval.Sound.Infra.Defs.typ,
+        MyEval.Sound.Infra.Defs.typ) prod list) prod **)
     
     let rec unify_kind_rel kr kr' un pairs =
       match kr with
@@ -1370,20 +1655,20 @@ module MkUnify =
                | Right -> Cons ((Pair (y, a)), (remove_env e' x)))
     
     (** val unify_kinds :
-        Sound.Infra.Defs.kind -> Sound.Infra.Defs.kind ->
-        (Sound.Infra.Defs.kind, (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ)
-        prod list) prod option **)
+        MyEval.Sound.Infra.Defs.kind -> MyEval.Sound.Infra.Defs.kind ->
+        (MyEval.Sound.Infra.Defs.kind, (MyEval.Sound.Infra.Defs.typ,
+        MyEval.Sound.Infra.Defs.typ) prod list) prod option **)
     
     let unify_kinds k1 k2 =
       match k1 with
         | Some c ->
-            let { Sound.Infra.Defs.kind_cstr = kc1;
-              Sound.Infra.Defs.kind_rel = kr1 } = c
+            let { MyEval.Sound.Infra.Defs.kind_cstr = kc1;
+              MyEval.Sound.Infra.Defs.kind_rel = kr1 } = c
             in
             (match k2 with
                | Some c0 ->
-                   let { Sound.Infra.Defs.kind_cstr = kc2;
-                     Sound.Infra.Defs.kind_rel = kr2 } = c0
+                   let { MyEval.Sound.Infra.Defs.kind_cstr = kc2;
+                     MyEval.Sound.Infra.Defs.kind_rel = kr2 } = c0
                    in
                    let kc = Cstr2.lub kc1 kc2 in
                    (match Cstr2.valid kc with
@@ -1392,16 +1677,17 @@ module MkUnify =
                             unify_kind_rel (app kr1 kr2) Nil
                               (Cstr2.unique kc) Nil
                           in
-                          Some (Pair ((Some { Sound.Infra.Defs.kind_cstr =
-                          kc; Sound.Infra.Defs.kind_rel = 
+                          Some (Pair ((Some
+                          { MyEval.Sound.Infra.Defs.kind_cstr = kc;
+                          MyEval.Sound.Infra.Defs.kind_rel = 
                           (fst krp) }), (snd krp)))
                       | Right -> None)
                | None -> Some (Pair (k1, Nil)))
         | None -> Some (Pair (k2, Nil))
     
     (** val get_kind :
-        Variables.var -> Sound.Infra.Defs.kind Env.env ->
-        Sound.Infra.Defs.kind **)
+        Variables.var -> MyEval.Sound.Infra.Defs.kind Env.env ->
+        MyEval.Sound.Infra.Defs.kind **)
     
     let get_kind x e =
       match Env.get x e with
@@ -1409,9 +1695,10 @@ module MkUnify =
         | None -> None
     
     (** val unify_vars :
-        Sound.Infra.Defs.kenv -> Variables.var -> Variables.var ->
-        ((Variables.var, Sound.Infra.Defs.kind) prod list,
-        (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list) prod option **)
+        MyEval.Sound.Infra.Defs.kenv -> Variables.var -> Variables.var ->
+        ((Variables.var, MyEval.Sound.Infra.Defs.kind) prod list,
+        (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod list)
+        prod option **)
     
     let unify_vars k x y =
       match unify_kinds (get_kind x k) (get_kind y k) with
@@ -1423,14 +1710,15 @@ module MkUnify =
         | None -> None
     
     (** val unify_nv :
-        (Sound.Infra.Defs.kenv -> Sound.Infra.subs -> (Sound.Infra.Defs.kenv,
-        Sound.Infra.subs) prod option) -> Sound.Infra.Defs.kind Env.env ->
-        Sound.Infra.Defs.typ Env.env -> Variables.VarSet.S.elt ->
-        Sound.Infra.Defs.typ -> (Sound.Infra.Defs.kenv, Sound.Infra.subs)
-        prod option **)
+        (MyEval.Sound.Infra.Defs.kenv -> MyEval.Sound.Infra.subs ->
+        (MyEval.Sound.Infra.Defs.kenv, MyEval.Sound.Infra.subs) prod option)
+        -> MyEval.Sound.Infra.Defs.kind Env.env ->
+        MyEval.Sound.Infra.Defs.typ Env.env -> Variables.VarSet.S.elt ->
+        MyEval.Sound.Infra.Defs.typ -> (MyEval.Sound.Infra.Defs.kenv,
+        MyEval.Sound.Infra.subs) prod option **)
     
     let unify_nv unify1 k s x t0 =
-      match Variables.VarSet.S.mem x (Sound.Infra.Defs.typ_fv t0) with
+      match Variables.VarSet.S.mem x (MyEval.Sound.Infra.Defs.typ_fv t0) with
         | True -> None
         | False ->
             (match get_kind x k with
@@ -1439,11 +1727,12 @@ module MkUnify =
                    unify1 (remove_env k x) (compose (Env.single x t0) s))
     
     (** val unify0 :
-        ((Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list ->
-        Sound.Infra.Defs.kenv -> Sound.Infra.subs -> (Sound.Infra.Defs.kenv,
-        Sound.Infra.subs) prod option) -> nat -> (Sound.Infra.Defs.typ,
-        Sound.Infra.Defs.typ) prod list -> Sound.Infra.Defs.kenv ->
-        Sound.Infra.subs -> (Sound.Infra.Defs.kenv, Sound.Infra.subs) prod
+        ((MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod list
+        -> MyEval.Sound.Infra.Defs.kenv -> MyEval.Sound.Infra.subs ->
+        (MyEval.Sound.Infra.Defs.kenv, MyEval.Sound.Infra.subs) prod option)
+        -> nat -> (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ)
+        prod list -> MyEval.Sound.Infra.Defs.kenv -> MyEval.Sound.Infra.subs
+        -> (MyEval.Sound.Infra.Defs.kenv, MyEval.Sound.Infra.subs) prod
         option **)
     
     let rec unify0 unify1 h pairs k s =
@@ -1454,24 +1743,24 @@ module MkUnify =
                | Nil -> Some (Pair (k, s))
                | Cons (p, pairs') ->
                    let Pair (t1, t2) = p in
-                   (match Sound.Infra.typ_subst s t1 with
-                      | Sound.Infra.Defs.Coq_typ_bvar n ->
-                          (match Sound.Infra.typ_subst s t2 with
-                             | Sound.Infra.Defs.Coq_typ_bvar m ->
+                   (match MyEval.Sound.Infra.typ_subst s t1 with
+                      | MyEval.Sound.Infra.Defs.Coq_typ_bvar n ->
+                          (match MyEval.Sound.Infra.typ_subst s t2 with
+                             | MyEval.Sound.Infra.Defs.Coq_typ_bvar m ->
                                  (match eq_nat_dec n m with
                                     | Left -> unify0 unify1 h' pairs' k s
                                     | Right -> None)
-                             | Sound.Infra.Defs.Coq_typ_fvar x ->
+                             | MyEval.Sound.Infra.Defs.Coq_typ_fvar x ->
                                  unify_nv (unify1 pairs') k s x
-                                   (Sound.Infra.Defs.Coq_typ_bvar n)
-                             | Sound.Infra.Defs.Coq_typ_arrow (
+                                   (MyEval.Sound.Infra.Defs.Coq_typ_bvar n)
+                             | MyEval.Sound.Infra.Defs.Coq_typ_arrow (
                                  t0, t3) -> None)
-                      | Sound.Infra.Defs.Coq_typ_fvar x ->
-                          (match Sound.Infra.typ_subst s t2 with
-                             | Sound.Infra.Defs.Coq_typ_bvar n ->
+                      | MyEval.Sound.Infra.Defs.Coq_typ_fvar x ->
+                          (match MyEval.Sound.Infra.typ_subst s t2 with
+                             | MyEval.Sound.Infra.Defs.Coq_typ_bvar n ->
                                  unify_nv (unify1 pairs') k s x
-                                   (Sound.Infra.Defs.Coq_typ_bvar n)
-                             | Sound.Infra.Defs.Coq_typ_fvar x0 ->
+                                   (MyEval.Sound.Infra.Defs.Coq_typ_bvar n)
+                             | MyEval.Sound.Infra.Defs.Coq_typ_fvar x0 ->
                                  (match eq_var_dec x x0 with
                                     | Left -> unify0 unify1 h' pairs' k s
                                     | Right ->
@@ -1482,22 +1771,23 @@ module MkUnify =
                                                  (app pairs0 pairs') k'
                                                  (compose
                                                   (Env.single x
-                                                  (Sound.Infra.Defs.Coq_typ_fvar
+                                                  (MyEval.Sound.Infra.Defs.Coq_typ_fvar
                                                   x0)) s)
                                            | None -> None))
-                             | Sound.Infra.Defs.Coq_typ_arrow (
+                             | MyEval.Sound.Infra.Defs.Coq_typ_arrow (
                                  t0, t3) ->
                                  unify_nv (unify1 pairs') k s x
-                                   (Sound.Infra.Defs.Coq_typ_arrow (t0, t3)))
-                      | Sound.Infra.Defs.Coq_typ_arrow (
+                                   (MyEval.Sound.Infra.Defs.Coq_typ_arrow
+                                   (t0, t3)))
+                      | MyEval.Sound.Infra.Defs.Coq_typ_arrow (
                           t11, t12) ->
-                          (match Sound.Infra.typ_subst s t2 with
-                             | Sound.Infra.Defs.Coq_typ_bvar n -> None
-                             | Sound.Infra.Defs.Coq_typ_fvar x ->
+                          (match MyEval.Sound.Infra.typ_subst s t2 with
+                             | MyEval.Sound.Infra.Defs.Coq_typ_bvar n -> None
+                             | MyEval.Sound.Infra.Defs.Coq_typ_fvar x ->
                                  unify_nv (unify1 pairs') k s x
-                                   (Sound.Infra.Defs.Coq_typ_arrow (t11,
-                                   t12))
-                             | Sound.Infra.Defs.Coq_typ_arrow (
+                                   (MyEval.Sound.Infra.Defs.Coq_typ_arrow
+                                   (t11, t12))
+                             | MyEval.Sound.Infra.Defs.Coq_typ_arrow (
                                  t21, t22) ->
                                  unify0 unify1 h' (Cons ((Pair (t11, t21)),
                                    (Cons ((Pair (t12, t22)), pairs')))) k s)))
@@ -1510,32 +1800,35 @@ module MkUnify =
       | Cons (a, rem) -> op (f a) (accum f op unit0 rem)
     
     (** val all_types :
-        Sound.Infra.subs -> (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod
-        list -> Sound.Infra.Defs.typ list **)
+        MyEval.Sound.Infra.subs -> (MyEval.Sound.Infra.Defs.typ,
+        MyEval.Sound.Infra.Defs.typ) prod list -> MyEval.Sound.Infra.Defs.typ
+        list **)
     
     let rec all_types s = function
       | Nil -> Nil
-      | Cons (p, rem) -> Cons ((Sound.Infra.typ_subst s (fst p)), (Cons
-          ((Sound.Infra.typ_subst s (snd p)), (all_types s rem))))
+      | Cons (p, rem) -> Cons ((MyEval.Sound.Infra.typ_subst s (fst p)),
+          (Cons ((MyEval.Sound.Infra.typ_subst s (snd p)),
+          (all_types s rem))))
     
-    (** val typ_size : Sound.Infra.Defs.typ -> nat **)
+    (** val typ_size : MyEval.Sound.Infra.Defs.typ -> nat **)
     
     let rec typ_size = function
-      | Sound.Infra.Defs.Coq_typ_arrow (t1, t2) -> S
+      | MyEval.Sound.Infra.Defs.Coq_typ_arrow (t1, t2) -> S
           (plus (typ_size t1) (typ_size t2))
       | _ -> S O
     
     (** val pairs_size :
-        Sound.Infra.subs -> (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod
-        list -> nat **)
+        MyEval.Sound.Infra.subs -> (MyEval.Sound.Infra.Defs.typ,
+        MyEval.Sound.Infra.Defs.typ) prod list -> nat **)
     
     let pairs_size s pairs =
       accum typ_size plus O (all_types s pairs)
     
     (** val unify :
-        nat -> (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list ->
-        Sound.Infra.Defs.kenv -> Sound.Infra.subs -> (Sound.Infra.Defs.kenv,
-        Sound.Infra.subs) prod option **)
+        nat -> (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ)
+        prod list -> MyEval.Sound.Infra.Defs.kenv -> MyEval.Sound.Infra.subs
+        -> (MyEval.Sound.Infra.Defs.kenv, MyEval.Sound.Infra.subs) prod
+        option **)
     
     let rec unify h pairs k s =
       match h with
@@ -1543,32 +1836,34 @@ module MkUnify =
         | S h' ->
             unify0 (unify h') (plus (pairs_size s pairs) (S O)) pairs k s
     
-    (** val id : Sound.Infra.Defs.typ Env.env **)
+    (** val id : MyEval.Sound.Infra.Defs.typ Env.env **)
     
     let id =
       Env.empty
     
     (** val all_fv :
-        Sound.Infra.subs -> (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod
-        list -> Variables.vars **)
+        MyEval.Sound.Infra.subs -> (MyEval.Sound.Infra.Defs.typ,
+        MyEval.Sound.Infra.Defs.typ) prod list -> Variables.vars **)
     
     let all_fv s pairs =
-      accum Sound.Infra.Defs.typ_fv Variables.VarSet.S.union
+      accum MyEval.Sound.Infra.Defs.typ_fv Variables.VarSet.S.union
         Variables.VarSet.S.empty (all_types s pairs)
     
     (** val really_all_fv :
-        Sound.Infra.subs -> Sound.Infra.Defs.kind Env.env ->
-        (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list ->
-        Variables.VarSet.S.t **)
+        MyEval.Sound.Infra.subs -> MyEval.Sound.Infra.Defs.kind Env.env ->
+        (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod list
+        -> Variables.VarSet.S.t **)
     
     let really_all_fv s k pairs =
       Variables.VarSet.S.union
-        (Env.fv_in Sound.Infra.Defs.kind_fv
-          (Env.map (Sound.Infra.kind_subst s) k)) (all_fv s pairs)
+        (Env.fv_in MyEval.Sound.Infra.Defs.kind_fv
+          (Env.map (MyEval.Sound.Infra.kind_subst s) k)) 
+        (all_fv s pairs)
     
     (** val size_pairs :
-        Sound.Infra.subs -> Sound.Infra.Defs.kind Env.env ->
-        (Sound.Infra.Defs.typ, Sound.Infra.Defs.typ) prod list -> nat **)
+        MyEval.Sound.Infra.subs -> MyEval.Sound.Infra.Defs.kind Env.env ->
+        (MyEval.Sound.Infra.Defs.typ, MyEval.Sound.Infra.Defs.typ) prod list
+        -> nat **)
     
     let size_pairs s k pairs =
       Variables.VarSet.S.cardinal (really_all_fv s k pairs)
@@ -1592,33 +1887,35 @@ module MkRename =
   module Unify = MkUnify(Cstr)(Const)
   
   module Mk2 = 
-   functor (Delta:Unify.Sound.Infra.Defs.DeltaIntf) ->
+   functor (Delta:Unify.MyEval.Sound.Infra.Defs.DeltaIntf) ->
    struct 
-    module Sound = Unify.Sound.Mk2(Delta)
+    module MyEval2 = Unify.MyEval.Mk2(Delta)
     
     (** val typ_generalize :
-        Variables.var list -> Unify.Sound.Infra.Defs.typ ->
-        Unify.Sound.Infra.Defs.typ **)
+        Variables.var list -> Unify.MyEval.Sound.Infra.Defs.typ ->
+        Unify.MyEval.Sound.Infra.Defs.typ **)
     
     let rec typ_generalize bs t0 = match t0 with
-      | Unify.Sound.Infra.Defs.Coq_typ_bvar n ->
-          Unify.Sound.Infra.Defs.Coq_typ_bvar (plus (length bs) n)
-      | Unify.Sound.Infra.Defs.Coq_typ_fvar x ->
+      | Unify.MyEval.Sound.Infra.Defs.Coq_typ_bvar n ->
+          Unify.MyEval.Sound.Infra.Defs.Coq_typ_bvar 
+          (plus (length bs) n)
+      | Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar x ->
           (match index eq_var_dec O x bs with
-             | Some n -> Unify.Sound.Infra.Defs.Coq_typ_bvar n
+             | Some n -> Unify.MyEval.Sound.Infra.Defs.Coq_typ_bvar n
              | None -> t0)
-      | Unify.Sound.Infra.Defs.Coq_typ_arrow (t1, t2) ->
-          Unify.Sound.Infra.Defs.Coq_typ_arrow ((typ_generalize bs t1),
-          (typ_generalize bs t2))
+      | Unify.MyEval.Sound.Infra.Defs.Coq_typ_arrow (
+          t1, t2) -> Unify.MyEval.Sound.Infra.Defs.Coq_typ_arrow
+          ((typ_generalize bs t1), (typ_generalize bs t2))
     
     (** val sch_generalize :
-        Variables.var list -> Unify.Sound.Infra.Defs.typ ->
-        Unify.Sound.Infra.Defs.kind list -> Unify.Sound.Infra.Defs.sch **)
+        Variables.var list -> Unify.MyEval.Sound.Infra.Defs.typ ->
+        Unify.MyEval.Sound.Infra.Defs.kind list ->
+        Unify.MyEval.Sound.Infra.Defs.sch **)
     
     let sch_generalize bs t0 ks =
-      { Unify.Sound.Infra.Defs.sch_type = (typ_generalize bs t0);
-        Unify.Sound.Infra.Defs.sch_kinds =
-        (map (Unify.Sound.Infra.Defs.kind_map (typ_generalize bs)) ks) }
+      { Unify.MyEval.Sound.Infra.Defs.sch_type = (typ_generalize bs t0);
+        Unify.MyEval.Sound.Infra.Defs.sch_kinds =
+        (map (Unify.MyEval.Sound.Infra.Defs.kind_map (typ_generalize bs)) ks) }
     
     (** val list_fst : ('a1, 'a2) prod list -> 'a1 list **)
     
@@ -1634,7 +1931,7 @@ module MkInfer =
   module Rename = MkRename(Cstr)(Const)
   
   module Mk2 = 
-   functor (Delta:Rename.Unify.Sound.Infra.Defs.DeltaIntf) ->
+   functor (Delta:Rename.Unify.MyEval.Sound.Infra.Defs.DeltaIntf) ->
    functor (Cstr2:Rename.Unify.Cstr2I) ->
    struct 
     module Rename2 = Rename.Mk2(Delta)
@@ -1642,11 +1939,12 @@ module MkInfer =
     module Body = Rename.Unify.Mk2(Cstr2)
     
     (** val unify :
-        Rename.Unify.Sound.Infra.Defs.kind Env.env ->
-        Rename.Unify.Sound.Infra.Defs.typ ->
-        Rename.Unify.Sound.Infra.Defs.typ -> Rename.Unify.Sound.Infra.subs ->
-        (Rename.Unify.Sound.Infra.Defs.kenv, Rename.Unify.Sound.Infra.subs)
-        prod option **)
+        Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ ->
+        Rename.Unify.MyEval.Sound.Infra.subs ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+        Rename.Unify.MyEval.Sound.Infra.subs) prod option **)
     
     let unify k t1 t2 s =
       Body.unify
@@ -1654,21 +1952,23 @@ module MkInfer =
         (Cons ((Pair (t1, t2)), Nil)) k s
     
     (** val fvs :
-        Rename.Unify.Sound.Infra.Defs.typ Env.env ->
-        Rename.Unify.Sound.Infra.Defs.kind Env.env ->
-        Rename.Unify.Sound.Infra.Defs.sch Env.env -> Variables.VarSet.S.t **)
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ Env.env ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.sch Env.env ->
+        Variables.VarSet.S.t **)
     
     let fvs s k e =
       Variables.VarSet.S.union
         (Variables.VarSet.S.union
           (Variables.VarSet.S.union
             (Variables.VarSet.S.union (Env.dom s)
-              (Env.fv_in Rename.Unify.Sound.Infra.Defs.typ_fv s))
-            (Env.dom k)) (Env.fv_in Rename.Unify.Sound.Infra.Defs.kind_fv k))
-        (Rename.Unify.Sound.Infra.Defs.env_fv e)
+              (Env.fv_in Rename.Unify.MyEval.Sound.Infra.Defs.typ_fv s))
+            (Env.dom k))
+          (Env.fv_in Rename.Unify.MyEval.Sound.Infra.Defs.kind_fv k))
+        (Rename.Unify.MyEval.Sound.Infra.Defs.env_fv e)
     
     (** val close_fvars :
-        nat -> Rename.Unify.Sound.Infra.Defs.kenv -> Variables.vars ->
+        nat -> Rename.Unify.MyEval.Sound.Infra.Defs.kenv -> Variables.vars ->
         Variables.vars -> Variables.vars **)
     
     let rec close_fvars n k vK vs =
@@ -1681,13 +1981,14 @@ module MkInfer =
                      (match Env.get x k with
                         | Some k0 ->
                             Variables.VarSet.S.union vs
-                              (Rename.Unify.Sound.Infra.Defs.kind_fv k0)
+                              (Rename.Unify.MyEval.Sound.Infra.Defs.kind_fv
+                                k0)
                         | None -> vs)
                | None -> vs)
     
     (** val close_fvk :
-        (Variables.var, Rename.Unify.Sound.Infra.Defs.kind) prod list ->
-        Variables.vars -> Variables.vars **)
+        (Variables.var, Rename.Unify.MyEval.Sound.Infra.Defs.kind) prod list
+        -> Variables.vars -> Variables.vars **)
     
     let close_fvk k vs =
       close_fvars (length k) k (Env.dom k) vs
@@ -1704,27 +2005,30 @@ module MkInfer =
              | False -> Pair ((Cons (xk, eb)), eB))
     
     (** val vars_subst :
-        Rename.Unify.Sound.Infra.subs -> Variables.VarSet.S.t ->
+        Rename.Unify.MyEval.Sound.Infra.subs -> Variables.VarSet.S.t ->
         Variables.VarSet.S.t **)
     
     let vars_subst s l =
-      Rename.Unify.Sound.Infra.Defs.typ_fv_list
+      Rename.Unify.MyEval.Sound.Infra.Defs.typ_fv_list
         (map (fun x ->
-          Rename.Unify.Sound.Infra.typ_subst s
-            (Rename.Unify.Sound.Infra.Defs.Coq_typ_fvar x))
+          Rename.Unify.MyEval.Sound.Infra.typ_subst s
+            (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar x))
           (Variables.VarSet.S.elements l))
     
     (** val typinf_generalize :
-        (Variables.var, Rename.Unify.Sound.Infra.Defs.kind) prod list ->
-        Rename.Unify.Sound.Infra.Defs.sch Env.env -> Variables.vars ->
-        Rename.Unify.Sound.Infra.Defs.typ -> ((Variables.var,
-        Rename.Unify.Sound.Infra.Defs.kind) prod list,
-        Rename.Unify.Sound.Infra.Defs.sch) prod **)
+        (Variables.var, Rename.Unify.MyEval.Sound.Infra.Defs.kind) prod list
+        -> Rename.Unify.MyEval.Sound.Infra.Defs.sch Env.env -> Variables.vars
+        -> Rename.Unify.MyEval.Sound.Infra.Defs.typ -> ((Variables.var,
+        Rename.Unify.MyEval.Sound.Infra.Defs.kind) prod list,
+        Rename.Unify.MyEval.Sound.Infra.Defs.sch) prod **)
     
     let typinf_generalize k' e' l t1 =
-      let ftve = close_fvk k' (Rename.Unify.Sound.Infra.Defs.env_fv e') in
+      let ftve =
+        close_fvk k' (Rename.Unify.MyEval.Sound.Infra.Defs.env_fv e')
+      in
       let Pair (k'', kA) = split_env ftve k' in
-      let b = close_fvk k' (Rename.Unify.Sound.Infra.Defs.typ_fv t1) in
+      let b = close_fvk k' (Rename.Unify.MyEval.Sound.Infra.Defs.typ_fv t1)
+      in
       let Pair (x, kB) = split_env b k'' in
       let Pair (bs, ks) = split kB in
       let bs' =
@@ -1737,7 +2041,8 @@ module MkInfer =
       (Rename2.sch_generalize (app bs bs') t1
         (app ks (map (fun x1 -> None) bs'))))
     
-    (** val kdom : Rename.Unify.Sound.Infra.Defs.kenv -> Variables.vars **)
+    (** val kdom :
+        Rename.Unify.MyEval.Sound.Infra.Defs.kenv -> Variables.vars **)
     
     let rec kdom = function
       | Nil -> Variables.VarSet.S.empty
@@ -1750,43 +2055,47 @@ module MkInfer =
              | None -> kdom e')
     
     (** val typinf :
-        Rename.Unify.Sound.Infra.Defs.kenv ->
-        Rename.Unify.Sound.Infra.Defs.env ->
-        Rename.Unify.Sound.Infra.Defs.trm ->
-        Rename.Unify.Sound.Infra.Defs.typ -> Variables.vars ->
-        Rename.Unify.Sound.Infra.subs -> nat ->
-        ((Rename.Unify.Sound.Infra.Defs.kenv, Rename.Unify.Sound.Infra.subs)
-        prod option, Variables.vars) prod **)
+        Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.env ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ -> Variables.vars ->
+        Rename.Unify.MyEval.Sound.Infra.subs -> nat ->
+        ((Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+        Rename.Unify.MyEval.Sound.Infra.subs) prod option, Variables.vars)
+        prod **)
     
     let rec typinf k e t0 t1 l s = function
       | O -> Pair (None, l)
       | S h' ->
           (match t0 with
-             | Rename.Unify.Sound.Infra.Defs.Coq_trm_bvar n -> Pair (None, l)
-             | Rename.Unify.Sound.Infra.Defs.Coq_trm_fvar x ->
+             | Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_bvar n -> Pair
+                 (None, l)
+             | Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_fvar x ->
                  (match Env.get x e with
                     | Some m ->
                         let vs =
                           proj1_sig
                             (var_freshes l
                               (length
-                                (Rename.Unify.Sound.Infra.Defs.sch_kinds m)))
+                                (Rename.Unify.MyEval.Sound.Infra.Defs.sch_kinds
+                                  m)))
                         in
                         Pair
                         ((unify
                            (Env.concat k
-                             (Rename.Unify.Sound.Infra.Defs.kinds_open_vars
-                               (Rename.Unify.Sound.Infra.Defs.sch_kinds m)
-                               vs))
-                           (Rename.Unify.Sound.Infra.Defs.sch_open_vars m vs)
-                           t1 s), (Variables.VarSet.S.union l (mkset vs)))
+                             (Rename.Unify.MyEval.Sound.Infra.Defs.kinds_open_vars
+                               (Rename.Unify.MyEval.Sound.Infra.Defs.sch_kinds
+                                 m) vs))
+                           (Rename.Unify.MyEval.Sound.Infra.Defs.sch_open_vars
+                             m vs) t1 s),
+                        (Variables.VarSet.S.union l (mkset vs)))
                     | None -> Pair (None, l))
-             | Rename.Unify.Sound.Infra.Defs.Coq_trm_abs t2 ->
+             | Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_abs t2 ->
                  let x =
                    proj1_sig
                      (Variables.var_fresh
                        (Variables.VarSet.S.union (Env.dom e)
-                         (Rename.Unify.Sound.Infra.trm_fv t2)))
+                         (Rename.Unify.MyEval.Sound.Infra.trm_fv t2)))
                  in
                  let v1 = proj1_sig (Variables.var_fresh l) in
                  let v2 =
@@ -1795,33 +2104,38 @@ module MkInfer =
                        (Variables.VarSet.S.union l
                          (Variables.VarSet.S.singleton v1)))
                  in
-                 (match unify k (Rename.Unify.Sound.Infra.Defs.Coq_typ_arrow
-                          ((Rename.Unify.Sound.Infra.Defs.Coq_typ_fvar v1),
-                          (Rename.Unify.Sound.Infra.Defs.Coq_typ_fvar v2)))
-                          t1 s with
+                 (match unify k
+                          (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_arrow
+                          ((Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar
+                          v1),
+                          (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar
+                          v2))) t1 s with
                     | Some p ->
                         let Pair (k', s') = p in
                         typinf k'
                           (Env.concat e
                             (Env.single x
-                              { Rename.Unify.Sound.Infra.Defs.sch_type =
-                              (Rename.Unify.Sound.Infra.Defs.Coq_typ_fvar
-                              v1); Rename.Unify.Sound.Infra.Defs.sch_kinds =
+                              { Rename.Unify.MyEval.Sound.Infra.Defs.sch_type =
+                              (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar
+                              v1);
+                              Rename.Unify.MyEval.Sound.Infra.Defs.sch_kinds =
                               Nil }))
-                          (Rename.Unify.Sound.Infra.Defs.trm_open t2
-                            (Rename.Unify.Sound.Infra.Defs.Coq_trm_fvar x))
-                          (Rename.Unify.Sound.Infra.Defs.Coq_typ_fvar v2)
+                          (Rename.Unify.MyEval.Sound.Infra.Defs.trm_open t2
+                            (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_fvar
+                            x))
+                          (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar
+                          v2)
                           (Variables.VarSet.S.union
                             (Variables.VarSet.S.union l
                               (Variables.VarSet.S.singleton v1))
                             (Variables.VarSet.S.singleton v2)) s' h'
                     | None -> Pair (None, l))
-             | Rename.Unify.Sound.Infra.Defs.Coq_trm_let (
+             | Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_let (
                  t2, t3) ->
                  let v = proj1_sig (Variables.var_fresh l) in
                  let Pair (o, l') =
-                   typinf k e t2 (Rename.Unify.Sound.Infra.Defs.Coq_typ_fvar
-                     v)
+                   typinf k e t2
+                     (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar v)
                      (Variables.VarSet.S.union l
                        (Variables.VarSet.S.singleton v)) s h'
                  in
@@ -1830,12 +2144,15 @@ module MkInfer =
                         let Pair (k0, s') = p in
                         let Pair (kA, m) =
                           typinf_generalize
-                            (Env.map (Rename.Unify.Sound.Infra.kind_subst s')
+                            (Env.map
+                              (Rename.Unify.MyEval.Sound.Infra.kind_subst s')
                               k0)
-                            (Env.map (Rename.Unify.Sound.Infra.sch_subst s')
+                            (Env.map
+                              (Rename.Unify.MyEval.Sound.Infra.sch_subst s')
                               e) (vars_subst s' (kdom k))
-                            (Rename.Unify.Sound.Infra.typ_subst s'
-                              (Rename.Unify.Sound.Infra.Defs.Coq_typ_fvar v))
+                            (Rename.Unify.MyEval.Sound.Infra.typ_subst s'
+                              (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar
+                              v))
                         in
                         let x =
                           proj1_sig
@@ -1843,20 +2160,22 @@ module MkInfer =
                               (Variables.VarSet.S.union
                                 (Variables.VarSet.S.union 
                                   (Env.dom e)
-                                  (Rename.Unify.Sound.Infra.trm_fv t2))
-                                (Rename.Unify.Sound.Infra.trm_fv t3)))
+                                  (Rename.Unify.MyEval.Sound.Infra.trm_fv t2))
+                                (Rename.Unify.MyEval.Sound.Infra.trm_fv t3)))
                         in
                         typinf kA (Env.concat e (Env.single x m))
-                          (Rename.Unify.Sound.Infra.Defs.trm_open t3
-                            (Rename.Unify.Sound.Infra.Defs.Coq_trm_fvar x))
-                          t1 l' s' h'
+                          (Rename.Unify.MyEval.Sound.Infra.Defs.trm_open t3
+                            (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_fvar
+                            x)) t1 l' s' h'
                     | None -> Pair (None, l'))
-             | Rename.Unify.Sound.Infra.Defs.Coq_trm_app (
+             | Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_app (
                  t2, t3) ->
                  let v = proj1_sig (Variables.var_fresh l) in
                  let Pair (o, l') =
-                   typinf k e t2 (Rename.Unify.Sound.Infra.Defs.Coq_typ_arrow
-                     ((Rename.Unify.Sound.Infra.Defs.Coq_typ_fvar v), t1))
+                   typinf k e t2
+                     (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_arrow
+                     ((Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar v),
+                     t1))
                      (Variables.VarSet.S.union l
                        (Variables.VarSet.S.singleton v)) s h'
                  in
@@ -1864,41 +2183,44 @@ module MkInfer =
                     | Some p ->
                         let Pair (k', s') = p in
                         typinf k' e t3
-                          (Rename.Unify.Sound.Infra.Defs.Coq_typ_fvar v) l'
-                          s' h'
+                          (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar
+                          v) l' s' h'
                     | None -> Pair (None, l'))
-             | Rename.Unify.Sound.Infra.Defs.Coq_trm_cst c ->
+             | Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_cst c ->
                  let m = Delta.coq_type c in
                  let vs =
                    proj1_sig
                      (var_freshes l
-                       (length (Rename.Unify.Sound.Infra.Defs.sch_kinds m)))
+                       (length
+                         (Rename.Unify.MyEval.Sound.Infra.Defs.sch_kinds m)))
                  in
                  Pair
                  ((unify
                     (Env.concat k
-                      (Rename.Unify.Sound.Infra.Defs.kinds_open_vars
-                        (Rename.Unify.Sound.Infra.Defs.sch_kinds m) vs))
-                    (Rename.Unify.Sound.Infra.Defs.sch_open_vars m vs) t1 s),
-                 (Variables.VarSet.S.union l (mkset vs))))
+                      (Rename.Unify.MyEval.Sound.Infra.Defs.kinds_open_vars
+                        (Rename.Unify.MyEval.Sound.Infra.Defs.sch_kinds m)
+                        vs))
+                    (Rename.Unify.MyEval.Sound.Infra.Defs.sch_open_vars m vs)
+                    t1 s), (Variables.VarSet.S.union l (mkset vs))))
     
-    (** val trm_depth : Rename.Unify.Sound.Infra.Defs.trm -> nat **)
+    (** val trm_depth : Rename.Unify.MyEval.Sound.Infra.Defs.trm -> nat **)
     
     let rec trm_depth = function
-      | Rename.Unify.Sound.Infra.Defs.Coq_trm_abs t1 -> S (trm_depth t1)
-      | Rename.Unify.Sound.Infra.Defs.Coq_trm_let (
+      | Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_abs t1 -> S
+          (trm_depth t1)
+      | Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_let (
           t1, t2) -> S (max (trm_depth t1) (trm_depth t2))
-      | Rename.Unify.Sound.Infra.Defs.Coq_trm_app (
+      | Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_app (
           t1, t2) -> S (max (trm_depth t1) (trm_depth t2))
       | _ -> O
     
     (** val typinf' :
-        Rename.Unify.Sound.Infra.Defs.trm ->
-        (Rename.Unify.Sound.Infra.Defs.kind Env.env,
-        Rename.Unify.Sound.Infra.Defs.typ) prod option **)
+        Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+        (Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env,
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod option **)
     
     let typinf' trm0 =
-      let v = Rename.Unify.Sound.Infra.Defs.Coq_typ_fvar
+      let v = Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar
         Variables.var_default
       in
       let Pair (o, v0) =
@@ -1909,14 +2231,16 @@ module MkInfer =
       (match o with
          | Some p ->
              let Pair (k, s) = p in
-             Some (Pair ((Env.map (Rename.Unify.Sound.Infra.kind_subst s) k),
-             (Rename.Unify.Sound.Infra.typ_subst s v)))
+             Some (Pair
+             ((Env.map (Rename.Unify.MyEval.Sound.Infra.kind_subst s) k),
+             (Rename.Unify.MyEval.Sound.Infra.typ_subst s v)))
          | None -> None)
     
-    (** val coq_Gc : (bool, Rename2.Sound.JudgInfra.Judge.gc_kind) prod **)
+    (** val coq_Gc :
+        (bool, Rename2.MyEval2.Sound2.JudgInfra.Judge.gc_kind) prod **)
     
     let coq_Gc =
-      Pair (False, Rename2.Sound.JudgInfra.Judge.GcLet)
+      Pair (False, Rename2.MyEval2.Sound2.JudgInfra.Judge.GcLet)
    end
  end
 
@@ -2023,62 +2347,69 @@ module Infer = MkInfer(Cstr)(Const)
 
 module Delta = 
  struct 
-  (** val matches_arg : nat -> Infer.Rename.Unify.Sound.Infra.Defs.typ **)
+  (** val matches_arg :
+      nat -> Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ **)
   
   let matches_arg n =
-    Infer.Rename.Unify.Sound.Infra.Defs.Coq_typ_arrow
-      ((Infer.Rename.Unify.Sound.Infra.Defs.Coq_typ_bvar n),
-      (Infer.Rename.Unify.Sound.Infra.Defs.Coq_typ_bvar (S O)))
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_arrow
+      ((Infer.Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_bvar n),
+      (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_bvar (S O)))
   
   (** val coq_type :
-      Const.const -> Infer.Rename.Unify.Sound.Infra.Defs.sch **)
+      Const.const -> Infer.Rename.Unify.MyEval.Sound.Infra.Defs.sch **)
   
   let coq_type = function
-    | Const.Coq_tag t0 -> { Infer.Rename.Unify.Sound.Infra.Defs.sch_type =
-        (Infer.Rename.Unify.Sound.Infra.Defs.Coq_typ_arrow
-        ((Infer.Rename.Unify.Sound.Infra.Defs.Coq_typ_bvar O),
-        (Infer.Rename.Unify.Sound.Infra.Defs.Coq_typ_bvar (S O))));
-        Infer.Rename.Unify.Sound.Infra.Defs.sch_kinds = (Cons (None, (Cons
-        ((Some { Infer.Rename.Unify.Sound.Infra.Defs.kind_cstr =
+    | Const.Coq_tag t0 ->
+        { Infer.Rename.Unify.MyEval.Sound.Infra.Defs.sch_type =
+        (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_arrow
+        ((Infer.Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_bvar O),
+        (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_bvar (S O))));
+        Infer.Rename.Unify.MyEval.Sound.Infra.Defs.sch_kinds = (Cons (None,
+        (Cons ((Some { Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kind_cstr =
         { Cstr.cstr_low = (Cons (t0, Nil)); Cstr.cstr_high = None };
-        Infer.Rename.Unify.Sound.Infra.Defs.kind_rel = (Cons ((Pair (t0,
-        (Infer.Rename.Unify.Sound.Infra.Defs.Coq_typ_bvar O))), Nil)) }),
-        Nil)))) }
-    | Const.Coq_matches l -> { Infer.Rename.Unify.Sound.Infra.Defs.sch_type =
+        Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kind_rel = (Cons ((Pair
+        (t0, (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_bvar O))),
+        Nil)) }), Nil)))) }
+    | Const.Coq_matches l ->
+        { Infer.Rename.Unify.MyEval.Sound.Infra.Defs.sch_type =
         (fold_right (fun x x0 ->
-          Infer.Rename.Unify.Sound.Infra.Defs.Coq_typ_arrow (x, x0))
-          (Infer.Rename.Unify.Sound.Infra.Defs.Coq_typ_arrow
-          ((Infer.Rename.Unify.Sound.Infra.Defs.Coq_typ_bvar O),
-          (Infer.Rename.Unify.Sound.Infra.Defs.Coq_typ_bvar (S O))))
+          Infer.Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_arrow (x, x0))
+          (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_arrow
+          ((Infer.Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_bvar O),
+          (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_bvar (S O))))
           (map matches_arg (seq (S (S O)) (length l))));
-        Infer.Rename.Unify.Sound.Infra.Defs.sch_kinds = (Cons ((Some
-        { Infer.Rename.Unify.Sound.Infra.Defs.kind_cstr = { Cstr.cstr_low =
-        Nil; Cstr.cstr_high = (Some l) };
-        Infer.Rename.Unify.Sound.Infra.Defs.kind_rel =
+        Infer.Rename.Unify.MyEval.Sound.Infra.Defs.sch_kinds = (Cons ((Some
+        { Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kind_cstr =
+        { Cstr.cstr_low = Nil; Cstr.cstr_high = (Some l) };
+        Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kind_rel =
         (combine l
-          (map (fun x -> Infer.Rename.Unify.Sound.Infra.Defs.Coq_typ_bvar x)
+          (map (fun x ->
+            Infer.Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_bvar x)
             (seq (S (S O)) (length l)))) }),
         (map (fun x -> None) (seq O (S (length l)))))) }
   
   (** val matches_lhs :
-      Variables.var list -> nat -> Infer.Rename.Unify.Sound.Infra.Defs.trm **)
+      Variables.var list -> nat ->
+      Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm **)
   
   let matches_lhs l k =
-    Infer.Rename.Unify.Sound.Infra.Defs.Coq_trm_app
-      ((Infer.Rename.Unify.Sound.Infra.const_app (Const.Coq_matches l)
-         (map (fun x -> Infer.Rename.Unify.Sound.Infra.Defs.Coq_trm_bvar x)
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_app
+      ((Infer.Rename.Unify.MyEval.Sound.Infra.const_app (Const.Coq_matches l)
+         (map (fun x ->
+           Infer.Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_bvar x)
            (seq (S O) (length l)))),
-      (Infer.Rename.Unify.Sound.Infra.Defs.Coq_trm_app
-      ((Infer.Rename.Unify.Sound.Infra.Defs.Coq_trm_cst (Const.Coq_tag
+      (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_app
+      ((Infer.Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_cst (Const.Coq_tag
       (nth k l Variables.var_default))),
-      (Infer.Rename.Unify.Sound.Infra.Defs.Coq_trm_bvar O))))
+      (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_bvar O))))
   
-  (** val matches_rhs : nat -> Infer.Rename.Unify.Sound.Infra.Defs.trm **)
+  (** val matches_rhs :
+      nat -> Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm **)
   
   let matches_rhs k =
-    Infer.Rename.Unify.Sound.Infra.Defs.Coq_trm_app
-      ((Infer.Rename.Unify.Sound.Infra.Defs.Coq_trm_bvar (S k)),
-      (Infer.Rename.Unify.Sound.Infra.Defs.Coq_trm_bvar O))
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_app
+      ((Infer.Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_bvar (S k)),
+      (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_bvar O))
  end
 
 module Cstr2 = 

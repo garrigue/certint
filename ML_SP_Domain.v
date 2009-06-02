@@ -5,7 +5,7 @@
 
 Set Implicit Arguments.
 Require Import Lib_FinSet Metatheory List Arith.
-Require Import ML_SP_Infrastructure ML_SP_Soundness.
+Require Import ML_SP_Infrastructure ML_SP_Soundness ML_SP_Eval.
 Require Import ML_SP_Unify ML_SP_Rename ML_SP_Inference.
 
 Module Cstr.
@@ -88,7 +88,7 @@ End Const.
 
 Module Infer := MkInfer(Cstr)(Const).
 Import Infer.
-Import Rename.Unify.Sound.Infra.
+Import Rename.Unify.MyEval.Sound.Infra.
 Import Defs.
 
 Inductive closed_n : nat -> trm -> Prop :=
@@ -266,8 +266,8 @@ Module Delta.
   Qed.
 End Delta.
 
-Module Sound2 := Rename.Unify.Sound.Mk2(Delta).
-Import Sound2.
+Module MyEval := Rename.Unify.MyEval.Mk2(Delta).
+Import MyEval.Sound2.
 Import JudgInfra.
 Import Judge.
 
