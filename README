@@ -1,9 +1,12 @@
 The files ML_SP_* contain a proof of type soundness for structural
 polymorphism based on local constraints [1], together with soundness
 and principality of the type inference algorithm.
+  Metatheory_SP: new generic lemmas used in developments
+  Cardinal: lemmas about finite set cardinals
   ML_SP_Definitions: basic definitions
   ML_SP_Infrastructure: structural lemmas on kinds and types
-  ML_SP_Soundness: lemmas on derivations and proof of type soundnes
+  ML_SP_Soundness: lemmas on derivations and proof of type soundness
+  ML_SP_Eval: proof of type soundness for a stack-based evaluator
   ML_SP_Rename: renaming lemmas, and Gc elimination
   ML_SP_Unify: soundness and completeness of unification
   ML_SP_Inference: soundness and principality of type inference
@@ -12,9 +15,10 @@ and principality of the type inference algorithm.
 I started from a proof of type soundness for coer ML by Arthur
 Chargueraud, which accompanied "Engineering formal metatheory" [2].
 The library files (Lib_* and Metatheory*) are almost untouched.
-The first 3 files (Definitions, Infrastructure and Soundness) were heavily,
-and contain completely new properties, like elimination of kind_gc.
-Unify, Inference and Domain are completely new.
+The first 3 files (Definitions, Infrastructure and Soundness) were
+heavily modified, and contain completely new properties, like
+elimination of kind_gc.
+Eval, Unify, Inference and Domain are completely new.
 
 All the above development were checked with coq 8.2.
 You can compile them with "sh build.sh"

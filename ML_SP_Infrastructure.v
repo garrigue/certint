@@ -823,18 +823,23 @@ Qed.
 
 (* Extra properties *)
 
+Lemma All_kind_types_None : forall P, All_kind_types P None.
+Proof.
+  unfold All_kind_types. simpl*.
+Qed.
+
+Hint Resolve All_kind_types_None.
+
 Lemma All_kind_types_imp (P P' : typ -> Prop) k:
   (forall x, P x -> P' x) ->
   All_kind_types P k -> All_kind_types P' k.
 Proof.
-  intros. unfold All_kind_types in *.
-  unfold kind_types in *.
-  simpl.
+  intros.
   destruct* k as [[kc kv kr kh]|].
+  unfold All_kind_types, kind_types in *.
   simpl in *.
-  clear -H H0; induction* kr.
-  destruct a. simpl in *. 
-  destruct H0; split; auto.
+  clear -H H0; induction kr; simpl in *. auto.
+  inversions* H0.
 Qed.
 
 Lemma All_kind_types_map : forall P f a,
@@ -845,7 +850,18 @@ Proof.
   destruct a as [[kc kv kr kh]|]; simpl*.
   unfold All_kind_types in *; simpl in *.
   clear kv kh; induction kr. simpl*.
-  simpl in *. split*.
+  simpl in *. inversions* H.
+Qed.
+
+Lemma All_kind_types_inv: forall P f a,
+  All_kind_types P (kind_map f a) ->
+  All_kind_types (fun x => P (f x)) a.
+Proof.
+  intros.
+  destruct a as [[kc kv kr kh]|]; simpl*.
+  unfold All_kind_types in *; simpl in *.
+  clear kv kh; induction kr. simpl*.
+  simpl in *. inversions* H.
 Qed.
 
 Lemma disjoint_ok : forall (A:Set) (E F:Env.env A),
@@ -904,6 +920,27 @@ Qed.
 
 Hint Resolve types_length.
         
+Lemma typ_fv_typ_fvars : forall Ys,
+  typ_fv_list (typ_fvars Ys) = mkset Ys.
+Proof.
+  induction Ys; simpl*.
+  rewrite* IHYs.
+Qed.
+
+Lemma typ_fvars_app : forall Xs Ys,
+  typ_fvars (Xs++Ys) = typ_fvars Xs ++ typ_fvars Ys.
+Proof.
+  unfold typ_fvars; intros; apply map_app.
+Qed.
+
+Lemma types_typ_fvars : forall Xs,
+  types (length Xs) (typ_fvars Xs).
+Proof.
+  unfold typ_fvars; intro; split.
+    rewrite* map_length.
+  induction Xs; simpl*.
+Qed.
+
 (** Schemes are stable by type substitution. *)
 
 Lemma typ_open_other_type : forall Us Vs T,
@@ -918,14 +955,6 @@ Proof.
         inversion* H1.
     simpl*.
   inversion* H.
-Qed.
-
-Lemma types_typ_fvars : forall Xs,
-  types (length Xs) (typ_fvars Xs).
-Proof.
-  unfold typ_fvars; intro; split.
-    rewrite* map_length.
-  induction Xs; simpl*.
 Qed.
 
 Lemma typ_open_vars_type : forall Xs Ys T,

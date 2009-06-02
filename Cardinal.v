@@ -362,3 +362,26 @@ Proof.
   rewrite <- (cardinal_remove H3).
   omega.
 Qed.
+
+Lemma cardinal_empty : S.cardinal {} = 0.
+Proof.
+  rewrite S.cardinal_1.
+  case_eq (S.elements {}); intros. simpl*.
+  assert (In e (e::l)) by auto.
+  rewrite <- H in H0.
+  assert (e \in {}). auto with sets.
+  elim (in_empty H1).
+Qed.
+
+Lemma cardinal_0 : forall L,
+  S.cardinal L = 0 -> L = {}.
+Proof.
+  intros.
+  rewrite S.cardinal_1 in H.
+  case_rewrite R1 (S.elements L).
+  apply eq_ext; intros; split; intro; intros.
+    use (S.elements_1 H0).
+    rewrite R1 in H1.
+    inversion H1.
+  elim (in_empty H0).
+Qed.

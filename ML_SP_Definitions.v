@@ -125,14 +125,8 @@ Definition kind_types (K:kind) :=
   | Some k => List.map (fun (x:var*typ) => snd x) (kind_rel k)
   end.
 
-Fixpoint For_all(A:Set)(P:A->Prop)(l:list A) {struct l} : Prop :=
-  match l with
-  | nil   => True
-  | a::l' => P a /\ For_all P l'
-  end.
-
 Definition All_kind_types (P:typ->Prop) K :=
-  For_all P (kind_types K).
+  list_forall P (kind_types K).
 
 Lemma map_coherent : forall f kc kr,
   coherent kc kr ->

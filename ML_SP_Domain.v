@@ -261,8 +261,8 @@ Module Delta.
     clear H; revert H0.
     unfold typ_open_vars.
     generalize 2; induction n; simpl; intros. auto.
-    split. apply type_nth_typ_vars. omega.
-    apply IHn. omega.
+    constructor. apply IHn. omega.
+    apply type_nth_typ_vars. omega.
   Qed.
 End Delta.
 
@@ -272,44 +272,6 @@ Import JudgInfra.
 Import Judge.
 
 Module SndHyp.
-  Section For_all2.
-  Variables (A B:Set) (P:A->B->Prop).
-
-  Lemma For_all2_app : forall u1 u2 v1 v2,
-    For_all2 P u1 u2 -> For_all2 P v1 v2 ->
-    For_all2 P (app u1 v1) (app u2 v2).
-  Proof.
-    induction u1; intros; destruct* u2; try elim H.
-    simpl; intros.
-    split*.
-  Qed.
-
-  Lemma For_all2_nth : forall d1 d2 n l1 l2,
-    For_all2 P l1 l2 -> n < length l1 ->
-    P (nth n l1 d1) (nth n l2 d2).
-  Proof.
-    induction n; intros; destruct* l1; try elim (lt_n_O _ H0);
-      destruct l2; try elim H; simpl; intros; auto.
-    apply* IHn. apply* lt_S_n.
-  Qed.
-
-  Lemma For_all2_length : forall l1 l2,
-    For_all2 P l1 l2 -> length l1 = length l2.
-  Proof.
-    induction l1; intros; destruct* l2; try elim H.
-    intros; simpl. rewrite* (IHl1 l2).
-  Qed.
-
-  Lemma For_all2_rev : forall l1 l2,
-    For_all2 P l1 l2 ->  For_all2 P (rev l1) (rev l2).
-  Proof.
-    induction l1; intros; destruct l2; simpl in *; auto; try elim H.
-    clear H; intros.
-    apply* For_all2_app.
-    simpl. auto.
-  Qed.
-  End For_all2.
-
   Lemma fold_arrow_eq : forall T1 TL1 T2 TL2 Us,
     typ_open (fold_right typ_arrow T1 TL1) Us = fold_right typ_arrow T2 TL2 ->
     length TL1 = length TL2 ->
@@ -459,18 +421,6 @@ Module SndHyp.
     autorewrite with list; auto.
   Qed.
 
-  Lemma cons_append : forall (A:Set) (a:A) l, a :: l = (a :: nil) ++ l.
-  Proof. auto.
-  Qed.
-
-  Lemma list_forall_rev : forall (A:Set) (P:A->Prop) l,
-    list_forall P l -> list_forall P (rev l).
-  Proof.
-    induction l; simpl; intros; auto.
-    inversions H.
-    apply* list_forall_concat.
-  Qed.
-
   Fixpoint typ_arity (T:typ) : nat :=
     match T with
     | typ_arrow T1 T2 => S (typ_arity T2)
@@ -539,35 +489,6 @@ Module SndHyp.
     discriminate.
   Qed.
 
-  Lemma mkset_in : forall x Xs,
-    x \in mkset Xs -> In x Xs.
-  Proof.
-    induction Xs; intros.
-      elim (in_empty H).
-    simpl in *.
-    destruct* (proj1 (in_union _ _ _) H).
-    left. rewrite* (proj1 (in_singleton _ _) H0).
-  Qed.
-
-  Lemma exists_nth : forall (A:Set) (d:A) x Xs,
-    In x Xs -> exists n, n < length Xs /\ x = nth n Xs d.
-  Proof.
-    induction Xs; intros. elim H.
-    simpl in H; destruct* H.
-      exists 0; rewrite H; simpl; split*. apply lt_O_Sn.
-    destruct* IHXs as [n [Hlen EQ]].
-    exists (S n). simpl; split*.
-    apply* lt_n_S.
-  Qed.
-
-  Lemma list_forall_imp : forall (A:Set) (P Q:A->Prop) l,
-    (forall x, P x -> Q x) -> list_forall P l -> list_forall Q l.
-  Proof.
-    induction l; intros; auto.
-    inversions H0.
-    constructor; auto.
-  Qed.
-
   Lemma seq_in : forall k n m, In k (seq m n) -> m <= k < m+n.
   Proof.
     induction n; intros. elim H.
@@ -575,15 +496,6 @@ Module SndHyp.
       rewrite H. omega.
     destruct* (IHn (S m)).
     omega.
-  Qed.
-
-  Lemma map_ext' : forall (A B:Set) (f g:A->B) l,
-    (forall x, In x l -> f x = g x) -> map f l = map g l.
-  Proof.
-    induction l; intros; auto.
-    simpl.
-    rewrite* (H a).
-    rewrite* IHl.
   Qed.
 
   Lemma map_inst_bvar : forall t l,
@@ -597,7 +509,7 @@ Module SndHyp.
     rewrite map_map.
     rewrite map_map.
     rewrite map_map.
-    apply map_ext'.
+    apply list_map_ext.
     intros.
     simpl.
     rewrite <- minus_n_O.
@@ -789,9 +701,6 @@ Section ListSet.
   Defined.
 End ListSet.
 
-Ltac case_rewrite t H :=
-  case_eq t; introv H; rewrite H in *; try discriminate.
-
 Module Cstr2.
   Definition unique := Cstr.cstr_low.
   Lemma unique_ok : forall c l, In l (unique c) <-> Cstr.unique c l.
@@ -814,17 +723,17 @@ Module Cstr2.
     unfold Cstr.entails, lub; simpl; split; intros.
       intuition.
         intros x Hx; destruct* (set_union_elim _ _ _ _ Hx).
-      case_rewrite (Cstr.cstr_high c1) R1;
-      case_rewrite (Cstr.cstr_high c2) R2;
-      try case_rewrite (Cstr.cstr_high c) R3; intuition.
+      case_rewrite R1 (Cstr.cstr_high c1);
+      case_rewrite R2 (Cstr.cstr_high c2);
+      try case_rewrite R3 (Cstr.cstr_high c); intuition.
       intros x Hx; apply set_inter_intro. apply* H2. apply* H3.
     destruct H.
     split; split;
       try (intros x Hx; apply H;
            solve [ apply* set_union_intro2 | apply* set_union_intro1 ]);
-      case_rewrite (Cstr.cstr_high c1) R1;
-      case_rewrite (Cstr.cstr_high c2) R2;
-      try case_rewrite (Cstr.cstr_high c) R3; intuition;
+      case_rewrite R1 (Cstr.cstr_high c1);
+      case_rewrite R2 (Cstr.cstr_high c2);
+      try case_rewrite R3 (Cstr.cstr_high c); intuition;
       intros x Hx; destruct* (set_inter_elim _ _ _ _ (H0 _ Hx)).
   Qed.
 
@@ -848,7 +757,7 @@ Module Cstr2.
   Proof.
     unfold Cstr.entails, Cstr.valid.
     intros. destruct H.
-    case_rewrite (Cstr.cstr_high c1) R1; case_rewrite (Cstr.cstr_high c2) R2;
+    case_rewrite R1 (Cstr.cstr_high c1); case_rewrite R2 (Cstr.cstr_high c2);
     auto*.
   Qed.
 End Cstr2.
