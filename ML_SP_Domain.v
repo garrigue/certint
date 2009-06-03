@@ -762,14 +762,14 @@ Module SndHyp.
  
   Definition get_tag cl :=
     match cl with
-    | clos_const (Const.tag t) (cl1 :: nil) => Some (t, cl1)
+    | clos_const (Const.tag t) (cl1 :: _) => Some (t, cl1)
     | _ => None
     end.
   Definition delta_red c (cl : list clos) :=
     match c with
     | Const.tag _ => (clos_def, nil)
     | Const.matches l nd =>
-      match get_tag (last cl clos_def) with
+      match get_tag (nth (length l) cl clos_def) with
       | Some (t, cl1) =>
         match index eq_var_dec 0 t l with
         | Some i => (nth i cl clos_def, cl1 :: nil)
@@ -800,13 +800,46 @@ Module SndHyp.
       destruct H. rewrite <- (map_length clos2trm) in H.
       elim (tag_is_const _ _ _ H TypC TypA).
     unfold delta_red.
-    case_eq (get_tag (last cls clos_def)); introv R.
+    case_eq (get_tag (nth (length l) cls clos_def)); introv R.
       destruct p.
-      set (i := index eq_var_dec 0 v l) in *.
-      destruct i as [i|].
+      case_eq (index eq_var_dec 0 v l); introv R1.
+        rename n0 into i.
         exists (Delta.matches_lhs n i).
         exists (Delta.matches_rhs i).
-        exists (map clos2trm cls).
+        case_eq (cut (length l) cls); introv R2.
+        exists (map clos2trm (c :: l0)).
+        intros.
+        destruct H as [Hl Hcls].
+        assert (Hl': length l <= length cls).
+          simpl in Hl. rewrite <- Hl. omega.
+        destruct (cut_ok _ Hl' R2) as [Hl0 Hcut].
+        destruct l1. discriminate.
+        split.
+          rewrite map_length.
+          unfold Delta.rule.
+          simpl. exists l. exists n. exists i.
+          destruct (index_ok _ v v l R1).
+          rewrite* Hl0.
+        split.
+          apply* (@list_forall_map _ clos_ok _ term clos2trm).
+            intros; apply* clos_ok_term.
+          rewrite Hcut in Hcls.
+          constructor.
+            apply list_forall_in; intros; apply* (list_forall_out Hcls).
+          case_rewrite R3 (nth (length l) cls clos_def).
+          case_rewrite R4 c0.
+          case_rewrite R5 l2.
+          subst; simpl in R.
+          inversions R; clear R.
+          assert (clos_ok (clos_const (Const.tag v) (c :: l3))).
+            rewrite <- R3.
+            apply (list_forall_out Hcls).
+            simpl in Hl. apply nth_In. omega.
+          inversions H. inversions* H3.
+        split.
+          unfold Delta.matches_lhs; unfold const_app; simpl.
+          rewrite Hcut. rewrite map_app; rewrite fold_left_app.
+          simpl.
 End SndHyp.
 
 Module Sound3 := Infer2.Rename2.MyEval2.Mk3(SndHyp).

@@ -69,9 +69,9 @@ Section Index.
     destruct* (eq_dec x a). discriminate.
   Qed.
 
-  Lemma index_ok : forall (B:Set) (f:A->B) (def:B) a l n,
+  Lemma index_ok : forall def a l n,
     index 0 a l = Some n ->
-    nth n (List.map f l) def = f a.
+    n < length l /\ nth n l def = a.
   Proof.
     intros.
     replace n with (n-0) by omega.
@@ -83,13 +83,14 @@ Section Index.
       inversions H.
       split*.
       replace (n0 - n0) with 0 by omega.
-      auto.
+      auto with arith.
     destruct (IHl _ _ H).
     split. omega.
     case_eq (n0 - n); intros.
       elimtype False; omega.
     replace n2 with (n0 - S n) by omega.
-    auto.
+    destruct H1.
+    auto with arith.
   Qed.
 End Index.
 
