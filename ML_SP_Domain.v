@@ -765,6 +765,7 @@ Module SndHyp.
     | clos_const (Const.tag t) (cl1 :: _) => Some (t, cl1)
     | _ => None
     end.
+
   Definition delta_red c (cl : list clos) :=
     match c with
     | Const.tag _ => (clos_def, nil)
@@ -813,7 +814,11 @@ Module SndHyp.
         assert (Hl': length l <= length cls).
           simpl in Hl. rewrite <- Hl. omega.
         destruct (cut_ok _ Hl' R2) as [Hl0 Hcut].
-        destruct l1. discriminate.
+        destruct l1.
+          elimtype False; subst. simpl in *.
+          rewrite app_length in Hl; rewrite Hl0 in Hl.
+          simpl in Hl; omega.
+        destruct l1.
         split.
           rewrite map_length.
           unfold Delta.rule.
@@ -827,19 +832,31 @@ Module SndHyp.
           constructor.
             apply list_forall_in; intros; apply* (list_forall_out Hcls).
           case_rewrite R3 (nth (length l) cls clos_def).
-          case_rewrite R4 c0.
-          case_rewrite R5 l2.
+          case_rewrite R4 c1.
+          case_rewrite R5 l1.
           subst; simpl in R.
           inversions R; clear R.
-          assert (clos_ok (clos_const (Const.tag v) (c :: l3))).
+          assert (clos_ok (clos_const (Const.tag v) (c :: l2))).
             rewrite <- R3.
             apply (list_forall_out Hcls).
             simpl in Hl. apply nth_In. omega.
           inversions H. inversions* H3.
         split.
-          unfold Delta.matches_lhs; unfold const_app; simpl.
-          rewrite Hcut. rewrite map_app; rewrite fold_left_app.
-          simpl.
+          unfold Delta.matches_lhs, trm_inst; simpl.
+          rewrite trm_inst_app.
+          rewrite Hcut.
+          unfold const_app; rewrite map_app; rewrite fold_left_app.
+          simpl; apply f_equal2.
+            apply* (f_equal2 (fold_left trm_app)).
+            rewrite <- Hl0.
+            clear.
+            assert (forall i, i < length l0 ->
+              nth (S i) (clos2trm c :: map clos2trm l0) trm_def =
+              nth i (map clos2trm l0) trm_def).
+              intros. simpl. reflexivity.
+            set (l := clos2trm c :: map clos2trm l0) in *.
+            generalize 0; induction l0; simpl; intros. auto.
+          
 End SndHyp.
 
 Module Sound3 := Infer2.Rename2.MyEval2.Mk3(SndHyp).
