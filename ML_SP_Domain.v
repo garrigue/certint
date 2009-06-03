@@ -762,7 +762,7 @@ Module SndHyp.
  
   Definition get_tag cl :=
     match cl with
-    | clos_const (Const.tag t) (cl1 :: _) => Some (t, cl1)
+    | clos_const (Const.tag t) (cl1 :: nil) => Some (t, cl1)
     | _ => None
     end.
 
@@ -836,7 +836,9 @@ Module SndHyp.
           case_rewrite R5 l1.
           subst; simpl in R.
           inversions R; clear R.
-          assert (clos_ok (clos_const (Const.tag v) (c :: l2))).
+          destruct l2; try discriminate.
+          inversions H1; clear H1.
+          assert (clos_ok (clos_const (Const.tag v) (c :: nil))).
             rewrite <- R3.
             apply (list_forall_out Hcls).
             simpl in Hl. apply nth_In. omega.
@@ -850,12 +852,23 @@ Module SndHyp.
             apply* (f_equal2 (fold_left trm_app)).
             rewrite <- Hl0.
             clear.
-            assert (forall i, i < length l0 ->
-              nth (S i) (clos2trm c :: map clos2trm l0) trm_def =
-              nth i (map clos2trm l0) trm_def).
-              intros. simpl. reflexivity.
-            set (l := clos2trm c :: map clos2trm l0) in *.
-            generalize 0; induction l0; simpl; intros. auto.
+            rewrite <- (map_length clos2trm l0).
+            apply map_inst_bvar.
+            unfold get_tag in R.
+            case_rewrite R3 (nth (length l) cls clos_def).
+            rewrite Hcut in R3.
+            rewrite app_nth2 in R3.
+            rewrite Hl0 in R3.
+            rewrite <- minus_n_n in R3. simpl in R3.
+            subst; simpl.
+            case_rewrite R4 c1.
+            case_rewrite R5 l1.
+            inversions R.
+            destruct (index_ok _ var_default _ _ R1).
+            destruct l2; try discriminate.
+            rewrite H2; clear H2.
+            inversions H1.
+            reflexivity.
           
 End SndHyp.
 
