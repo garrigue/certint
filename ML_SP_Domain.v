@@ -6,7 +6,7 @@
 Set Implicit Arguments.
 Require Import Lib_FinSet Metatheory List ListSet Arith.
 Require Import ML_SP_Infrastructure ML_SP_Soundness ML_SP_Eval.
-Require Import ML_SP_Unify ML_SP_Rename ML_SP_Inference.
+(* Require Import ML_SP_Unify ML_SP_Rename ML_SP_Inference. *)
 
 Section ListSet.
   Variable A : Type.
@@ -161,9 +161,12 @@ Module Const.
     end.
 End Const.
 
-Module Infer := MkInfer(Cstr)(Const).
+(* Module Infer := MkInfer(Cstr)(Const).
 Import Infer.
-Import Rename.Unify.MyEval.Sound.Infra.
+Import Rename.Unify.MyEval.Sound.Infra. *)
+Module MyEval := MkEval(Cstr)(Const).
+Import MyEval.
+Import Sound.Infra.
 Import Defs.
 
 Inductive closed_n : nat -> trm -> Prop :=
@@ -341,9 +344,10 @@ Module Delta.
   Qed.
 End Delta.
 
-Module Infer2 := Mk2(Delta).
-Import Infer.Rename.Unify.MyEval.
-Import Infer2.Rename2.MyEval2.
+(* Module Infer2 := Mk2(Delta).
+Import Infer2.Rename2.MyEval2. *)
+Module MyEval2 := Mk2(Delta).
+Import MyEval2.
 Import Sound2.
 Import JudgInfra.
 Import Judge.
@@ -545,11 +549,11 @@ Module SndHyp.
     simpl. omega.
   Qed.
 
-  Lemma tag_is_const : forall v vl K gc T TL,
+  Lemma tag_is_const : forall v vl K E gc T TL,
     S (Const.arity (Const.tag v)) = length vl ->
-    K; empty |(false,gc)|= trm_cst (Const.tag v) ~:
+    K; E |(false,gc)|= trm_cst (Const.tag v) ~:
       fold_right typ_arrow T TL ->
-    For_all2 (typing (false,gc) K empty) vl TL -> False.
+    For_all2 (typing (false,gc) K E) vl TL -> False.
   Proof.
     introv Hv TypC TypA.
     inversions TypC; try discriminate. clear TypC H4.
@@ -756,17 +760,22 @@ Module SndHyp.
     auto.
   Qed.
  
+  Definition get_tag cl :=
+    match cl with
+    | clos_const (Const.tag t) (cl1 :: nil) => Some (t, cl1)
+    | _ => None
+    end.
   Definition delta_red c (cl : list clos) :=
     match c with
     | Const.tag _ => (clos_def, nil)
     | Const.matches l nd =>
-      match last cl clos_def with
-      | clos_const (Const.tag t) (cl1 :: nil) =>
-        match get t (combine l cl) with
-        | Some cl2 => (cl2, cl1 :: nil)
+      match get_tag (last cl clos_def) with
+      | Some (t, cl1) =>
+        match index eq_var_dec 0 t l with
+        | Some i => (nth i cl clos_def, cl1 :: nil)
         | None => (clos_def, nil)
         end
-      | _ => (clos_def, nil)
+      | None => (clos_def, nil)
       end
     end.
 
@@ -782,11 +791,22 @@ Module SndHyp.
       clos_ok cl' /\ list_forall clos_ok cls'.
   Proof.
     intros.
-    destruct c; simpl in *.
+    destruct c.
       exists trm_def; exists trm_def; exists (@nil trm).
       intros.
-      destruct (typing_tag_inv _ _ H0).
-      elim (tag_is_const _ _ _ H H1 H0).
+      unfold const_app in H0.
+      puts (fold_app_inv _ _ H0).
+      clear H0; destruct H1 as [TL [TypC TypA]].
+      destruct H. rewrite <- (map_length clos2trm) in H.
+      elim (tag_is_const _ _ _ H TypC TypA).
+    unfold delta_red.
+    case_eq (get_tag (last cls clos_def)); introv R.
+      destruct p.
+      set (i := index eq_var_dec 0 v l) in *.
+      destruct i as [i|].
+        exists (Delta.matches_lhs n i).
+        exists (Delta.matches_rhs i).
+        exists (map clos2trm cls).
 End SndHyp.
 
 Module Sound3 := Infer2.Rename2.MyEval2.Mk3(SndHyp).

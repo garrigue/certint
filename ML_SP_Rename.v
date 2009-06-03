@@ -6,48 +6,6 @@
 Set Implicit Arguments.
 
 Require Import List Metatheory.
-
-Section Index.
-  Variable A : Set.
-  Hypothesis eq_dec : forall x y : A, {x = y}+{x <> y}.
-
-  Fixpoint index (i:nat) (x:A) (l : list A) {struct l} : option nat :=
-    match l with
-    | nil   => None
-    | y::l' => if eq_dec x y then Some i else index (S i) x l'
-    end.
-
-  Lemma index_none_notin : forall x l n,
-    index n x l = None -> ~In x l.
-  Proof.
-    induction l; simpl; intros. auto.
-    destruct* (eq_dec x a). discriminate.
-  Qed.
-
-  Lemma index_ok : forall (B:Set) (f:A->B) (def:B) a l n,
-    index 0 a l = Some n ->
-    nth n (List.map f l) def = f a.
-  Proof.
-    intros.
-    replace n with (n-0) by omega.
-    apply (proj2 (A:= 0 <= n)).
-    gen n; generalize 0.
-    induction l; simpl; intros. discriminate.
-    destruct (eq_dec a a0).
-      subst.
-      inversions H.
-      split*.
-      replace (n0 - n0) with 0 by omega.
-      auto.
-    destruct (IHl _ _ H).
-    split. omega.
-    case_eq (n0 - n); intros.
-      elimtype False; omega.
-    replace n2 with (n0 - S n) by omega.
-    auto.
-  Qed.
-End Index.
-
 Require Import ML_SP_Definitions ML_SP_Infrastructure.
 Require Import ML_SP_Soundness ML_SP_Unify.
 
