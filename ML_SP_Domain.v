@@ -788,7 +788,8 @@ Module SndHyp.
       let (cl', cls') := delta_red c cls in
       Delta.rule (length tl) t1 t2 /\ list_forall term tl /\
       const_app c (List.map clos2trm cls) = trm_inst t1 tl /\
-      app2trm (clos2trm cl') cls' = trm_inst t2 tl /\
+      fold_left trm_app (List.map clos2trm cls') (clos2trm cl')
+      = trm_inst t2 tl /\
       clos_ok cl' /\ list_forall clos_ok cls'.
   Proof.
     intros.
@@ -814,16 +815,29 @@ Module SndHyp.
         assert (Hl': length l <= length cls).
           simpl in Hl. rewrite <- Hl. omega.
         destruct (cut_ok _ Hl' R2) as [Hl0 Hcut].
+        destruct (index_ok _ var_default v l R1) as [Hi Hi'].
         destruct l1.
           elimtype False; subst. simpl in *.
           rewrite app_length in Hl; rewrite Hl0 in Hl.
           simpl in Hl; omega.
         destruct l1.
+        assert (HR: c0 = clos_const (Const.tag v) (c :: nil)).
+          unfold get_tag in R.
+          case_rewrite R3 (nth (length l) cls clos_def).
+          rewrite Hcut in R3.
+          rewrite app_nth2 in R3.
+          rewrite Hl0 in R3.
+          rewrite <- minus_n_n in R3. simpl in R3.
+          subst; simpl.
+          case_rewrite R4 c1.
+          case_rewrite R5 l1.
+          destruct l2; try discriminate.
+          inversions* R.
+          omega.
         split.
           rewrite map_length.
           unfold Delta.rule.
           simpl. exists l. exists n. exists i.
-          destruct (index_ok _ v v l R1).
           rewrite* Hl0.
         split.
           apply* (@list_forall_map _ clos_ok _ term clos2trm).
@@ -831,18 +845,8 @@ Module SndHyp.
           rewrite Hcut in Hcls.
           constructor.
             apply list_forall_in; intros; apply* (list_forall_out Hcls).
-          case_rewrite R3 (nth (length l) cls clos_def).
-          case_rewrite R4 c1.
-          case_rewrite R5 l1.
-          subst; simpl in R.
-          inversions R; clear R.
-          destruct l2; try discriminate.
-          inversions H1; clear H1.
-          assert (clos_ok (clos_const (Const.tag v) (c :: nil))).
-            rewrite <- R3.
-            apply (list_forall_out Hcls).
-            simpl in Hl. apply nth_In. omega.
-          inversions H. inversions* H3.
+          assert (clos_ok c0) by apply* (list_forall_out Hcls).
+          rewrite HR in H; inversion H. inversion* H3.
         split.
           unfold Delta.matches_lhs, trm_inst; simpl.
           rewrite trm_inst_app.
@@ -854,22 +858,29 @@ Module SndHyp.
             clear.
             rewrite <- (map_length clos2trm l0).
             apply map_inst_bvar.
-            unfold get_tag in R.
-            case_rewrite R3 (nth (length l) cls clos_def).
-            rewrite Hcut in R3.
-            rewrite app_nth2 in R3.
-            rewrite Hl0 in R3.
-            rewrite <- minus_n_n in R3. simpl in R3.
-            subst; simpl.
-            case_rewrite R4 c1.
-            case_rewrite R5 l1.
-            inversions R.
-            destruct (index_ok _ var_default _ _ R1).
-            destruct l2; try discriminate.
-            rewrite H2; clear H2.
-            inversions H1.
-            reflexivity.
-          
+          rewrite HR.
+          rewrite Hi'.
+          reflexivity.
+        split.
+          unfold Delta.matches_rhs.
+          unfold trm_inst; simpl.
+          rewrite <- Hl0 in Hi.
+          apply* f_equal2.
+          rewrite Hcut.
+          rewrite* app_nth1.
+          symmetry; apply* map_nth.
+        split.
+          apply* (list_forall_out Hcls).
+          apply* nth_In. omega.
+        constructor; auto.
+        assert (clos_ok c0).
+          apply* (list_forall_out Hcls).
+          rewrite* Hcut.
+        rewrite HR in H; inversion H. inversion* H3.
+      elimtype False. rewrite Hcut in Hl.
+      rewrite app_length in Hl. simpl in Hl; omega.
+    exists trm_def. exists trm_def. exists (@nil trm).
+    intros; elimtype False.
 End SndHyp.
 
 Module Sound3 := Infer2.Rename2.MyEval2.Mk3(SndHyp).
