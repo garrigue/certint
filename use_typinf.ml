@@ -29,8 +29,8 @@ let rec coqlist_of_list = function
     [] -> Nil
   | a :: l -> Cons (a, coqlist_of_list l);;
 
-let typinf1 trm =
-  match typinf' trm with
+let typinf1 env trm =
+  match typinf' env trm with
     Some (Pair (kenv, typ)) ->
       List.map (fun (Pair(a,b)) -> a,b) (list_of_coqlist kenv), typ
   | _ -> failwith "Type Error";;
@@ -51,7 +51,7 @@ let tag v =
 (* First example: (Coq_tag A) is a function constant, which takes any value
    and returns a polymorphic variant A with this value as argument *)
 (* This example is equivalent to the ocaml term [fun x -> `A0 x] *)
-typinf1 (tag (var 0));;
+typinf1 Nil (tag (var 0));;
 
 (* Second example: (Coq_matches [A1; ..; An]) is a n+1-ary function constant
    which takes n functions and a polymorphic variant as argument, and
@@ -60,16 +60,16 @@ typinf1 (tag (var 0));;
 let mtch f1 f2 =
   app (app (matches [var 20; var 21]) f1) f2
 let trm = mtch (abs (bvar 0)) (abs (bvar 0));;
-typinf1 trm;;
+typinf1 Nil trm;;
 
 (* Another example, producing a recursive type *)
 (* OCaml equivalent: [fun x -> match x with `A20 y -> y | `A21 y -> x] *)
 let trm2 =
   abs (app (mtch (abs (bvar 0)) (abs (bvar 1))) (bvar 0)) ;;
-typinf1 trm2;;
+typinf1 Nil trm2;;
 
 let trm3 = app trm2 (app (tag (var 20)) (app (tag (var 21)) (abs (bvar 0)))) ;;
-typinf1 trm3;;
+typinf1 Nil trm3;;
 
 let r1 = eval' Nil trm3 (nat_of_int 10);;
 let r2 = eval' Nil trm3 (nat_of_int 20);;

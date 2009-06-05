@@ -3058,6 +3058,7 @@ module MkInfer :
     val trm_depth : Rename.Unify.MyEval.Sound.Infra.Defs.trm -> nat
     
     val typinf' :
+      Rename.Unify.MyEval.Sound.Infra.Defs.env ->
       Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
       (Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env,
       Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod option
@@ -3744,6 +3745,7 @@ module Infer :
     val trm_depth : Rename.Unify.MyEval.Sound.Infra.Defs.trm -> nat
     
     val typinf' :
+      Rename.Unify.MyEval.Sound.Infra.Defs.env ->
       Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
       (Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env,
       Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod option
@@ -3898,6 +3900,7 @@ module Infer2 :
   val trm_depth : Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm -> nat
   
   val typinf' :
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.env ->
     Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
     (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env,
     Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod option

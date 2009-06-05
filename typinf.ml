@@ -2230,16 +2230,17 @@ module MkInfer =
       | _ -> O
     
     (** val typinf' :
+        Rename.Unify.MyEval.Sound.Infra.Defs.env ->
         Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
         (Rename.Unify.MyEval.Sound.Infra.Defs.kind Env.env,
         Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod option **)
     
-    let typinf' trm0 =
+    let typinf' e trm0 =
       let v = Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar
         Variables.var_default
       in
       let Pair (o, v0) =
-        typinf Env.empty Env.empty trm0 v
+        typinf Env.empty e trm0 v
           (Variables.VarSet.S.singleton Variables.var_default) Env.empty (S
           (trm_depth trm0))
       in
