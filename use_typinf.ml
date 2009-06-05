@@ -1,7 +1,9 @@
 #load"typinf.cmo";;
 open Typinf;;
 open Infer2;;
-open Infer.Rename.Unify.Sound.Infra.Defs;;
+open Infer.Rename.Unify.MyEval.Sound.Infra.Defs;;
+open Infer.Rename.Unify.MyEval;;
+open Const;;
 open Variables.VarSet;;
 
 let rec int_of_nat = function O -> 0 | S x -> succ (int_of_nat x);;
@@ -65,3 +67,9 @@ typinf1 trm;;
 let trm2 =
   abs (app (mtch (abs (bvar 0)) (abs (bvar 1))) (bvar 0)) ;;
 typinf1 trm2;;
+
+let trm3 = app trm2 (app (tag (var 20)) (app (tag (var 21)) (abs (bvar 0)))) ;;
+typinf1 trm3;;
+
+let r1 = eval' Nil trm3 (nat_of_int 10);;
+let r2 = eval' Nil trm3 (nat_of_int 20);;

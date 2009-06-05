@@ -334,7 +334,11 @@ Proof.
   induction 1; simpl.
     case_eq (index eq_var_dec 0 X Xs); simpl; intros.
       unfold typ_fvars.
-      apply* index_ok.
+      destruct (index_ok _ var_default _ _ H).
+      rewrite <- (map_length typ_fvar) in H0.
+      rewrite <- (f_equal typ_fvar H1).
+      rewrite <- map_nth.
+      apply* nth_indep.
     auto.
   congruence.
 Qed.
@@ -1110,4 +1114,3 @@ Qed.
 End Mk2.
 
 End MkRename.
-

@@ -217,8 +217,8 @@ Module Type SndHypIntf2.
       let (cl', cls') := delta_red c cls in
       Delta.rule (length tl) t1 t2 /\ list_forall term tl /\
       const_app c (List.map clos2trm cls) = trm_inst t1 tl /\
-      app2trm (clos2trm cl') cls' = trm_inst t2 tl /\
-      clos_ok cl' /\ list_forall clos_ok cls'.
+      fold_left trm_app (List.map clos2trm cls') (clos2trm cl') = trm_inst t2 tl
+      /\ clos_ok cl' /\ list_forall clos_ok cls'.
 End SndHypIntf2.
 
 Module Mk3(SH:SndHypIntf2).
@@ -998,8 +998,15 @@ Proof.
         intro; intros.
         destruct (Hd _ _ _ H6) as [Hr [Htl [Ht1 [Ht2 _]]]]; clear Typ' Hd.
         rewrite Ht1 in H6.
-        rewrite Ht2.
-        apply* SH.delta_typed. split*.
+        assert (Typ: K0; E |Gc|= trm_inst t2 tl ~: T0).
+          apply* SH.delta_typed. split*.
+        rewrite <- Ht2 in Typ.
+        clear -Typ.
+        unfold app2trm.
+        gen T0; induction l1 using rev_ind; simpl; intros. auto.
+        rewrite map_app in *; rewrite fold_left_app in *; simpl in *.
+        apply retypable_trm_app.
+        inversions* Typ; discriminate.
       assert (clos_ok c1 /\ list_forall clos_ok l1).
         clear -Typ' Hd R.
         set (args := List.map clos2trm (c0 :: l2)) in *.

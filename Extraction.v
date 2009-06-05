@@ -1,5 +1,6 @@
 Require Import List Metatheory ML_SP_Domain.
 Import Infer2.
+Import Sound3.
 Import Infer.Rename.Unify.MyEval.Sound.Infra.
 Import Defs.
 
@@ -11,5 +12,7 @@ Definition t :=
 (* This doesn't seem to work inside Coq (some things don't get evaluated) *)
 (* Eval compute in typinf' t. *)
 
+Definition eval' fenv t h := eval fenv h nil nil t nil.
+
 (* Export and try to do this in ocaml *)
-Extraction "typinf" typinf'.
+Extraction "typinf" typinf' eval'.

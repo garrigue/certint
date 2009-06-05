@@ -6,7 +6,7 @@
 Set Implicit Arguments.
 Require Import Lib_FinSet Metatheory List ListSet Arith.
 Require Import ML_SP_Infrastructure ML_SP_Soundness ML_SP_Eval.
-(* Require Import ML_SP_Unify ML_SP_Rename ML_SP_Inference. *)
+Require Import ML_SP_Unify ML_SP_Rename ML_SP_Inference.
 
 Section ListSet.
   Variable A : Type.
@@ -161,11 +161,11 @@ Module Const.
     end.
 End Const.
 
-(* Module Infer := MkInfer(Cstr)(Const).
+Module Infer := MkInfer(Cstr)(Const).
 Import Infer.
-Import Rename.Unify.MyEval.Sound.Infra. *)
-Module MyEval := MkEval(Cstr)(Const).
-Import MyEval.
+Import Rename.Unify.MyEval.
+(* Module MyEval := MkEval(Cstr)(Const).
+Import MyEval. *)
 Import Sound.Infra.
 Import Defs.
 
@@ -344,10 +344,10 @@ Module Delta.
   Qed.
 End Delta.
 
-(* Module Infer2 := Mk2(Delta).
-Import Infer2.Rename2.MyEval2. *)
-Module MyEval2 := Mk2(Delta).
-Import MyEval2.
+Module Infer2 := Infer.Mk2(Delta).
+Import Infer2.Rename2.MyEval2.
+(* Module MyEval2 := Mk2(Delta).
+Import MyEval2. *)
 Import Sound2.
 Import JudgInfra.
 Import Judge.
@@ -637,13 +637,13 @@ Module SndHyp.
     exists* kh.
   Qed.
 
-  Lemma const_arity_ok0 : forall c vl K gc T,
+  Lemma const_arity_ok0 : forall c vl K E gc T,
     S(Const.arity c) = length vl ->
-    K ; empty |(false,gc)|= const_app c vl ~: T ->
+    K ; E |(false,gc)|= const_app c vl ~: T ->
     exists l, exists ND : NoDup l, exists Us, exists v, exists vl',
       vl = rev (v :: vl') /\ c = Const.matches ND /\ length l = length vl' /\
       proper_instance K (sch_kinds (Delta.type (Const.matches ND))) Us /\
-      K; empty |(false,gc)|= v ~: nth 0 Us typ_def.
+      K; E |(false,gc)|= v ~: nth 0 Us typ_def.
   Proof.
     intros.
     unfold const_app in H0.
@@ -880,8 +880,89 @@ Module SndHyp.
       elimtype False. rewrite Hcut in Hl.
       rewrite app_length in Hl. simpl in Hl; omega.
     exists trm_def. exists trm_def. exists (@nil trm).
-    intros; elimtype False.
+    intros; elim (index_none_notin _ _ _ _ R1); clear R1.
+    destruct H. rewrite <- (map_length clos2trm) in H.
+    destruct (const_arity_ok0 _ _ H H0)
+      as [l' [ND [Us [v' [vl' [Hcls [Hn [Hl' [PI Typ]]]]]]]]].
+    inversions Hn; clear Hn.
+    set (cl1 := nth (length l') cls clos_def) in *.
+    assert (v' = clos2trm cl1).
+      unfold cl1; rewrite <- List.map_nth.
+      rewrite Hcls.
+      rewrite rev_nth.
+      simpl. rewrite Hl'; rewrite* <- minus_n_n.
+      simpl; rewrite Hl'; auto with arith.
+    destruct cl1; try discriminate.
+    destruct c0; try discriminate.
+    destruct l; try discriminate.
+    destruct l; try discriminate.
+    inversions R.
+    destruct PI.
+    simpl in H3.
+    destruct Us; try contradiction.
+    destruct H3.
+    destruct Us; try contradiction.
+    inversions H3.
+    simpl in Typ.
+    destruct (typing_tag_inv _ _ Typ) as [t [T' [k'' [Ht [Typ' [B [M HE]]]]]]].
+    inversions Ht; clear Ht.
+    puts (binds_func B H6). inversions H5; clear H5 H6.
+    destruct HE as [[HE _] _]. simpl in HE.
+    destruct H8 as [[_ H8] _]. simpl in *.
+    destruct k' as [[kl kh] kv kr kt].
+    simpl in *.
+    unfold Cstr.valid in kv.
+    simpl in kv.
+    destruct kh; try contradiction.
+    auto*.
+  exists trm_def. exists trm_def. exists (@nil trm).
+  intros; elimtype False.
+  destruct H. rewrite <- (map_length clos2trm) in H.
+  destruct (const_arity_ok0 _ _ H H0)
+    as [l' [ND [Us [v' [vl' [Hcls [Hn [Hl' [PI Typ]]]]]]]]].
+  inversions Hn; clear Hn.
+  set (cl1 := nth (length l') cls clos_def) in *.
+  assert (v' = clos2trm cl1).
+    unfold cl1; rewrite <- List.map_nth.
+    rewrite Hcls.
+    rewrite rev_nth.
+    simpl. rewrite Hl'; rewrite* <- minus_n_n.
+    simpl; rewrite Hl'; auto with arith.
+  destruct PI.
+  simpl in H4.
+  destruct Us; try contradiction.
+  destruct H4.
+  destruct Us; try contradiction.
+  inversions H4.
+  simpl in Typ.
+  case_rewrite R1 cl1; subst; simpl in *.
+    unfold trm_inst in Typ. inversion Typ; discriminate.
+  assert (clos_ok (clos_const c l)).
+    rewrite <- R1.
+    apply (list_forall_out H1).
+    apply* nth_In. rewrite map_length in H; omega.
+  destruct c.
+    destruct (typing_tag_inv _ _ Typ) as [t [T' [k'' [Ht [Typ' [B [M HE]]]]]]].
+    destruct l; try discriminate.
+    destruct l; try discriminate.
+  inversions H2.
+  unfold const_app in Typ.
+  destruct (fold_app_inv _ _ Typ) as [TL [TypC TypA]].
+  inversions TypC; try discriminate.
+  simpl in *.
+  puts (For_all2_length _ _ _ TypA).
+  rewrite map_length in H6.
+  rewrite H6 in H11.
+  unfold sch_open in H8; simpl in H8.
+  clear -H8 H11.
+  gen l0; generalize 2; induction TL; destruct l0; intros; try discriminate.
+    simpl in H11; omega.
+  simpl in *.
+  inversions H8.
+  elim (IHTL (S n) l0). simpl in H11; omega. auto.
+Qed.
 End SndHyp.
 
 Module Sound3 := Infer2.Rename2.MyEval2.Mk3(SndHyp).
+(* Module Sound3 := MyEval2.Mk3(SndHyp). *)
 
