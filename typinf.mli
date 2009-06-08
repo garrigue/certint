@@ -12,6 +12,10 @@ type 'a option =
   | Some of 'a
   | None
 
+type ('a, 'b) sum =
+  | Inl of 'a
+  | Inr of 'b
+
 type ('a, 'b) prod =
   | Pair of 'a * 'b
 
@@ -3046,16 +3050,25 @@ module MkInfer :
     
     val kdom : Rename.Unify.MyEval.Sound.Infra.Defs.kenv -> Variables.vars
     
+    val trm_depth : Rename.Unify.MyEval.Sound.Infra.Defs.trm -> nat
+    
     val typinf :
       Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
       Rename.Unify.MyEval.Sound.Infra.Defs.env ->
       Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
       Rename.Unify.MyEval.Sound.Infra.Defs.typ -> Variables.vars ->
-      Rename.Unify.MyEval.Sound.Infra.subs -> nat ->
+      Rename.Unify.MyEval.Sound.Infra.subs ->
       ((Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
       Rename.Unify.MyEval.Sound.Infra.subs) prod option, Variables.vars) prod
     
-    val trm_depth : Rename.Unify.MyEval.Sound.Infra.Defs.trm -> nat
+    val typinf0 :
+      Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.env ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.typ -> Variables.vars ->
+      Rename.Unify.MyEval.Sound.Infra.subs ->
+      ((Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+      Rename.Unify.MyEval.Sound.Infra.subs) prod option, Variables.vars) prod
     
     val typinf' :
       Rename.Unify.MyEval.Sound.Infra.Defs.env ->
@@ -3733,16 +3746,25 @@ module Infer :
     
     val kdom : Rename.Unify.MyEval.Sound.Infra.Defs.kenv -> Variables.vars
     
+    val trm_depth : Rename.Unify.MyEval.Sound.Infra.Defs.trm -> nat
+    
     val typinf :
       Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
       Rename.Unify.MyEval.Sound.Infra.Defs.env ->
       Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
       Rename.Unify.MyEval.Sound.Infra.Defs.typ -> Variables.vars ->
-      Rename.Unify.MyEval.Sound.Infra.subs -> nat ->
+      Rename.Unify.MyEval.Sound.Infra.subs ->
       ((Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
       Rename.Unify.MyEval.Sound.Infra.subs) prod option, Variables.vars) prod
     
-    val trm_depth : Rename.Unify.MyEval.Sound.Infra.Defs.trm -> nat
+    val typinf0 :
+      Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.env ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+      Rename.Unify.MyEval.Sound.Infra.Defs.typ -> Variables.vars ->
+      Rename.Unify.MyEval.Sound.Infra.subs ->
+      ((Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+      Rename.Unify.MyEval.Sound.Infra.subs) prod option, Variables.vars) prod
     
     val typinf' :
       Rename.Unify.MyEval.Sound.Infra.Defs.env ->
@@ -3887,17 +3909,27 @@ module Infer2 :
   val kdom :
     Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kenv -> Variables.vars
   
+  val trm_depth : Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm -> nat
+  
   val typinf :
     Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
     Infer.Rename.Unify.MyEval.Sound.Infra.Defs.env ->
     Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
     Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ -> Variables.vars ->
-    Infer.Rename.Unify.MyEval.Sound.Infra.subs -> nat ->
+    Infer.Rename.Unify.MyEval.Sound.Infra.subs ->
     ((Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
     Infer.Rename.Unify.MyEval.Sound.Infra.subs) prod option, Variables.vars)
     prod
   
-  val trm_depth : Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm -> nat
+  val typinf0 :
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.env ->
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ -> Variables.vars ->
+    Infer.Rename.Unify.MyEval.Sound.Infra.subs ->
+    ((Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+    Infer.Rename.Unify.MyEval.Sound.Infra.subs) prod option, Variables.vars)
+    prod
   
   val typinf' :
     Infer.Rename.Unify.MyEval.Sound.Infra.Defs.env ->
@@ -3939,7 +3971,26 @@ module Sound3 :
   val is_abs : Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm -> bool
  end
 
-val eval' :
+type 'a decidable = 'a -> sumbool
+
+val ok_dec : Infer.Rename.Unify.MyEval.Sound.Infra.Defs.sch Env.env decidable
+
+val type_n_dec :
+  nat -> Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ decidable
+
+val list_forall_dec : 'a1 decidable -> 'a1 list decidable
+
+val scheme_dec : Infer.Rename.Unify.MyEval.Sound.Infra.Defs.sch decidable
+
+val env_prop_dec : 'a1 decidable -> 'a1 Env.env decidable
+
+val typinf1 :
+  Infer.Rename.Unify.MyEval.Sound.Infra.Defs.env ->
+  Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+  ((Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+  Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod, sumbool) sum
+
+val eval1 :
   Infer.Rename.Unify.MyEval.clos Env.env ->
   Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm -> nat ->
   Infer.Rename.Unify.MyEval.eval_res

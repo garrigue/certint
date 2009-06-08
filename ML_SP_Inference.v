@@ -5,7 +5,7 @@
 
 Set Implicit Arguments.
 
-Require Import List Metatheory.
+Require Import List Arith Metatheory.
 Require Import ML_SP_Definitions ML_SP_Infrastructure.
 Require Import ML_SP_Soundness ML_SP_Eval ML_SP_Unify ML_SP_Rename.
 
@@ -86,56 +86,6 @@ Fixpoint kdom (E : kenv) : vars :=
   | _ :: E' => kdom E'
   end.
 
-Fixpoint typinf (K:kenv) (E:Defs.env) (t:trm) (T:typ) (L:vars) (S:subs)
-  (h:nat) {struct h} : option (kenv * subs) * vars :=
-  match h with
-  | 0 => (None, L)
-  | S h' =>
-  match t with
-  | trm_bvar _ => (None, L)
-  | trm_fvar x =>
-    match get x E with
-    | None => (None, L)
-    | Some M =>
-      let Vs := proj1_sig (var_freshes L (sch_arity M)) in
-      (unify (K & kinds_open_vars (sch_kinds M) Vs) (M ^ Vs) T S,
-       L \u mkset Vs)
-    end
-  | trm_abs t1 =>
-    let x := proj1_sig (var_fresh (dom E \u trm_fv t1)) in
-    let v1 := proj1_sig (var_fresh L) in
-    let v2 := proj1_sig (var_fresh (L \u {{v1}})) in
-    match unify K (typ_arrow (typ_fvar v1) (typ_fvar v2)) T S with
-    | None => (None, L)
-    | Some (K',S') =>
-      typinf K' (E & x ~ Sch (typ_fvar v1) nil) (t1 ^ x) (typ_fvar v2)
-        (L \u {{v1}} \u {{v2}}) S' h'
-    end
-  | trm_let t1 t2 =>
-    let v := proj1_sig (var_fresh L) in
-    match typinf K E t1 (typ_fvar v) (L \u {{v}}) S h' with
-    | (Some (K0,S'), L') =>
-      let K' := Env.map (kind_subst S') K0 in
-      let E' := Env.map (sch_subst S') E in
-      let T1 := typ_subst S' (typ_fvar v) in
-      let (KA, M) := typinf_generalize K' E' (vars_subst S' (kdom K)) T1 in
-      let x := proj1_sig (var_fresh (dom E \u trm_fv t1 \u trm_fv t2)) in
-      typinf KA (E & x ~ M) (t2 ^ x) T L' S' h'
-    | none => none
-    end
-  | trm_app t1 t2 =>
-    let v := proj1_sig (var_fresh L) in
-    match typinf K E t1 (typ_arrow (typ_fvar v) T) (L \u {{v}}) S h' with
-    | (Some (K',S'), L') => typinf K' E t2 (typ_fvar v) L' S' h'
-    | none => none
-    end
-  | trm_cst c =>
-    let M := Delta.type c in
-    let Vs := proj1_sig (var_freshes L (sch_arity M)) in
-    (unify (K & kinds_open_vars (sch_kinds M) Vs) (M ^ Vs) T S,
-     L \u mkset Vs)
-  end end.
-
 Fixpoint trm_depth (t : trm) : nat :=
   match t with
   | trm_bvar _ => 0
@@ -146,12 +96,165 @@ Fixpoint trm_depth (t : trm) : nat :=
   | trm_cst _ => 0
   end.
 
+Lemma trm_depth_open : forall x t,
+  trm_depth (t ^ x) = trm_depth t.
+Proof.
+  intros; unfold trm_open.
+  generalize 0; induction t; intros; simpl*.
+  destruct (n0 === n); reflexivity.
+Qed.
+
+Definition Rnat (n' n : nat) : Prop := n' < n.
+
+Lemma Rnat_wf : forall n, Acc Rnat n.
+Proof.
+  induction n.
+    apply Acc_intro; intros. elim (le_Sn_O _ H).
+  apply Acc_intro; intros.
+  unfold Rnat in H.
+  unfold lt in H.
+  destruct (Lt.le_lt_or_eq _ _ (Le.le_S_n _ _ H)).
+    apply (Acc_inv IHn _ H0).
+  subst*.
+Defined.
+
+Lemma dom_inv_abs : forall t t1 x,
+   Acc Rnat (trm_depth t) ->
+   t = trm_abs t1 -> Acc Rnat (trm_depth (t1 ^ x)).
+Proof.
+  introv P eq.
+  rewrite eq in P.
+  rewrite trm_depth_open.
+  simpl in P.
+  pose (P1 := le_n (S (trm_depth t1))).
+  exact (Acc_inv P _ P1).
+Defined.
+
+Lemma Rnat_max1 : forall n1 n2,
+  Rnat n1 (S (Max.max n1 n2)).
+Proof.
+  intros.
+  puts (Max.le_max_l n1 n2).
+  unfold Rnat; omega.
+Qed.
+
+Lemma Rnat_max2 : forall n1 n2,
+  Rnat n2 (S (Max.max n1 n2)).
+Proof.
+  intros.
+  puts (Max.le_max_r n1 n2).
+  unfold Rnat; omega.
+Qed.
+
+Lemma dom_inv_app1 : forall t t1 t2,
+   Acc Rnat (trm_depth t) ->
+   t = trm_app t1 t2 -> Acc Rnat (trm_depth t1).
+Proof.
+  introv P eq.
+  rewrite eq in P.
+  simpl in P.
+  pose (P1:= Rnat_max1 (trm_depth t1) (trm_depth t2)).
+  exact (Acc_inv P _ P1).
+Defined.
+
+Lemma dom_inv_app2 : forall t t1 t2,
+   Acc Rnat (trm_depth t) ->
+   t = trm_app t1 t2 -> Acc Rnat (trm_depth t2).
+Proof.
+  introv P eq.
+  rewrite eq in P.
+  simpl in P.
+  pose (P1:= Rnat_max2 (trm_depth t1) (trm_depth t2)).
+  exact (Acc_inv P _ P1).
+Defined.
+
+Lemma dom_inv_let1 : forall t t1 t2,
+   Acc Rnat (trm_depth t) ->
+   t = trm_let t1 t2 -> Acc Rnat (trm_depth t1).
+Proof.
+  introv P eq.
+  rewrite eq in P.
+  simpl in P.
+  pose (P1:= Rnat_max1 (trm_depth t1) (trm_depth t2)).
+  exact (Acc_inv P _ P1).
+Defined.
+
+Lemma dom_inv_let2 : forall t t1 t2 x,
+   Acc Rnat (trm_depth t) ->
+   t = trm_let t1 t2 -> Acc Rnat (trm_depth (t2 ^ x)).
+Proof.
+  introv P eq.
+  rewrite eq in P.
+  simpl in P.
+  rewrite trm_depth_open.
+  pose (P1:= Rnat_max2 (trm_depth t1) (trm_depth t2)).
+  exact (Acc_inv P _ P1).
+Defined.
+
+Fixpoint typinf (K:kenv) (E:Defs.env) (t:trm) (T:typ) (L:vars) (S:subs)
+  (h:Acc Rnat (trm_depth t)) {struct h} : option (kenv * subs) * vars :=
+  match t as t' return t = t' -> option (kenv * subs) * vars with
+  | trm_bvar _ => fun eq => (None, L)
+  | trm_fvar x => fun eq =>
+    match get x E with
+    | None => (None, L)
+    | Some M =>
+      let Vs := proj1_sig (var_freshes L (sch_arity M)) in
+      (unify (K & kinds_open_vars (sch_kinds M) Vs) (M ^ Vs) T S,
+       L \u mkset Vs)
+    end
+  | trm_abs t1 => fun eq =>
+    let x := proj1_sig (var_fresh (dom E \u trm_fv t1)) in
+    let v1 := proj1_sig (var_fresh L) in
+    let v2 := proj1_sig (var_fresh (L \u {{v1}})) in
+    match unify K (typ_arrow (typ_fvar v1) (typ_fvar v2)) T S with
+    | None => (None, L)
+    | Some (K',S') =>
+      typinf K' (E & x ~ Sch (typ_fvar v1) nil) (t1 ^ x) (typ_fvar v2)
+        (L \u {{v1}} \u {{v2}}) S' (dom_inv_abs x h eq)
+    end
+  | trm_let t1 t2 => fun eq =>
+    let v := proj1_sig (var_fresh L) in
+    match typinf K E t1 (typ_fvar v) (L \u {{v}}) S (dom_inv_let1 h eq) with
+    | (Some (K0,S'), L') =>
+      let K' := Env.map (kind_subst S') K0 in
+      let E' := Env.map (sch_subst S') E in
+      let T1 := typ_subst S' (typ_fvar v) in
+      let (KA, M) := typinf_generalize K' E' (vars_subst S' (kdom K)) T1 in
+      let x := proj1_sig (var_fresh (dom E \u trm_fv t1 \u trm_fv t2)) in
+      typinf KA (E & x ~ M) (t2 ^ x) T L' S' (dom_inv_let2 x h eq)
+    | none => none
+    end
+  | trm_app t1 t2 => fun eq =>
+    let v := proj1_sig (var_fresh L) in
+    match typinf K E t1 (typ_arrow (typ_fvar v) T) (L \u {{v}}) S
+      (dom_inv_app1 h eq) with
+    | (Some (K',S'), L') =>
+        typinf K' E t2 (typ_fvar v) L' S' (dom_inv_app2 h eq)
+    | none => none
+    end
+  | trm_cst c => fun eq =>
+    let M := Delta.type c in
+    let Vs := proj1_sig (var_freshes L (sch_arity M)) in
+    (unify (K & kinds_open_vars (sch_kinds M) Vs) (M ^ Vs) T S,
+     L \u mkset Vs)
+  end (refl_equal t).
+
+Definition typinf0 K E t T L S := typinf K E t T L S (Rnat_wf _).
+
+Lemma normalize_typinf : forall K E t T L S h,
+  typinf K E t T L S h = typinf0 K E t T L S.
+Proof.
+  intros.
+  unfold typinf0; apply f_equal. apply ProofIrrelevance.proof_irrelevance.
+Qed.
+
 Definition typinf' E trm :=
   let v  :=  Variables.var_default in
   let min_vars := S.singleton v in
   let V := typ_fvar v in
   match
-    typinf empty E trm V min_vars empty (S (trm_depth trm))
+    typinf empty E trm V min_vars empty (Rnat_wf _)
   with (None, _) => None
   | (Some (k, s), _) =>
     Some (map (kind_subst s) k, typ_subst s V)
@@ -646,7 +749,8 @@ Qed.
 Definition Gc := (false, GcLet).
 
 Definition soundness_spec h t K0 E T L0 S0 K S L :=
-  typinf K0 E t T L0 S0 h = (Some (K, S), L) ->
+  trm_depth t < h ->
+  typinf K0 E t T L0 S0 (Rnat_wf _) = (Some (K, S), L) ->
   is_subst S0 -> env_prop type S0 ->
   kenv_ok K0 -> disjoint (dom S0) (dom K0) ->
   fvs S0 K0 E \u typ_fv T << L0 ->
@@ -670,7 +774,7 @@ Lemma soundness_ind : forall h t K0 E T L0 S0 K S L s x,
    map (sch_subst S0) E |Gc|= t ~: sch_subst S0 s ^^ typ_fvars x)) ->
   soundness_spec h t K0 E T L0 S0 K S L.
 Proof.
-  intros until x; intros Hs f HI Typ _ HS0 HTS0 HK0 Dis HL0 HE HT.
+  intros until x; intros Hs f HI Typ Ht _ HS0 HTS0 HK0 Dis HL0 HE HT.
   unfold unify in HI.
   poses Fr (fresh_sub _ _ f HL0).
   assert (kenv_ok (K0 & kinds_open_vars (sch_kinds s) x)).
@@ -843,15 +947,15 @@ Proof.
 Qed.
 
 Lemma soundness_var : forall h L0 v K0 E T S0 K S L,
-  soundness_spec (Datatypes.S h) (trm_fvar v) K0 E T L0 S0 K S L.
+  soundness_spec h (trm_fvar v) K0 E T L0 S0 K S L.
 Proof.
-  intros; intros HI HS0 HTS0 HK0 Dis HL0 HE HT.
+  intros; intros Ht HI HS0 HTS0 HK0 Dis HL0 HE HT.
   poses HI' HI; simpl in HI.
   case_rewrite R1 (get v E).
   destruct (var_freshes L0 (sch_arity s));
     simpl proj1_sig in HI.
   inversions HI; clear HI. rename H0 into HI.
-  refine (soundness_ind _ _ _ _ HI _ HI' _ _ _ _ _ _ _); auto.
+  refine (soundness_ind _ _ _ HI _ _ HI' _ _ _ _ _ _ _); auto.
     apply (proj2 HE _ _ (binds_in R1)).
   split*.
     unfold unify in HI.
@@ -900,14 +1004,14 @@ Proof.
 Qed.
 
 Lemma soundness_cst : forall h L0 c K0 E T S0 K S L,
-  soundness_spec (Datatypes.S h) (trm_cst c) K0 E T L0 S0 K S L.
+  soundness_spec h (trm_cst c) K0 E T L0 S0 K S L.
 Proof.
-  intros; intros HI HS0 HTS0 HK0 Dis HL0 HE HT.
+  intros; intros Ht HI HS0 HTS0 HK0 Dis HL0 HE HT.
   poses HI' HI; simpl in HI.
   destruct (var_freshes L0 (sch_arity (Delta.type c)));
     simpl in HI.
   inversions HI; clear HI.
-  refine (soundness_ind _ _ _ _ H0 _ HI' _ _ _ _ _ _ _); auto.
+  refine (soundness_ind _ _ _ H0 _ _ HI' _ _ _ _ _ _ _); auto.
     apply Delta.scheme.
   intros.
   rewrite sch_subst_fresh; try (rewrite Delta.closed; intro; auto).
@@ -942,19 +1046,22 @@ Lemma soundness_abs : forall h L0 t K0 E T S0 S K L,
   (forall t K0 E T L0 S0, soundness_spec h t K0 E T L0 S0 K S L) ->
   soundness_spec (Datatypes.S h) (trm_abs t) K0 E T L0 S0 K S L.
 Proof.
-  intros until L; intros IHh  HI HS0 HTS0 HK0 Dis HL0 HE HT; simpl in HI.
+  intros until L; intros IHh Ht HI HS0 HTS0 HK0 Dis HL0 HE HT; simpl in HI.
   destruct (var_fresh L0); simpl in HI.
   destruct (var_fresh (L0 \u {{x}})); simpl in HI.
   destruct (var_fresh (dom E \u trm_fv t)); simpl in HI.
   case_rewrite R1 (unify K0 (typ_arrow (typ_fvar x) (typ_fvar x0)) T S0).
   destruct p as [K' S'].
+  rewrite normalize_typinf in HI.
   unfold unify in R1.
   destruct (unify_keep _ _ _ R1) as [HS' _]; auto.
   destruct (unify_type _ _ R1); auto.
     simpl; intros. destruct* H.
     inversions* H.
   destruct* (unify_kinds_ok _ _ R1). clear H1; destruct H2.
-  destruct* (IHh _ _ _ _ _ _ HI); clear IHh HI.
+  simpl in Ht. rewrite <- (trm_depth_open x1) in Ht.
+  poses Ht' (lt_S_n _ _ Ht).
+  destruct* (IHh _ _ _ _ _ _ Ht' HI); clear IHh HI.
       forward~ (unify_keep_fv' _ _ R1 HS0 (E:=E)) as G.
       unfold fvs in *.
       unfold all_fv in G; simpl in G.
@@ -1531,9 +1638,10 @@ Lemma soundness_let : forall h L0 t1 t2 K0 E T S0 S K L,
   (forall t K0 E T L0 S0 K S L, soundness_spec h t K0 E T L0 S0 K S L) ->
   soundness_spec (Datatypes.S h) (trm_let t1 t2) K0 E T L0 S0 K S L.
 Proof.
-  intros until L; intros IHh  HI HS0 HTS0 HK0 Dis HL0 HE HT; simpl in HI.
+  intros until L; intros IHh Ht HI HS0 HTS0 HK0 Dis HL0 HE HT; simpl in HI.
   destruct (var_fresh L0); simpl in HI.
-  case_rewrite R1 (typinf K0 E t1 (typ_fvar x) (L0 \u {{x}}) S0 h).
+  rewrite normalize_typinf in HI.
+  case_rewrite R1 (typinf0 K0 E t1 (typ_fvar x) (L0 \u {{x}}) S0).
   destruct o; try discriminate. destruct p.
   fold (typ_subst s (typ_fvar x)) in HI.
   set (K' := map (kind_subst s) k) in *.
@@ -1541,12 +1649,19 @@ Proof.
   set (T1 := typ_subst s (typ_fvar x)) in *.
   destruct (var_fresh (dom E \u trm_fv t1 \u trm_fv t2)); simpl proj1_sig in HI.
   case_rewrite R2 (typinf_generalize K' E' (vars_subst s (kdom K0)) T1).
-  destruct* (IHh _ _ _ _ _ _ _ _ _ R1); clear R1.
+  simpl in Ht.
+  assert (Ht': trm_depth t1 < h).
+    puts (Max.le_max_l (trm_depth t1) (trm_depth t2)). omega.
+  destruct* (IHh _ _ _ _ _ _ _ _ _ Ht' R1); clear R1.
     simpl*.
   destruct H0 as [HTs [Hs [Hk [Disk [WS' [HL0' Typ']]]]]].
   destruct (soundness_generalize _ Typ' R2)
     as [HKA [Inc2 [Inc1 [HM [Hfv [L' Typ2]]]]]].
-  destruct* (IHh _ _ _ _ _ _ _ _ _ HI); clear IHh HI.
+  rewrite normalize_typinf in HI.
+  clear Ht'; assert (Ht': trm_depth t2 < h).
+    puts (Max.le_max_r (trm_depth t1) (trm_depth t2)). omega.
+  rewrite <- (trm_depth_open x0) in Ht'.
+  destruct* (IHh _ _ _ _ _ _ _ _ _ Ht' HI); clear IHh HI.
         puts (incl_subset_dom Inc2).
         rewrite dom_map in H0.
         intro z; destruct* (Disk z).
@@ -1588,13 +1703,20 @@ Lemma soundness_app : forall h L0 t1 t2 K0 E T S0 S K L,
   (forall t K0 E T L0 S0 K S L, soundness_spec h t K0 E T L0 S0 K S L) ->
   soundness_spec (Datatypes.S h) (trm_app t1 t2) K0 E T L0 S0 K S L.
 Proof.
-  intros until L; intros IHh HI HS0 HTS0 HK0 Dis HL0 HE HT; simpl in HI.
+  intros until L; intros IHh Ht HI HS0 HTS0 HK0 Dis HL0 HE HT; simpl in HI.
   destruct (var_fresh L0); simpl in HI.
-  case_rewrite R1 (typinf K0 E t1 (typ_arrow (typ_fvar x) T) (L0\u{{x}}) S0 h).
+  rewrite normalize_typinf in HI.
+  case_rewrite R1 (typinf0 K0 E t1 (typ_arrow (typ_fvar x) T) (L0\u{{x}}) S0).
   destruct o; try discriminate. destruct p as [K' S'].
-  destruct* (IHh _ _ _ _ _ _ _ _ _ R1); clear R1.
+  simpl in Ht.
+  assert (Ht': trm_depth t1 < h).
+    puts (Max.le_max_l (trm_depth t1) (trm_depth t2)). omega.
+  destruct* (IHh _ _ _ _ _ _ _ _ _ Ht' R1); clear R1.
     simpl*.
-  destruct* (IHh _ _ _ _ _ _ _ _ _ HI); clear IHh HI.
+  rewrite normalize_typinf in HI.
+  clear Ht'; assert (Ht': trm_depth t2 < h).
+    puts (Max.le_max_r (trm_depth t1) (trm_depth t2)). omega.
+  destruct* (IHh _ _ _ _ _ _ _ _ _ Ht' HI); clear IHh HI.
     clear -H0; simpl. remember {{x}} as L. auto*.
   intuition.
       apply* extends_trans.
@@ -1611,13 +1733,14 @@ Qed.
 Theorem typinf_sound : forall h t K0 E T L0 S0 K S L,
   soundness_spec h t K0 E T L0 S0 K S L.
 Proof.
-  induction h; destruct t; intros;
-    intros HI HS0 HTS0 HK0 Dis HL0 HE HT; try discriminate.
-  apply* (soundness_var h).
-  apply* (@soundness_abs h).
-  apply* (@soundness_let h).
-  apply* (@soundness_app h).
-  apply* (@soundness_cst h).
+ induction h; destruct t; intros;
+    intros Ht HI HS0 HTS0 HK0 Dis HL0 HE HT;
+      try elim (lt_n_O _ Ht); try discriminate.
+  apply* soundness_var.
+  apply* soundness_abs.
+  apply* soundness_let. 
+  apply* soundness_app.
+  apply* soundness_cst.
 Qed.
 
 Lemma map_sch_subst_fresh : forall S E,
@@ -1637,11 +1760,12 @@ Corollary typinf_sound' : forall t K E T,
 Proof.
   unfold typinf'.
   introv HE HC HI.
-  case_rewrite R1 (typinf empty E t (typ_fvar var_default) 
-             (S.singleton var_default) empty (S (trm_depth t))).
+  rewrite normalize_typinf in HI.
+  case_rewrite R1
+    (typinf0 empty E t (typ_fvar var_default) {{var_default}} empty).
   destruct o; try discriminate.
   destruct p. inversions HI; clear HI.
-  destruct* (typinf_sound _ _ R1).
+  destruct* (typinf_sound _ (lt_n_Sn _) R1).
        intro; intros. elim H.
       intro; intros. elim H.
      split*. intro; intros. elim H.
@@ -1651,6 +1775,9 @@ Proof.
   rewrite* <- (map_sch_subst_fresh s E).
   rewrite HC. intro. auto.
 Qed.
+
+
+(** Principality *)
 
 Lemma typ_subst_concat_fresh : forall S1 S2 T,
   disjoint (dom S2) (typ_fv T) ->
@@ -2005,7 +2132,7 @@ Definition principality S0 K0 E0 S K E t T L h :=
   K; E |(false,GcAny)|= t ~: typ_subst S T ->
   trm_depth t < h ->
   exists K', exists S', exists L',
-    typinf K0 E0 t T L S0 h = (Some (K', S'), L') /\ extends S' S0 /\
+    typinf K0 E0 t T L S0 (Rnat_wf _) = (Some (K', S'), L') /\ extends S' S0 /\
     exists S'',
       dom S'' << S.diff L' L /\ env_prop type S'' /\ extends (S & S'') S' /\
       well_subst K' K (S & S'').
@@ -2130,14 +2257,6 @@ Proof.
   unfold env_fv, sch_fv; simpl; auto with sets.
 Qed.
 
-Lemma trm_depth_open : forall x t,
-  trm_depth (t ^ x) = trm_depth t.
-Proof.
-  intros; unfold trm_open.
-  generalize 0; induction t; intros; simpl*.
-  destruct (n0 === n); reflexivity.
-Qed.
-
 Lemma type_scheme : forall T,
   type T -> scheme (Sch T nil).
 Proof.
@@ -2246,6 +2365,7 @@ Proof.
      simpl in Hh.
      rewrite trm_depth_open. omega.
     destruct H9 as [S2 [L' [TI [Hext2 [S3 [HS3 [TS3 [Hext3 WS3]]]]]]]].
+    rewrite normalize_typinf; unfold typinf0.
     esplit; esplit; esplit; split*.
     split.
       apply* extends_trans.
@@ -2255,7 +2375,7 @@ Proof.
     split.
       rewrite dom_concat.
       unfold Xs, Us; simpl.
-      destruct* (typinf_sound _ _ TI).
+      destruct* (typinf_sound _ (lt_n_Sn _) TI).
         unfold fvs in *; simpl. unfold sch_fv; simpl.
         unfold all_fv in Uk; simpl in Uk.
         rewrite typ_subst_id in Uk. auto.
@@ -3014,6 +3134,7 @@ Proof.
    simpl in Hh.
    eapply Lt.le_lt_trans. apply (Max.le_max_l (trm_depth t1) (trm_depth t2)).
    omega.
+  rewrite normalize_typinf; unfold typinf0.
   rewrite HI.
   set (K1 := map (kind_subst S') K') in *.
   set (E1 := map (sch_subst S') E0) in *.
@@ -3029,7 +3150,8 @@ Proof.
     in *.
   set (l0' := List.map (fun _ : var => @None ckind) Bs) in *.
   set (M0 := sch_generalize (l++Bs) T1 (l0++l0')).
-  destruct* (typinf_sound _ _ HI). simpl*.
+  destruct* (typinf_sound _ (lt_n_Sn _) HI). simpl*.
+  rewrite normalize_typinf.
   assert (OkK1: ok K1) by (unfold K1; auto* ).
   destruct* (split_env_ok _ H).
   assert (Oke: kenv_ok (e0 & e)).
@@ -3178,7 +3300,7 @@ Proof.
    clear -Hh.
    puts (Max.le_max_r (trm_depth t1) (trm_depth t2)). omega.
   env_fix. esplit; esplit; esplit; split*.
-  destruct* (typinf_sound _ _ HI').
+  destruct* (typinf_sound _ (lt_n_Sn _) HI').
   split*. apply* extends_trans.
   exists (x1~MXs & S'' & S1'').
   repeat rewrite <- concat_assoc.
@@ -3197,6 +3319,7 @@ Proof.
   simpl.
   destruct (var_fresh L) as [x1 Fr1]; simpl.
   inversions Typ; try discriminate. simpl in *.
+  rewrite normalize_typinf.
   assert (Hsub: forall t, typ_fv t << L ->
                   typ_subst (S & x1 ~ S1) t = typ_subst S t).
     intros.
@@ -3223,9 +3346,10 @@ Proof.
    clear -Hh.
    puts (Max.le_max_l (trm_depth t1) (trm_depth t2)). omega.
   intuition.
-  rewrite HI.
-  destruct* (typinf_sound _ _ HI). simpl*. use (typ_subst_type' S T).
+  unfold typinf0; rewrite HI.
+  destruct* (typinf_sound _ (lt_n_Sn _) HI). simpl*. use (typ_subst_type' S T).
   intuition.
+  rewrite normalize_typinf.
   assert (Hsub': forall S t, typ_fv t << L \u {{x1}} ->
                   typ_subst (S & S'') t = typ_subst S t).
     intros; apply typ_subst_concat_fresh.
@@ -3245,9 +3369,10 @@ Proof.
    clear -Hh.
    puts (Max.le_max_r (trm_depth t1) (trm_depth t2)). omega.
   intuition.
+  unfold typinf0.
   esplit; esplit; esplit; split*.
   split. apply* extends_trans.
-  destruct* (typinf_sound _ _ HI'). simpl*. intros y Hy; apply* H11.
+  destruct* (typinf_sound _ (lt_n_Sn _) HI'). simpl*. intros y Hy; apply* H11.
   exists (x1 ~ S1 & S'' & S1'').
   repeat rewrite <- concat_assoc.
   intuition.
@@ -3348,12 +3473,12 @@ Proof.
     intros HS0 HTS0 HK0 Dis HE0 MGE HTS HL Hext WS Typ Hh;
     try (elimtype False; omega).
   inversions Typ.
-  apply* (@principal_var h L S0 K0 E0 S K E).
-  apply* (@principal_abs h L S0 K0 E0 S K E).
-  apply* (@principal_let h L S0 K0 E0 S K E).
-  apply* (@principal_app h L S0 K0 E0 S K E).
-  apply* (@principal_cst h L S0 K0 E0 S K E).
-  simpl in H. discriminate.
+  apply* principal_var.
+  apply* principal_abs.
+  apply* principal_let.
+  apply* principal_app.
+  apply* principal_cst.
+  discriminate.
 Qed.
 
 Corollary typinf_principal' : forall K E t T,

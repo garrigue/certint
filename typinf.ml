@@ -13,6 +13,10 @@ type 'a option =
   | Some of 'a
   | None
 
+type ('a, 'b) sum =
+  | Inl of 'a
+  | Inr of 'b
+
 type ('a, 'b) prod =
   | Pair of 'a * 'b
 
@@ -2069,155 +2073,6 @@ module MkInfer =
                    (kdom e')
              | None -> kdom e')
     
-    (** val typinf :
-        Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
-        Rename.Unify.MyEval.Sound.Infra.Defs.env ->
-        Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
-        Rename.Unify.MyEval.Sound.Infra.Defs.typ -> Variables.vars ->
-        Rename.Unify.MyEval.Sound.Infra.subs -> nat ->
-        ((Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
-        Rename.Unify.MyEval.Sound.Infra.subs) prod option, Variables.vars)
-        prod **)
-    
-    let rec typinf k e t0 t1 l s = function
-      | O -> Pair (None, l)
-      | S h' ->
-          (match t0 with
-             | Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_bvar n -> Pair
-                 (None, l)
-             | Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_fvar x ->
-                 (match Env.get x e with
-                    | Some m ->
-                        let vs =
-                          proj1_sig
-                            (var_freshes l
-                              (length
-                                (Rename.Unify.MyEval.Sound.Infra.Defs.sch_kinds
-                                  m)))
-                        in
-                        Pair
-                        ((unify
-                           (Env.concat k
-                             (Rename.Unify.MyEval.Sound.Infra.Defs.kinds_open_vars
-                               (Rename.Unify.MyEval.Sound.Infra.Defs.sch_kinds
-                                 m) vs))
-                           (Rename.Unify.MyEval.Sound.Infra.Defs.sch_open_vars
-                             m vs) t1 s),
-                        (Variables.VarSet.S.union l (mkset vs)))
-                    | None -> Pair (None, l))
-             | Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_abs t2 ->
-                 let x =
-                   proj1_sig
-                     (Variables.var_fresh
-                       (Variables.VarSet.S.union (Env.dom e)
-                         (Rename.Unify.MyEval.Sound.Infra.trm_fv t2)))
-                 in
-                 let v1 = proj1_sig (Variables.var_fresh l) in
-                 let v2 =
-                   proj1_sig
-                     (Variables.var_fresh
-                       (Variables.VarSet.S.union l
-                         (Variables.VarSet.S.singleton v1)))
-                 in
-                 (match unify k
-                          (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_arrow
-                          ((Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar
-                          v1),
-                          (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar
-                          v2))) t1 s with
-                    | Some p ->
-                        let Pair (k', s') = p in
-                        typinf k'
-                          (Env.concat e
-                            (Env.single x
-                              { Rename.Unify.MyEval.Sound.Infra.Defs.sch_type =
-                              (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar
-                              v1);
-                              Rename.Unify.MyEval.Sound.Infra.Defs.sch_kinds =
-                              Nil }))
-                          (Rename.Unify.MyEval.Sound.Infra.Defs.trm_open t2
-                            (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_fvar
-                            x))
-                          (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar
-                          v2)
-                          (Variables.VarSet.S.union
-                            (Variables.VarSet.S.union l
-                              (Variables.VarSet.S.singleton v1))
-                            (Variables.VarSet.S.singleton v2)) s' h'
-                    | None -> Pair (None, l))
-             | Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_let (
-                 t2, t3) ->
-                 let v = proj1_sig (Variables.var_fresh l) in
-                 let Pair (o, l') =
-                   typinf k e t2
-                     (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar v)
-                     (Variables.VarSet.S.union l
-                       (Variables.VarSet.S.singleton v)) s h'
-                 in
-                 (match o with
-                    | Some p ->
-                        let Pair (k0, s') = p in
-                        let Pair (kA, m) =
-                          typinf_generalize
-                            (Env.map
-                              (Rename.Unify.MyEval.Sound.Infra.kind_subst s')
-                              k0)
-                            (Env.map
-                              (Rename.Unify.MyEval.Sound.Infra.sch_subst s')
-                              e) (vars_subst s' (kdom k))
-                            (Rename.Unify.MyEval.Sound.Infra.typ_subst s'
-                              (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar
-                              v))
-                        in
-                        let x =
-                          proj1_sig
-                            (Variables.var_fresh
-                              (Variables.VarSet.S.union
-                                (Variables.VarSet.S.union 
-                                  (Env.dom e)
-                                  (Rename.Unify.MyEval.Sound.Infra.trm_fv t2))
-                                (Rename.Unify.MyEval.Sound.Infra.trm_fv t3)))
-                        in
-                        typinf kA (Env.concat e (Env.single x m))
-                          (Rename.Unify.MyEval.Sound.Infra.Defs.trm_open t3
-                            (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_fvar
-                            x)) t1 l' s' h'
-                    | None -> Pair (None, l'))
-             | Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_app (
-                 t2, t3) ->
-                 let v = proj1_sig (Variables.var_fresh l) in
-                 let Pair (o, l') =
-                   typinf k e t2
-                     (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_arrow
-                     ((Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar v),
-                     t1))
-                     (Variables.VarSet.S.union l
-                       (Variables.VarSet.S.singleton v)) s h'
-                 in
-                 (match o with
-                    | Some p ->
-                        let Pair (k', s') = p in
-                        typinf k' e t3
-                          (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar
-                          v) l' s' h'
-                    | None -> Pair (None, l'))
-             | Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_cst c ->
-                 let m = Delta.coq_type c in
-                 let vs =
-                   proj1_sig
-                     (var_freshes l
-                       (length
-                         (Rename.Unify.MyEval.Sound.Infra.Defs.sch_kinds m)))
-                 in
-                 Pair
-                 ((unify
-                    (Env.concat k
-                      (Rename.Unify.MyEval.Sound.Infra.Defs.kinds_open_vars
-                        (Rename.Unify.MyEval.Sound.Infra.Defs.sch_kinds m)
-                        vs))
-                    (Rename.Unify.MyEval.Sound.Infra.Defs.sch_open_vars m vs)
-                    t1 s), (Variables.VarSet.S.union l (mkset vs))))
-    
     (** val trm_depth : Rename.Unify.MyEval.Sound.Infra.Defs.trm -> nat **)
     
     let rec trm_depth = function
@@ -2228,6 +2083,157 @@ module MkInfer =
       | Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_app (
           t1, t2) -> S (max (trm_depth t1) (trm_depth t2))
       | _ -> O
+    
+    (** val typinf :
+        Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.env ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ -> Variables.vars ->
+        Rename.Unify.MyEval.Sound.Infra.subs ->
+        ((Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+        Rename.Unify.MyEval.Sound.Infra.subs) prod option, Variables.vars)
+        prod **)
+    
+    let rec typinf k e t0 t1 l s =
+      match t0 with
+        | Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_bvar n -> Pair (None,
+            l)
+        | Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_fvar x ->
+            (match Env.get x e with
+               | Some m ->
+                   let vs =
+                     proj1_sig
+                       (var_freshes l
+                         (length
+                           (Rename.Unify.MyEval.Sound.Infra.Defs.sch_kinds m)))
+                   in
+                   Pair
+                   ((unify
+                      (Env.concat k
+                        (Rename.Unify.MyEval.Sound.Infra.Defs.kinds_open_vars
+                          (Rename.Unify.MyEval.Sound.Infra.Defs.sch_kinds m)
+                          vs))
+                      (Rename.Unify.MyEval.Sound.Infra.Defs.sch_open_vars m
+                        vs) t1 s), (Variables.VarSet.S.union l (mkset vs)))
+               | None -> Pair (None, l))
+        | Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_abs t2 ->
+            let x =
+              proj1_sig
+                (Variables.var_fresh
+                  (Variables.VarSet.S.union (Env.dom e)
+                    (Rename.Unify.MyEval.Sound.Infra.trm_fv t2)))
+            in
+            let v1 = proj1_sig (Variables.var_fresh l) in
+            let v2 =
+              proj1_sig
+                (Variables.var_fresh
+                  (Variables.VarSet.S.union l
+                    (Variables.VarSet.S.singleton v1)))
+            in
+            (match unify k
+                     (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_arrow
+                     ((Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar v1),
+                     (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar v2)))
+                     t1 s with
+               | Some p ->
+                   let Pair (k', s') = p in
+                   typinf k'
+                     (Env.concat e
+                       (Env.single x
+                         { Rename.Unify.MyEval.Sound.Infra.Defs.sch_type =
+                         (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar
+                         v1);
+                         Rename.Unify.MyEval.Sound.Infra.Defs.sch_kinds =
+                         Nil }))
+                     (Rename.Unify.MyEval.Sound.Infra.Defs.trm_open t2
+                       (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_fvar x))
+                     (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar v2)
+                     (Variables.VarSet.S.union
+                       (Variables.VarSet.S.union l
+                         (Variables.VarSet.S.singleton v1))
+                       (Variables.VarSet.S.singleton v2)) s'
+               | None -> Pair (None, l))
+        | Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_let (
+            t2, t3) ->
+            let v = proj1_sig (Variables.var_fresh l) in
+            let Pair (o, l') =
+              typinf k e t2
+                (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar v)
+                (Variables.VarSet.S.union l (Variables.VarSet.S.singleton v))
+                s
+            in
+            (match o with
+               | Some p ->
+                   let Pair (k0, s') = p in
+                   let Pair (kA, m) =
+                     typinf_generalize
+                       (Env.map
+                         (Rename.Unify.MyEval.Sound.Infra.kind_subst s') k0)
+                       (Env.map
+                         (Rename.Unify.MyEval.Sound.Infra.sch_subst s') e)
+                       (vars_subst s' (kdom k))
+                       (Rename.Unify.MyEval.Sound.Infra.typ_subst s'
+                         (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar
+                         v))
+                   in
+                   let x =
+                     proj1_sig
+                       (Variables.var_fresh
+                         (Variables.VarSet.S.union
+                           (Variables.VarSet.S.union 
+                             (Env.dom e)
+                             (Rename.Unify.MyEval.Sound.Infra.trm_fv t2))
+                           (Rename.Unify.MyEval.Sound.Infra.trm_fv t3)))
+                   in
+                   typinf kA (Env.concat e (Env.single x m))
+                     (Rename.Unify.MyEval.Sound.Infra.Defs.trm_open t3
+                       (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_fvar x))
+                     t1 l' s'
+               | None -> Pair (None, l'))
+        | Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_app (
+            t2, t3) ->
+            let v = proj1_sig (Variables.var_fresh l) in
+            let Pair (o, l') =
+              typinf k e t2
+                (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_arrow
+                ((Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar v), t1))
+                (Variables.VarSet.S.union l (Variables.VarSet.S.singleton v))
+                s
+            in
+            (match o with
+               | Some p ->
+                   let Pair (k', s') = p in
+                   typinf k' e t3
+                     (Rename.Unify.MyEval.Sound.Infra.Defs.Coq_typ_fvar v) l'
+                     s'
+               | None -> Pair (None, l'))
+        | Rename.Unify.MyEval.Sound.Infra.Defs.Coq_trm_cst c ->
+            let m = Delta.coq_type c in
+            let vs =
+              proj1_sig
+                (var_freshes l
+                  (length (Rename.Unify.MyEval.Sound.Infra.Defs.sch_kinds m)))
+            in
+            Pair
+            ((unify
+               (Env.concat k
+                 (Rename.Unify.MyEval.Sound.Infra.Defs.kinds_open_vars
+                   (Rename.Unify.MyEval.Sound.Infra.Defs.sch_kinds m) vs))
+               (Rename.Unify.MyEval.Sound.Infra.Defs.sch_open_vars m vs) t1
+               s), (Variables.VarSet.S.union l (mkset vs)))
+    
+    (** val typinf0 :
+        Rename.Unify.MyEval.Sound.Infra.Defs.kenv ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.env ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+        Rename.Unify.MyEval.Sound.Infra.Defs.typ -> Variables.vars ->
+        Rename.Unify.MyEval.Sound.Infra.subs ->
+        ((Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+        Rename.Unify.MyEval.Sound.Infra.subs) prod option, Variables.vars)
+        prod **)
+    
+    let typinf0 k e t0 t1 l s =
+      typinf k e t0 t1 l s
     
     (** val typinf' :
         Rename.Unify.MyEval.Sound.Infra.Defs.env ->
@@ -2241,8 +2247,7 @@ module MkInfer =
       in
       let Pair (o, v0) =
         typinf Env.empty e trm0 v
-          (Variables.VarSet.S.singleton Variables.var_default) Env.empty (S
-          (trm_depth trm0))
+          (Variables.VarSet.S.singleton Variables.var_default) Env.empty
       in
       (match o with
          | Some p ->
@@ -2472,11 +2477,95 @@ module SndHyp =
 
 module Sound3 = Infer2.Rename2.MyEval2.Mk3(SndHyp)
 
-(** val eval' :
+type 'a decidable = 'a -> sumbool
+
+(** val ok_dec :
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.sch Env.env decidable **)
+
+let rec ok_dec = function
+  | Nil -> Left
+  | Cons (a, l0) ->
+      (match ok_dec l0 with
+         | Left ->
+             let Pair (v, s) = a in
+             (match Env.get v l0 with
+                | Some s0 -> Right
+                | None -> Left)
+         | Right -> Right)
+
+(** val type_n_dec :
+    nat -> Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ decidable **)
+
+let type_n_dec n t0 =
+  Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ_rec (fun n0 ->
+    match le_lt_dec n n0 with
+      | Left -> Right
+      | Right -> Left) (fun v -> Left) (fun t1 iHT1 t2 iHT2 ->
+    match iHT1 with
+      | Left -> iHT2
+      | Right -> Right) t0
+
+(** val list_forall_dec : 'a1 decidable -> 'a1 list decidable **)
+
+let rec list_forall_dec hP = function
+  | Nil -> Left
+  | Cons (a, l0) ->
+      (match hP a with
+         | Left -> list_forall_dec hP l0
+         | Right -> Right)
+
+(** val scheme_dec :
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.sch decidable **)
+
+let scheme_dec x =
+  let { Infer.Rename.Unify.MyEval.Sound.Infra.Defs.sch_type = t0;
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.sch_kinds = ks } = x
+  in
+  let n = length ks in
+  (match type_n_dec n t0 with
+     | Left ->
+         list_forall_dec (fun k ->
+           list_forall_dec (type_n_dec n)
+             (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kind_types k)) ks
+     | Right -> Right)
+
+(** val env_prop_dec : 'a1 decidable -> 'a1 Env.env decidable **)
+
+let rec env_prop_dec hP = function
+  | Nil -> Left
+  | Cons (a, l) ->
+      let Pair (v, a0) = a in
+      (match hP a0 with
+         | Left -> env_prop_dec hP l
+         | Right -> Right)
+
+(** val typinf1 :
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.env ->
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm ->
+    ((Infer.Rename.Unify.MyEval.Sound.Infra.Defs.kenv,
+    Infer.Rename.Unify.MyEval.Sound.Infra.Defs.typ) prod, sumbool) sum **)
+
+let typinf1 e t0 =
+  match Variables.VarSet.S.is_empty
+          (Infer.Rename.Unify.MyEval.Sound.Infra.Defs.env_fv e) with
+    | True ->
+        (match ok_dec e with
+           | Left ->
+               (match env_prop_dec scheme_dec e with
+                  | Left ->
+                      (match Infer2.typinf' e t0 with
+                         | Some p ->
+                             let Pair (e0, t1) = p in Inl (Pair (e0, t1))
+                         | None -> Inr Right)
+                  | Right -> Inr Right)
+           | Right -> Inr Right)
+    | False -> Inr Left
+
+(** val eval1 :
     Infer.Rename.Unify.MyEval.clos Env.env ->
     Infer.Rename.Unify.MyEval.Sound.Infra.Defs.trm -> nat ->
     Infer.Rename.Unify.MyEval.eval_res **)
 
-let eval' fenv t0 h =
+let eval1 fenv t0 h =
   Sound3.eval fenv h Nil Nil t0 Nil
 
