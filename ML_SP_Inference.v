@@ -104,14 +104,11 @@ Proof.
   destruct (n0 === n); reflexivity.
 Qed.
 
-Definition Rnat (n' n : nat) : Prop := n' < n.
-
-Lemma Rnat_wf : forall n, Acc Rnat n.
+Lemma lt_wf : forall n, Acc lt n.
 Proof.
   induction n.
     apply Acc_intro; intros. elim (le_Sn_O _ H).
   apply Acc_intro; intros.
-  unfold Rnat in H.
   unfold lt in H.
   destruct (Lt.le_lt_or_eq _ _ (Le.le_S_n _ _ H)).
     apply (Acc_inv IHn _ H0).
@@ -119,8 +116,8 @@ Proof.
 Defined.
 
 Lemma dom_inv_abs : forall t t1 x,
-   Acc Rnat (trm_depth t) ->
-   t = trm_abs t1 -> Acc Rnat (trm_depth (t1 ^ x)).
+   Acc lt (trm_depth t) ->
+   t = trm_abs t1 -> Acc lt (trm_depth (t1 ^ x)).
 Proof.
   introv P eq.
   rewrite eq in P.
@@ -130,69 +127,46 @@ Proof.
   exact (Acc_inv P _ P1).
 Defined.
 
-Lemma Rnat_max1 : forall n1 n2,
-  Rnat n1 (S (Max.max n1 n2)).
+Lemma lt_max_l : forall n1 n2, n1 < (S (Max.max n1 n2)).
 Proof.
-  intros.
-  puts (Max.le_max_l n1 n2).
-  unfold Rnat; omega.
+  intros; puts (Max.le_max_l n1 n2); auto with arith.
 Qed.
 
-Lemma Rnat_max2 : forall n1 n2,
-  Rnat n2 (S (Max.max n1 n2)).
+Lemma lt_max_r : forall n1 n2, n2 < (S (Max.max n1 n2)).
 Proof.
-  intros.
-  puts (Max.le_max_r n1 n2).
-  unfold Rnat; omega.
+  intros; puts (Max.le_max_r n1 n2); auto with arith.
 Qed.
+
+Ltac dom_inv_tac :=
+  intros t t1 t2 P eq;
+  rewrite eq in P;
+  simpl in P;
+  try rewrite trm_depth_open;
+  solve [exact (Acc_inv P _ (lt_max_l (trm_depth t1) (trm_depth t2)))
+        |exact (Acc_inv P _ (lt_max_r (trm_depth t1) (trm_depth t2)))].
 
 Lemma dom_inv_app1 : forall t t1 t2,
-   Acc Rnat (trm_depth t) ->
-   t = trm_app t1 t2 -> Acc Rnat (trm_depth t1).
-Proof.
-  introv P eq.
-  rewrite eq in P.
-  simpl in P.
-  pose (P1:= Rnat_max1 (trm_depth t1) (trm_depth t2)).
-  exact (Acc_inv P _ P1).
-Defined.
+   Acc lt (trm_depth t) ->
+   t = trm_app t1 t2 -> Acc lt (trm_depth t1).
+Proof. dom_inv_tac. Defined.
 
 Lemma dom_inv_app2 : forall t t1 t2,
-   Acc Rnat (trm_depth t) ->
-   t = trm_app t1 t2 -> Acc Rnat (trm_depth t2).
-Proof.
-  introv P eq.
-  rewrite eq in P.
-  simpl in P.
-  pose (P1:= Rnat_max2 (trm_depth t1) (trm_depth t2)).
-  exact (Acc_inv P _ P1).
-Defined.
+   Acc lt (trm_depth t) ->
+   t = trm_app t1 t2 -> Acc lt (trm_depth t2).
+Proof. dom_inv_tac. Defined.
 
 Lemma dom_inv_let1 : forall t t1 t2,
-   Acc Rnat (trm_depth t) ->
-   t = trm_let t1 t2 -> Acc Rnat (trm_depth t1).
-Proof.
-  introv P eq.
-  rewrite eq in P.
-  simpl in P.
-  pose (P1:= Rnat_max1 (trm_depth t1) (trm_depth t2)).
-  exact (Acc_inv P _ P1).
-Defined.
+   Acc lt (trm_depth t) ->
+   t = trm_let t1 t2 -> Acc lt (trm_depth t1).
+Proof. dom_inv_tac. Defined.
 
-Lemma dom_inv_let2 : forall t t1 t2 x,
-   Acc Rnat (trm_depth t) ->
-   t = trm_let t1 t2 -> Acc Rnat (trm_depth (t2 ^ x)).
-Proof.
-  introv P eq.
-  rewrite eq in P.
-  simpl in P.
-  rewrite trm_depth_open.
-  pose (P1:= Rnat_max2 (trm_depth t1) (trm_depth t2)).
-  exact (Acc_inv P _ P1).
-Defined.
+Lemma dom_inv_let2 : forall x t t1 t2,
+   Acc lt (trm_depth t) ->
+   t = trm_let t1 t2 -> Acc lt (trm_depth (t2 ^ x)).
+Proof. intro; dom_inv_tac. Defined.
 
 Fixpoint typinf (K:kenv) (E:Defs.env) (t:trm) (T:typ) (L:vars) (S:subs)
-  (h:Acc Rnat (trm_depth t)) {struct h} : option (kenv * subs) * vars :=
+  (h:Acc lt (trm_depth t)) {struct h} : option (kenv * subs) * vars :=
   match t as t' return t = t' -> option (kenv * subs) * vars with
   | trm_bvar _ => fun eq => (None, L)
   | trm_fvar x => fun eq =>
@@ -240,7 +214,7 @@ Fixpoint typinf (K:kenv) (E:Defs.env) (t:trm) (T:typ) (L:vars) (S:subs)
      L \u mkset Vs)
   end (refl_equal t).
 
-Definition typinf0 K E t T L S := typinf K E t T L S (Rnat_wf _).
+Definition typinf0 K E t T L S := typinf K E t T L S (lt_wf _).
 
 Lemma normalize_typinf : forall K E t T L S h,
   typinf K E t T L S h = typinf0 K E t T L S.
@@ -254,7 +228,7 @@ Definition typinf' E trm :=
   let min_vars := S.singleton v in
   let V := typ_fvar v in
   match
-    typinf empty E trm V min_vars empty (Rnat_wf _)
+    typinf empty E trm V min_vars empty (lt_wf _)
   with (None, _) => None
   | (Some (k, s), _) =>
     Some (map (kind_subst s) k, typ_subst s V)
@@ -750,7 +724,7 @@ Definition Gc := (false, GcLet).
 
 Definition soundness_spec h t K0 E T L0 S0 K S L :=
   trm_depth t < h ->
-  typinf K0 E t T L0 S0 (Rnat_wf _) = (Some (K, S), L) ->
+  typinf K0 E t T L0 S0 (lt_wf _) = (Some (K, S), L) ->
   is_subst S0 -> env_prop type S0 ->
   kenv_ok K0 -> disjoint (dom S0) (dom K0) ->
   fvs S0 K0 E \u typ_fv T << L0 ->
@@ -2132,7 +2106,7 @@ Definition principality S0 K0 E0 S K E t T L h :=
   K; E |(false,GcAny)|= t ~: typ_subst S T ->
   trm_depth t < h ->
   exists K', exists S', exists L',
-    typinf K0 E0 t T L S0 (Rnat_wf _) = (Some (K', S'), L') /\ extends S' S0 /\
+    typinf K0 E0 t T L S0 (lt_wf _) = (Some (K', S'), L') /\ extends S' S0 /\
     exists S'',
       dom S'' << S.diff L' L /\ env_prop type S'' /\ extends (S & S'') S' /\
       well_subst K' K (S & S'').
@@ -2301,6 +2275,7 @@ Proof.
   case_eq (unify K0 (typ_arrow (typ_fvar x1) (typ_fvar x2)) T S0);
     unfold unify; intros.
     destruct p as [K' S'].
+    rewrite normalize_typinf.
     destruct* (unify_mgu0 _ H (K':=K) (S':=S & combine Xs Us)).
       intro; intros.
       unfold fvs in HL.
@@ -2365,7 +2340,7 @@ Proof.
      simpl in Hh.
      rewrite trm_depth_open. omega.
     destruct H9 as [S2 [L' [TI [Hext2 [S3 [HS3 [TS3 [Hext3 WS3]]]]]]]].
-    rewrite normalize_typinf; unfold typinf0.
+    unfold typinf0.
     esplit; esplit; esplit; split*.
     split.
       apply* extends_trans.
