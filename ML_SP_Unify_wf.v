@@ -622,7 +622,14 @@ Proof.
     simpl in HU.
     inversions HU.
     auto.
-  destruct p; simpl in HU. rewrite normalize_unify0 in HU.
+  destruct p; simpl in HU.
+  destruct t; [destruct t0|idtac|destruct t0]; simpl in HU;
+    try rewrite normalize_unify0 in HU.
+        destruct (n===n0); try discriminate.
+        subst. apply* Hbv. apply* IHh0. simpl in H; omega.
+       case_eq (get v S); introv R1.
+       rewrite R1 in HU.
+         
   (* assert (Hnv1: forall v T t t0,
     typ_subst S t = typ_fvar v -> typ_subst S t0 = T ->
     unify_nv (unify h pairs) K S v T = Some (K',S') ->
