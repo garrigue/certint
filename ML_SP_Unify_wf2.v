@@ -585,62 +585,74 @@ Definition add_binding2 S T T' v (HS:is_subst S) eq1 eq : subs' :=
   exist is_subst (compose (v ~ T) S)
   (add_binding_is_subst _ HS (@typ_subst_res_fresh S T' T HS eq1) (mem_3 eq)).
 
-Function unify (KSP:kenv*subs'*list(typ*typ))
+Require Import Coq.Program.Wf.
+
+Program Fixpoint unify (KSP:kenv*subs'*list(typ*typ))
   {wf unify_lt KSP} : option (kenv*subs') :=
-  let (KS,pairs) := KSP in
-  match pairs with
-  | nil => Some KS
-  | (T1,T2) :: pairs' =>
-    let (K,S') := KS in
-    let (S,HS) := S' in
-    let ST1 := typ_subst S T1 in let ST2 := typ_subst S T2 in
-    match  ST1 as T1', ST2 as T2'
-    return ST1 = T1' -> ST2 = T2' -> option (kenv*subs') with
-    | typ_bvar n, typ_bvar m => fun _ _ =>
-      match n === m with left _ => unify (KS,pairs') | right _ => None end
-    | typ_fvar x, typ_fvar y => fun eq1 eq2 =>
-      match x == y with
-      | left dxy => unify (KS,pairs')
-      | right dxy =>
-        match unify_vars K x y with
-        | Some (K', pairs) =>
-          unify (K', exist is_subst _ (is_subst_compose_var _ HS dxy eq2),
+  match KSP with
+  | (KS,nil) => Some KS
+  | (K, S', (T1,T2) :: pairs') =>
+    let KS := (K, S') in
+    let S := proj1_sig S' in
+    match typ_subst S T1, typ_subst S T2 with
+    | typ_bvar n, typ_bvar m =>
+      if n === m then unify (KS,pairs') else None
+    | typ_fvar x, typ_fvar y =>
+      if x == y then unify (KS,pairs') else
+      match unify_vars K x y with
+      | Some (K', pairs) =>
+        unify (K', exist is_subst (compose (x~typ_fvar y) S) _,
                  pairs ++ pairs')
-        | None => None
-        end
+      | None => None
       end
-    | typ_fvar x, T => fun eq1 eq2 =>
-      let mx := S.mem x (typ_fv T) in
-      match mx as mx' return mx = mx' -> option (kenv*subs') with
-      | true => fun _ => None
-      | false => fun eq =>
-        match get_kind x K with
-        | Some _ => None
-        | None => unify (remove_env K x, add_binding2 _ HS eq2 eq, pairs')
-        end
-      end (refl_equal mx)
-    | T, typ_fvar x => fun eq1 eq2 =>
-      let mx := S.mem x (typ_fv T) in
-      match mx as mx' return mx = mx' -> option (kenv*subs') with
-      | true => fun _ => None
-      | false => fun eq =>
-        match get_kind x K with
-        | Some _ => None
-        | None => unify (remove_env K x, add_binding2 _ HS eq1 eq, pairs')
-        end
-      end (refl_equal mx)
-    | typ_arrow T11 T12, typ_arrow T21 T22 => fun eq1 eq2 =>
+    | typ_fvar x, T =>
+      if S.mem x (typ_fv T) then None else
+      match get_kind x K with
+      | Some _ => None
+      | None =>
+        unify (remove_env K x, exist is_subst (compose (x~T) S) _, pairs')
+      end
+    | T, typ_fvar x =>
+      if S.mem x (typ_fv T) then None else
+      match get_kind x K with
+      | Some _ => None
+      | None =>
+        unify (remove_env K x, exist is_subst (compose (x~T) S) _, pairs')
+      end
+    | typ_arrow T11 T12, typ_arrow T21 T22 =>
       unify (KS, (T11,T21)::(T12,T22)::pairs')
-    | _, _ => fun _ _ =>
+    | _, _ =>
       None
-    end (refl_equal ST1) (refl_equal ST2)
+    end
   end.
-Proof.
-  intros. subst p pairs KS KSP. clear teq5.
+Next Obligation.
+  destruct s as [S HS].
   unfold unify_lt, unify_mes, lt2; simpl.
-  puts (size_pairs_tl S K T1 T2 pairs').
+  puts (size_pairs_tl S k T1 T2 pairs').
   puts (pairs_size_decr S T1 T2 pairs').
   omega.
+Qed.
+Next Obligation.
+  destruct s as [S HS].
+  unfold unify_lt, unify_mes, lt2; simpl.
+  puts (size_pairs_tl S k T1 T2 pairs').
+  puts (pairs_size_decr S T1 T2 pairs').
+  omega.
+Qed.
+Next Obligation.
+  destruct s as [S HS]. simpl.
+  apply* is_subst_compose_var.
+Qed.
+Next Obligation.
+  destruct s as [S HS].
+  unfold unify_lt, unify_mes, lt2; simpl.
+  inversions Heq_KSP; clear Heq_KSP; simpl.
+  left.
+  unfold unify_vars in *.
+  case_rewrite R1 (unify_kinds (get_kind x k) (get_kind y k)).
+  destruct p.
+  inversions Heq_anonymous1; clear Heq_anonymous1.
+  apply si
 Proof.
   intros. subst.
   left; simpl.
