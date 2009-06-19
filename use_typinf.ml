@@ -8,10 +8,14 @@ open Variables.VarSet;;
 
 let rec int_of_nat = function O -> 0 | S x -> succ (int_of_nat x);;
 
-let print_nat ppf n = Format.fprintf ppf "%i" (int_of_nat n);;
+let print_nat ppf n =
+  match n with
+  | S m when m == n -> Format.fprintf ppf "omega"
+  | _ -> Format.fprintf ppf "%i" (int_of_nat n);;
 let print_var ppf v = print_nat ppf (Variables.nat_of_var v);;
 #install_printer print_nat;;
 #install_printer print_var;;
+let rec omega = S omega;; (* In ocaml we can define infinity! *)
 
 let rec print_list pp ppf = function
     Nil -> ()
@@ -74,3 +78,4 @@ typinf2 Nil trm3;;
 
 let r1 = eval1 Nil trm3 (nat_of_int 10);;
 let r2 = eval1 Nil trm3 (nat_of_int 20);;
+let r3 = eval1 Nil trm3 omega;;
