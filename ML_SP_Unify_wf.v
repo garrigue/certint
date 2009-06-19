@@ -1082,7 +1082,27 @@ Proof.
   apply disjoint_comm; apply* disjoint_union.
 Qed.
 
-Hint Resolve size_pairs2_tl size_pairs2_nv.
+Lemma size_pairs2_arrow : forall S K T1 T2 t t0 t1 t2 pairs,
+  is_subst S ->
+  typ_subst S T1 = typ_arrow t1 t2 ->
+  typ_subst S T2 = typ_arrow t t0 ->
+  lt2 (size_pairs2 S K ((t1, t) :: (t2, t0) :: pairs))
+     (size_pairs2 S K ((T1, T2) :: pairs)).
+Proof.
+  intros.
+  unfold size_pairs2, size_pairs, really_all_fv, all_fv, pairs_size; simpl.
+  rewrite <- (typ_subst_idem T1 H).
+  rewrite <- (typ_subst_idem T2 H).
+  rewrite H0; rewrite H1.
+  right; simpl; split.
+    repeat rewrite union_assoc.
+    rewrite <- (union_assoc _ (typ_fv (typ_subst S t))).
+    rewrite <- (union_comm _ (typ_fv (typ_subst S t))).
+    rewrite* union_assoc.
+  omega.
+Qed.
+
+Hint Resolve size_pairs2_tl size_pairs2_nv size_pairs2_arrow.
 
 Section Soundness.
 
@@ -1200,25 +1220,6 @@ Proof.
    rewrite* size_pairs2_comm.
   rewrite normalize_unify in HU.
   apply* Harr.
-  apply* H.
-Lemma size_pairs2_arrow : forall S K T1 T2 t t0 t1 t2 pairs,
-  is_subst S ->
-  typ_subst S T1 = typ_arrow t1 t2 ->
-  typ_subst S T2 = typ_arrow t t0 ->
-  lt2 (size_pairs2 S K ((t1, t) :: (t2, t0) :: pairs))
-     (size_pairs2 S K ((T1, T2) :: pairs)).
-Proof.
-  intros.
-  unfold size_pairs2, size_pairs, really_all_fv, all_fv, pairs_size; simpl.
-  rewrite <- (typ_subst_idem T1 H).
-  rewrite <- (typ_subst_idem T2 H).
-  rewrite H0; rewrite H1.
-  right; simpl; split.
-    repeat rewrite union_assoc.
-    rewrite <- (union_assoc _ (typ_fv (typ_subst S t))).
-    rewrite <- (union_comm _ (typ_fv (typ_subst S t))).
-    rewrite* union_assoc.
-  omega.
 Qed.
 
 Lemma unify_keep : forall pairs K S HS HK h,
@@ -1894,10 +1895,10 @@ Definition complete_spec K0 S0 pairs :=
 Lemma unify_complete_nv : forall pairs K0 S0 v T h t t0,
   typ_subst S0 t = typ_fvar v ->
   typ_subst S0 t0 = T ->
-  size_pairs S0 K0 ((t,t0)::pairs) < Datatypes.S h ->
   is_subst S0 -> ok K0 ->
   well_subst K0 K S ->
-  (forall K0 S0, complete_spec K0 S0 pairs h) ->
+  (forall K' S', size_pairs2 S' K' pairs < size_pairs2 S0 K0 ((t,t0)::pairs) ->
+    complete_spec K0 S0 pairs) ->
   extends S S0 ->
   unifies S ((t, t0) :: pairs) ->
   (forall x, T <> typ_fvar x) ->
@@ -2048,8 +2049,8 @@ Lemma unify_complete0 : forall pairs K0 S0,
 Proof.
   intros.
   pose (h1 := (1+size_pairs S0 K0 pairs, pairs_size S0 pairs)).
-  assert (Hsz: lt2 (size_pairs S0 K0 pairs, pairs_size S0 pairs) h1)
-    by (unfold h1, size_pairs; left; simpl; omega).
+  assert (Hsz: lt2 (size_pairs2 S0 K0 pairs) h1)
+    by (unfold h1, size_pairs2, size_pairs; left; simpl; omega).
   clearbody h1; gen pairs K0 S0.
   induction h1 using (well_founded_ind lt2_wf); simpl; intros.
   intros HS0 HK0 h Hext Heq WS.
@@ -2067,14 +2068,13 @@ Proof.
           destruct (n0 === n).
            subst.
            apply* H.
-             puts (size_pairs_tl S0 K0 t t0 pairs). omega.
-           puts (pairs_size_decr S0 t t0 pairs). omega.
-          assert (In (t,t0) ((t,t0)::pairs)) by simpl*.
-          poses Ht (Heq _ _ H).
-          rewrite <- Hext in Ht; rewrite R1 in Ht.
-          rewrite <- (Hext t0) in Ht; rewrite R2 in Ht.
+          assert (In (T1,T2) ((T1,T2)::pairs)) by simpl*.
+          poses Ht (Heq _ _ H0).
+          rewrite <- Hext in Ht; rewrite eq1 in Ht.
+          rewrite <- (Hext T2) in Ht; rewrite eq2 in Ht.
           simpl in Ht. inversions* Ht.
-         rewrite size_pairs_comm in Hsz.
+         unfold unify_nv in HU.
+         rewrite size_pairs2_comm in Hsz.
          apply* (unify_complete_nv R2 R1 Hsz).
            intro; simpl; intros. destruct H; subst.
              inversions H; symmetry; apply* Heq.
