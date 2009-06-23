@@ -385,13 +385,6 @@ Module SndHyp.
     apply* lt_S_n.
   Qed.
 
-  Lemma nth_In_eq : forall (A:Set) n l l' (d:A),
-    n < length l -> n < length l' ->
-    nth n l d = nth n l' d -> In (nth n l d) l'.
-  Proof.
-    intros. rewrite H1. apply* nth_In.
-  Qed.
-
   Hint Rewrite combine_length combine_nth : list.
 
   Lemma tag_is_const : forall v vl K E gc T TL,
@@ -477,6 +470,26 @@ Module SndHyp.
     intros; rewrite* fold_right_app.
   Qed.
     
+  Lemma in_matches_types : forall i l T1 T2 Us,
+    i < length l ->
+    In (nth i l var_default, nth i Us typ_def)
+    (List.map
+      (fun XT : var * typ => (fst XT, typ_open (snd XT) (T1 :: T2 :: Us)))
+      (combine l (map typ_bvar (seq 2 (length l))))).
+  Proof.
+    intros.
+    remember (0 + i) as m.
+    pattern i at 2.
+    replace i with (0+i) by reflexivity. rewrite <- Heqm.
+    gen i; generalize 0; induction l; intros.
+    simpl in H; elimtype False; omega.
+    destruct i; simpl.
+      replace m with n; auto. omega.
+    right.
+    apply (IHl (S n) i). simpl in H. omega.
+    omega.
+  Qed.
+
   Lemma delta_typed : forall c tl vl K E gc T,
     K ; E |(false,gc)|= const_app c tl ~: T ->
     K ; E |(false,gc)|= @Delta.reduce c tl vl ~: T.
@@ -487,86 +500,71 @@ Module SndHyp.
       elim (tag_is_const _ _ _ (proj1 vl) Typ0 TypA).
     inversions Typ0; try discriminate. clear Typ0.
     unfold sch_open in H0. simpl in H0.
-    assert (forall T1 T2 TL, fold_right typ_arrow (typ_arrow T1 T2) TL =
-      fold_right typ_arrow T2 (TL ++ T1 :: nil)).
-      intros; rewrite* fold_right_app.
-    rewrite H in H0; clear H.
+    rewrite fold_right_app_end in H0.
     poses Hlen (proj1 vl). simpl in Hlen.
-    destruct (fold_arrow_eq _ _ _ _ _ H0); clear H0.
+    destruct (fold_arrow_eq _ _ _ _ _ H0) as [HT HA]; clear H0.
       generalize (For_all2_length _ _ _ TypA).
       autorewrite with list. simpl. intros; omega.
     forward~ (For_all2_nth _ trm_def typ_def _ TL TypA (n:=length l)) as Typn.
       rewrite* <- Hlen.
-    forward~ (For_all2_nth _ typ_def typ_def _ TL H2 (n:=length l)) as Typn'.
+    forward~ (For_all2_nth _ typ_def typ_def _ TL HA (n:=length l)) as Eqn.
       autorewrite with list. simpl*. omega.
-    rewrite app_nth2 in Typn'.
-      autorewrite with list in Typn'. rewrite <- minus_n_n in Typn'.
-      simpl in Typn'.
-      puts (proj2 H5). simpl in H0. destruct* Us.
-      destruct* Us.
-      simpl in Typn'.
-      destruct H0.
-      destruct H3.
-      inversions H0; clear H0.
-      rewrite <- H11 in *.
-      destruct (value_fvar_is_const Typn) as [v [t2 Hv]].
-        apply* (list_forall_out (proj2 vl)). apply* nth_In. omega.
-      simpl.
-      rewrite Hv in *.
-      inversions Typn; clear Typn; try discriminate.
-      rewrite gc_lower_false in *.
-      inversions H12; clear H12; try discriminate.
-      destruct H17.
-      destruct H. simpl in H.
-      do 3 (destruct Us0; try discriminate).
-      simpl in *.
-      destruct H0 as [_ [Ht1 _]].
-      subst t1.
-      inversions Ht1; clear Ht1.
-      puts (binds_func H13 H8).
-      inversions H0; clear H0 H13.
-      destruct H17; destruct H10. simpl in *.
-      destruct H0; destruct H10. simpl in *.
-      destruct k' as [[kcl kch] kv kr kh]; simpl in *.
-      assert (Hvt: In (v,t) kr) by auto*. clear H7 H13.
-      destruct* kch.
-      unfold Cstr.valid in kv; simpl in kv.
-      assert (In v l) by auto*.
-      case_eq (index eq_var_dec 0 v l); introv R2;
-        try elim (index_none_notin _ _ _ _ R2 H7).
-      destruct (index_ok _ var_default _ _ R2).
-      forward~ (For_all2_nth _ trm_def typ_def _ TL TypA (n:=n0)) as Typv.
-        omega.
-      forward~ (For_all2_nth _ typ_def typ_def _ TL H2 (n:=n0)) as Eqv.
-        rewrite (For_all2_length _ _ _ H2).
-        rewrite <- (For_all2_length _ _ _ TypA).
-        omega.
-      rewrite app_nth1 in Eqv; [|rewrite map_length; rewrite* seq_length].
-      rewrite (map_nth _ 0) in Eqv; [|rewrite* seq_length].
-      rewrite seq_nth in Eqv; auto.
-      simpl in Eqv.
-      assert (In (v, nth n0 Us typ_def) kr).
-        rewrite <- H18.
-        apply H12.
-        clear -H13.
-        remember (0 + n0) as m.
-        pattern n0 at 2.
-        replace n0 with (0+n0) by reflexivity. rewrite <- Heqm.
-        gen n0; generalize 0; induction l; intros.
-          simpl in H13; elimtype False; omega.
-        destruct n0; simpl.
-          replace m with n; auto. omega.
-        right. apply (IHl (S n) n0).
-          simpl in H13. omega.
-        omega.
-      assert (Cstr.unique (Cstr.C kcl (Some l0)) v = true).
-        unfold Cstr.unique.
-        apply set_mem_correct2. simpl. unfold set_In. auto*.
-      puts (kh _ _ _ H20 Hvt H19).
-      rewrite <- H21 in *.
-      rewrite <- Eqv in Typv.
-      apply* typing_app; rewrite gc_lower_false; auto*.
-    rewrite map_length; rewrite seq_length; auto.
+    rewrite app_nth2 in Eqn; [|rewrite map_length; rewrite* seq_length].
+    autorewrite with list in Eqn.
+    rewrite <- minus_n_n in Eqn.
+    simpl in Eqn.
+    destruct H5 as [_ WUs]. simpl in WUs.
+    do 2 destruct* Us.
+    simpl in Eqn.
+    destruct WUs as [Wt _].
+    inversions Wt; clear Wt.
+    rewrite <- H5 in *; clear H5.
+    destruct (value_fvar_is_const Typn) as [v [t2 Hv]].
+      apply* (list_forall_out (proj2 vl)). apply* nth_In. omega.
+    simpl.
+    rewrite Hv in *; clear Hv.
+    inversions Typn; clear Typn; try discriminate.
+    rewrite gc_lower_false in *.
+    inversions H7; clear H7; try discriminate.
+    destruct H12.
+    destruct H as [H _]. simpl in H.
+    do 3 (destruct Us0; try discriminate). clear H.
+    simpl in *.
+    destruct H2 as [_ [Ht1 _]].
+    subst t1.
+    inversions Ht1; clear Ht1.
+    puts (binds_func H6 H0).
+    inversions H; clear H H6 H10 H11.
+    destruct H7; destruct H3.
+    destruct H; destruct H3.
+    destruct k' as [[kcl kch] kv kr kh]; simpl in *.
+    destruct* kch.
+    assert (Hvt: In (v,t) kr) by auto*. clear H6 H2.
+    unfold Cstr.valid in kv; simpl in kv.
+    assert (Hvl: In v l) by auto*.
+    case_eq (index eq_var_dec 0 v l); introv R2;
+      try elim (index_none_notin _ _ _ _ R2 Hvl).
+    destruct (index_ok _ var_default _ _ R2).
+    assert (Hvn: In (v, nth n0 Us typ_def) kr).
+      rewrite <- H6. apply H5. apply* in_matches_types.
+    clear H5 H6.
+    forward~ (For_all2_nth _ trm_def typ_def _ TL TypA (n:=n0)) as Typv.
+      omega.
+    forward~ (For_all2_nth _ typ_def typ_def _ TL HA (n:=n0)) as Eqv.
+      rewrite (For_all2_length _ _ _ HA).
+      rewrite <- (For_all2_length _ _ _ TypA).
+      omega.
+    rewrite <- Eqv in Typv; clear Eqv.
+    rewrite app_nth1 in Typv; [|rewrite map_length; rewrite* seq_length].
+    rewrite (map_nth _ 0) in Typv; [|rewrite* seq_length].
+    rewrite seq_nth in Typv; auto.
+    simpl in Typv.
+    assert (nth n0 Us typ_def = t).
+      apply (kh v); trivial.
+      unfold Cstr.unique.
+      apply set_mem_correct2. simpl. unfold set_In. auto*.
+    rewrite H5 in Typv.
+    apply* typing_app; rewrite gc_lower_false; auto*.
   Qed.
 
   Definition reduce_clos c (cl : list clos) :=

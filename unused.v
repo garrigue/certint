@@ -724,3 +724,10 @@ Proof.
   case_eq (S.mem x L); intros; auto with sets.
 Qed.
 
+Lemma nth_In_eq : forall (A:Set) n l l' (d:A),
+  n < length l -> n < length l' ->
+  nth n l d = nth n l' d -> In (nth n l d) l'.
+Proof.
+  intros. rewrite H1. apply* nth_In.
+Qed.
+
