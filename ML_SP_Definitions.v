@@ -252,6 +252,10 @@ Fixpoint trm_inst_rec (k : nat) (tl : list trm) (t : trm) {struct t} : trm :=
 
 Definition trm_inst t tl := trm_inst_rec 0 tl t.
 
+(** Applying a constant *)
+
+Definition const_app c vl := fold_left trm_app vl (trm_cst c).
+
 (* ********************************************************************** *)
 (** ** Description of typing *)
 
@@ -322,17 +326,28 @@ Definition sch_fv M :=
 Definition env_fv := 
   fv_in sch_fv.
 
+(** Grammar of values *)
+
+Inductive valu : nat -> trm -> Prop :=
+  | value_abs : forall t1, term (trm_abs t1) -> valu 0 (trm_abs t1)
+  | value_cst : forall c, valu (Const.arity c) (trm_cst c)
+  | value_app : forall n t1 n2 t2,
+      valu (S n) t1 ->
+      valu n2 t2 ->
+      valu n (trm_app t1 t2).
+
+Definition value t := exists n, valu n t.
+
 (** Another functor for delta-rules *)
 
 Module Type DeltaIntf.
   Parameter type : Const.const -> sch.
   Parameter closed : forall c, sch_fv (type c) = {}.
   Parameter scheme : forall c, scheme (type c).
-  Parameter rule : nat -> trm -> trm -> Prop.
-  Parameter term : forall n t1 t2 tl,
-    rule n t1 t2 ->
-    list_for_n term n tl ->
-    term (trm_inst t1 tl) /\ term (trm_inst t2 tl).
+  Parameter reduce : forall c tl,
+    list_for_n value (S(Const.arity c)) tl -> trm.
+  Parameter term : forall c tl vl,
+    term (@reduce c tl vl).
 End DeltaIntf.
 
 Module MkJudge(Delta:DeltaIntf).
@@ -395,18 +410,6 @@ where "K ; E | gc |= t ~: T" := (typing gc K E t T).
 (* ********************************************************************** *)
 (** ** Description of the semantics *)
 
-(** Grammar of values *)
-
-Inductive valu : nat -> trm -> Prop :=
-  | value_abs : forall t1, term (trm_abs t1) -> valu 0 (trm_abs t1)
-  | value_cst : forall c, valu (Const.arity c) (trm_cst c)
-  | value_app : forall n t1 n2 t2,
-      valu (S n) t1 ->
-      valu n2 t2 ->
-      valu n (trm_app t1 t2).
-
-Definition value t := exists n, valu n t.
-
 (** Reduction rules *)
 
 Inductive red : trm -> trm -> Prop :=
@@ -418,10 +421,8 @@ Inductive red : trm -> trm -> Prop :=
       term (trm_let t1 t2) ->
       value t1 -> 
       red (trm_let t1 t2) (t2 ^^ t1)
-  | red_delta : forall n t1 t2 tl,
-      Delta.rule n t1 t2 ->
-      list_for_n term n tl ->
-      red (trm_inst t1 tl) (trm_inst t2 tl)
+  | red_delta : forall c tl vl,
+      red (const_app c tl) (@Delta.reduce c tl vl)
   | red_let_1 : forall t1 t1' t2, 
       term_body t2 ->
       red t1 t1' -> 

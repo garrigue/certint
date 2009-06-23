@@ -7,8 +7,7 @@
 
 Set Implicit Arguments.
 Require Import Arith List Metatheory 
-  ML_SP_Definitions
-  ML_SP_Infrastructure.
+  ML_SP_Definitions_red ML_SP_Infrastructure_red.
 
 Module MkSound(Cstr:CstrIntf)(Const:CstIntf).
 
@@ -544,20 +543,9 @@ Qed.
 (** Extra hypotheses for main results *)
 
 Module Type SndHypIntf.
-  Parameter delta_typed : forall n t1 t2 tl K E gc T,
-    Delta.rule n t1 t2 ->
-    list_for_n term n tl ->
-    K ; E |(false,gc)|= trm_inst t1 tl ~: T ->
-    K ; E |(false,gc)|= trm_inst t2 tl ~: T.
-  Parameter const_arity_ok : forall c vl K gc T,
-    list_for_n value (S(Const.arity c)) vl ->
-    K ; empty |(false,gc)|= const_app c vl ~: T ->
-    exists n:nat, exists t1:trm, exists t2:trm, exists tl:list trm,
-      Delta.rule n t1 t2 /\ list_for_n term n tl /\
-      const_app c vl = trm_inst t1 tl.
-  Parameter delta_arity : forall n t1 t2,
-    Delta.rule n t1 t2 ->
-    exists c, exists pl, t1 = const_app c pl /\ length pl = S(Const.arity c).
+  Parameter delta_typed : forall c tl vl K E gc T,
+    K ; E |(false,gc)|= const_app c tl ~: T ->
+    K ; E |(false,gc)|= @Delta.reduce c tl vl ~: T.
 End SndHypIntf.
 
 Module Mk3(SH:SndHypIntf).
@@ -603,31 +591,24 @@ Lemma preservation_result : preservation.
 Proof.
   introv Typ. gen_eq (true, GcAny) as gc. gen t'.
   induction Typ; introv EQ Red; subst; inversions Red;
-    try solve [apply* typing_gc].
-  destruct (SH.delta_arity H4) as [a [pl [e1 e2]]]; subst.
-    destruct (trm_inst_app_inv a pl tl) as [EQ|[t1' [t2' EQ]]]; rewrite EQ in *;
-    discriminate.
-  destruct (SH.delta_arity H3) as [a [pl [e1 e2]]]; subst.
-    destruct (trm_inst_app_inv a pl tl) as [EQ|[t1' [t2' EQ]]]; rewrite EQ in *;
-    discriminate.
+    try solve [apply* typing_gc];
+    try (destruct (const_app_inv c tl) as [eq | [T1' [T2' eq]]];
+         rewrite eq in *; discriminate).
   (* Let *)
   pick_fresh x. rewrite* (@trm_subst_intro x). 
    apply_empty* (@typing_trm_subst true).
-  destruct (SH.delta_arity H4) as [a [pl [e1 e2]]]; subst.
-    destruct (trm_inst_app_inv a pl tl) as [EQ|[t1' [t2' EQ]]]; rewrite EQ in *;
-    discriminate.
   (* Let *)
   apply* (@typing_let (true,GcAny) M L1).
   (* Beta *)
   apply* typing_abs_inv.
   (* Delta *)
-  assert (K;E |(true,GcAny)|= trm_app t1 t2 ~: T). auto*.
-  use (typing_canonize H2).
-  fold (typing_gc_let K E (trm_app t1 t2) T) in H3.
-  rewrite <- H in *.
-  clear -H0 H1 H3.
-  gen_eq (trm_inst t0 tl) as t1.
-  induction H3 using typing_gc_ind; intros; subst.
+  assert (K;E |(true,GcAny)|= trm_app t1 t2 ~: T) by auto*.
+  use (typing_canonize H).
+  fold (typing_gc_let K E (trm_app t1 t2) T) in H1.
+  rewrite <- H0 in *.
+  clear -H1.
+  gen_eq (const_app c tl) as t1.
+  induction H1 using typing_gc_ind; intros; subst.
     apply* typing_gc_any.
     apply* delta_typed.
   apply* typing_gc. simpl; auto.
@@ -638,8 +619,8 @@ Proof.
   (* Delta/cst *)
   apply* (@typing_gc_any (false,GcAny)).
   apply* delta_typed.
-  rewrite* H2.
-Qed. 
+  rewrite* H3.
+Qed.
 
 (* ********************************************************************** *)
 (** Progress: typed terms are values or can reduce *)
@@ -665,6 +646,7 @@ Proof.
   split3*. constructor; auto. exists* n2.
 Qed.
 
+
 Lemma progress_delta : forall K t0 t3 t2 T,
   K; empty |(false,GcLet)|= trm_app (trm_app t0 t3) t2 ~: T ->
   valu 0 (trm_app t0 t3) ->
@@ -673,18 +655,15 @@ Lemma progress_delta : forall K t0 t3 t2 T,
 Proof.
   intros.
   destruct (value_app_const H0) as [c [vl [Hlen [Heq Hv]]]].
-  destruct (@const_arity_ok c (vl ++ t2 :: nil) K GcLet T).
-    split. rewrite <- Hlen. rewrite app_length. simpl; ring.
-    apply* list_forall_concat.
-    rewrite Heq in H.
-    unfold const_app in *. rewrite* fold_left_app.
-  destruct H2 as [t1' [t3' [tl [R [Htl Heq']]]]].
-  exists (trm_inst t3' tl).
-  rewrite Heq.
   unfold const_app in *.
-  rewrite fold_left_app in Heq'; simpl in Heq'.
-  rewrite Heq'.
-  apply* red_delta.
+  rewrite Heq in *.
+  change (exists t', fold_left trm_app (t2::nil) (const_app c vl) --> t').
+  unfold const_app; rewrite <- fold_left_app.
+  assert (list_for_n value (S(Const.arity c)) (vl ++ t2 :: nil)).
+    split. rewrite <- Hlen; rewrite app_length; simpl. auto with arith.
+    apply* list_forall_app.
+  exists (Delta.reduce H2).
+  apply red_delta.
 Qed.
 
 Lemma progress_result : progress.
@@ -714,13 +693,10 @@ Proof.
         right; exists* (t0 ^^ t2).
         case_eq (Const.arity c); intros.
           right. rewrite H0 in Val1.
-          destruct (@const_arity_ok c (t2::nil) K GcLet T).
-            rewrite H0. constructor; simpl; auto.
-          unfold const_app; simpl*.
-          destruct H1 as [t1' [t3' [tl [R [Htl Heq]]]]].
-          exists (trm_inst t3' tl).
-          unfold const_app in Heq; simpl in Heq; rewrite Heq.
-          apply* red_delta.
+          assert (list_for_n value 1 (t2 :: nil)) by split*.
+          rewrite <- H0 in H1.
+          exists (Delta.reduce H1).
+          apply (red_delta H1).
         left. exists n. rewrite H0 in Val1. destruct* Val2.
         destruct n.
           right; apply* progress_delta.
@@ -741,30 +717,21 @@ Lemma value_irreducible : forall t t',
 Proof.
   induction t; introv HV; destruct HV as [k HV']; inversions HV';
     intro R; inversions R.
-       destruct (delta_arity H0) as [c [pl [Heq Hlen]]]. rewrite Heq in H.
-       destruct* (trm_inst_app_inv c pl tl). subst. discriminate.
-       destruct H3; destruct H3; rewrite H3 in H. discriminate.
+       destruct (const_app_inv c tl) as [eq | [t1' [t2' eq]]];
+         rewrite eq in *; discriminate.
       inversions H2.
-     clear IHt1 IHt2 H1.
-     destruct (delta_arity H0) as [c [pl [Heq Hlen]]]. rewrite Heq in H.
      destruct (value_app_const HV').
-     destruct H1 as [vl [Hl [He Hv]]].
-     rewrite He in H; clear He.
-     unfold trm_inst in H.
-     rewrite trm_inst_app in H.
-     destruct (const_app_eq _ _ _ _ H). subst.
-     rewrite map_length in Hl.
+     destruct H as [vl' [Hl [He Hv]]].
+     rewrite He in H0; clear He.
+     destruct (const_app_eq _ _ _ _ H0). subst.
+     clear -vl Hl; destruct vl.
      omega.
     elim (IHt1 t1'). exists* (S k). auto.
    elim (IHt2 t2'). exists* n2. auto.
-  destruct (delta_arity H0) as [c' [pl [Heq Hlen]]]. rewrite Heq in H.
-  unfold trm_inst in H.
-  rewrite trm_inst_app in H.
-  assert (const_app c nil = trm_cst c). auto.
-  rewrite <- H2 in H.
-  destruct (const_app_eq _ _ _ _ H). subst.
-  rewrite <- (map_length (trm_inst_rec 0 tl)) in Hlen.
-  rewrite H4 in Hlen. discriminate.
+  clear -vl H0.
+  destruct vl.
+  destruct (const_app_inv c0 tl) as [eq | [t1' [t2' eq]]];
+    rewrite eq in *; discriminate.
 Qed.
 
 End Mk3.

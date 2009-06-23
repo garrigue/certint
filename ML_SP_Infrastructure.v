@@ -6,7 +6,7 @@
 ***************************************************************************)
 
 Set Implicit Arguments.
-Require Import List Metatheory ML_SP_Definitions.
+Require Import List Metatheory ML_SP_Definitions_red.
 Require Import ProofIrrelevance.
 
 (* ====================================================================== *)
@@ -759,8 +759,6 @@ Qed.
 
 (** Properties of constants *)
 
-Definition const_app c vl := fold_left trm_app vl (trm_cst c).
-
 Lemma trm_inst_app : forall c tl pl,
   trm_inst_rec 0 tl (const_app c pl) =
   const_app c (List.map (trm_inst_rec 0 tl) pl).
@@ -1097,12 +1095,19 @@ Proof.
   intros. destruct H. induction H; auto.
 Qed.
 
+Hint Resolve value_regular.
+
 (** A reduction relation only holds on pairs of locally-closed terms. *)
 
 Lemma red_regular : forall e e',
   red e e' -> term e /\ term e'.
 Proof.
-  induction 1; use value_regular.
+  induction 1; auto*.
+  split.
+    destruct vl.
+    clear H; unfold const_app.
+    assert (term (trm_cst c)) by auto.
+    revert H; generalize (trm_cst c); induction H0; simpl*.
   apply* Delta.term.
 Qed.
 

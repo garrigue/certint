@@ -6,8 +6,8 @@
 Set Implicit Arguments.
 
 Require Import Arith List Metatheory.
-Require Import ML_SP_Definitions ML_SP_Infrastructure.
-Require Import ML_SP_Soundness.
+Require Import ML_SP_Definitions_red.
+Require Import ML_SP_Soundness_red.
 
 Module MkEval(Cstr:CstrIntf)(Const:CstIntf).
 
@@ -206,19 +206,53 @@ Import Judge.
 
 Definition Gc := (false, GcAny).
 
+Lemma clos_ok_value : forall cl,
+  clos_ok cl -> value (clos2trm cl).
+Proof.
+  unfold value.
+  induction 1; simpl;
+    assert (list_forall term (List.map clos2trm cls))
+      by (clear -H; apply* list_forall_map; auto using clos_ok_term).
+    exists 0. unfold trm_inst. simpl. constructor.
+    apply (@term_abs {}). intros.
+    unfold trm_open. rewrite* trm_inst_rec_more.
+    fold (trm_inst t (trm_fvar x :: List.map clos2trm cls)).
+    apply* term_trm_inst_closed. simpl. rewrite* map_length.
+    rewrite map_length; simpl*.
+  set (n := Const.arity c - length cls).
+  exists n. unfold const_app.
+  set (t := trm_cst c).
+  assert (valu (Const.arity c) t) by (unfold t; auto).
+  replace (Const.arity c) with (n + length cls)
+    in H3 by (unfold n; omega).
+  gen t n; clear H H0; induction H1; simpl in *; intros.
+    rewrite <- plus_n_O in H3. auto.
+  inversions H2; clear H2.
+  apply* IHlist_forall.
+  destruct H.
+  apply* value_app.
+  replace (S (n + length L)) with (n + S (length L)) by omega; auto.
+Qed.
+
+Lemma list_for_n_value : forall n cls,
+  list_for_n clos_ok n cls ->
+  list_for_n value n (List.map clos2trm cls).
+Proof.
+  split. rewrite* map_length.
+  destruct H; apply* list_forall_map.
+  intros x _; apply clos_ok_value.
+Qed.
+
 Module Type SndHypIntf2.
   Include Type SndHypIntf.
-  Parameter delta_red : Const.const -> list clos -> clos * list clos.
-  Parameter delta_red_sound : forall c cls,
-    list_for_n clos_ok (S(Const.arity c)) cls ->
-    exists t1:trm, exists t2:trm, exists tl:list trm,
-    forall K E T,
-      K ; E |Gc|= const_app c (List.map clos2trm cls) ~: T ->
-      let (cl', cls') := delta_red c cls in
-      Delta.rule (length tl) t1 t2 /\ list_forall term tl /\
-      const_app c (List.map clos2trm cls) = trm_inst t1 tl /\
-      fold_left trm_app (List.map clos2trm cls') (clos2trm cl') = trm_inst t2 tl
-      /\ clos_ok cl' /\ list_forall clos_ok cls'.
+  Parameter reduce_clos : Const.const -> list clos -> clos * list clos.
+  Parameter reduce_clos_sound :
+    forall c cls (CLS : list_for_n clos_ok (S(Const.arity c)) cls) K E T,
+      K; E |Gc|= const_app c (List.map clos2trm cls) ~: T ->
+      let (cl', cls') := reduce_clos c cls in
+      clos_ok cl' /\ list_forall clos_ok cls' /\
+      fold_left trm_app (List.map clos2trm cls') (clos2trm cl') =
+      Delta.reduce (list_for_n_value CLS).
 End SndHypIntf2.
 
 Module Mk3(SH:SndHypIntf2).
@@ -257,7 +291,7 @@ Fixpoint eval (h:nat) (benv:list clos) (app:list clos) (t:trm)
         let nred := S(Const.arity cst) in
         if le_lt_dec nred nargs then
           let (args, app') := cut nred (List.app l app) in
-          match SH.delta_red cst args with
+          match SH.reduce_clos cst args with
           | (clos_const cst' app'', app3) =>
             eval h nil (app'' ++ app3 ++ app') (trm_cst cst') stack
           | (clos_abs t1 benv, app3) =>
@@ -294,34 +328,6 @@ Definition skk' := eval nil 3 nil nil
 Eval compute in skk'.
 Eval compute in res2trm skk'.
 *)
-
-Lemma clos_ok_value : forall cl,
-  clos_ok cl -> value (clos2trm cl).
-Proof.
-  unfold value.
-  induction 1; simpl;
-    assert (list_forall term (List.map clos2trm cls))
-      by (clear -H; apply* list_forall_map; auto using clos_ok_term).
-    exists 0. unfold trm_inst. simpl. constructor.
-    apply (@term_abs {}). intros.
-    unfold trm_open. rewrite* trm_inst_rec_more.
-    fold (trm_inst t (trm_fvar x :: List.map clos2trm cls)).
-    apply* term_trm_inst_closed. simpl. rewrite* map_length.
-    rewrite map_length; simpl*.
-  set (n := Const.arity c - length cls).
-  exists n. unfold const_app.
-  set (t := trm_cst c).
-  assert (valu (Const.arity c) t) by (unfold t; auto).
-  replace (Const.arity c) with (n + length cls)
-    in H3 by (unfold n; omega).
-  gen t n; clear H H0; induction H1; simpl in *; intros.
-    rewrite <- plus_n_O in H3. auto.
-  inversions H2; clear H2.
-  apply* IHlist_forall.
-  destruct H.
-  apply* value_app.
-  replace (S (n + length L)) with (n + S (length L)) by omega; auto.
-Qed.
 
 Lemma trm_inst_nil : forall t, trm_inst t nil = t.
 Proof.
@@ -818,6 +824,20 @@ Proof.
   simpl; omega.
 Qed.
 
+Lemma term_const_app : forall c cls,
+  list_forall clos_ok cls ->
+  term (const_app c (List.map clos2trm cls)).
+Proof.
+  intros.
+  unfold const_app.
+  cut (term (trm_cst c)).
+    generalize (trm_cst c).
+    induction H; simpl*.
+  auto.
+Qed.
+
+Hint Resolve term_const_app.
+
 Theorem eval_sound_rec : forall h fl benv args K t T,
   list_forall clos_ok args ->
   list_forall clos_ok benv ->
@@ -976,55 +996,39 @@ Proof.
       apply list_forall_in; intros; apply* (list_forall_out Hok).
     assert (Hok3: list_forall clos_ok l3).
       apply list_forall_in; intros; apply* (list_forall_out Hok).
-    destruct (@SH.delta_red_sound c (c0 :: l2))
-      as [t1 [t2 [tl Hd]]].
-      split*. simpl; rewrite* H5.
+    poses Hred (@SH.reduce_clos_sound c (c0 :: l2)
+      (conj (f_equal S (sym_equal H5)) Hok2)).
+    case_rewrite R (SH.reduce_clos c (c0 :: l2)).
     replace (app2trm (const_app c (List.map clos2trm l)) (arg :: args))
       with (app2trm (const_app c (List.map clos2trm (c0 :: l2))) l3)
         in Typ'.
-      case_rewrite R (SH.delta_red c (c0 :: l2)).
       assert (K; E |Gc|=
         stack2trm (app2trm (clos2trm c1) (l1 ++ l3)) fl ~: T).
         assert (Habs: forall l, is_abs (const_app c l) = false).
-          clear; unfold const_app.
-          induction l using rev_ind. simpl*.
-          rewrite fold_left_app. simpl*.
+          clear; intros; destruct (const_app_inv c l) as [eq|[t1[t2 eq]]];
+            rewrite* eq.
         rewrite app2trm_app.
         refine (retypable_stack2trm _ _ _ _ Typ'); auto.
-          apply* term_app2trm.
-          unfold const_app. apply* term_fold_app.
-          apply* (@list_forall_map _ clos_ok _ term clos2trm).
         apply* retypable_app2trm.
         intro; intros.
-        destruct (Hd _ _ _ H6) as [Hr [Htl [Ht1 [Ht2 _]]]]; clear Typ' Hd.
-        rewrite Ht1 in H6.
-        assert (Typ: K0; E |Gc|= trm_inst t2 tl ~: T0).
-          apply* SH.delta_typed. split*.
-        rewrite <- Ht2 in Typ.
+        assert (Typ: K0; E |Gc|= fold_left trm_app (List.map clos2trm l1) (clos2trm c1) ~: T0).
+          rewrite (proj33 (Hred _ _ _ H6)).
+          apply* SH.delta_typed.
         clear -Typ.
         unfold app2trm.
         gen T0; induction l1 using rev_ind; simpl; intros. auto.
         rewrite map_app in *; rewrite fold_left_app in *; simpl in *.
         apply retypable_trm_app.
         inversions* Typ; discriminate.
-      assert (clos_ok c1 /\ list_forall clos_ok l1).
-        clear -Typ' Hd R.
-        set (args := List.map clos2trm (c0 :: l2)) in *.
-        destruct (typing_stack2trm_inv _ _ Typ').
-          destruct (app2trm_cases (const_app c args) l3).
-            destruct H as [t1' [t2' Happ]]. rewrite* Happ.
-          destruct H.
-            destruct H as [t1' [t2' Happ]]. rewrite* Happ.
-          rewrite H. unfold const_app.
-          clear. induction args using rev_ind. simpl*.
-          rewrite fold_left_app. simpl*.
-        destruct H.
-        destruct (typing_app2trm_inv _ _ H).
-          clear. unfold const_app; induction args using rev_ind. simpl*.
-          rewrite fold_left_app; simpl*.
-        destruct* (Hd _ _ _ H0).
-      destruct H7.
-      destruct c1; inversions H7; apply* IHh; clear IHh;
+      destruct (typing_stack2trm_inv _ _ Typ') as [T' [K' Typ'']].
+        apply* is_bvar_term.
+      destruct (typing_app2trm_inv _ _ Typ'') as [T'' Typ3].
+        unfold const_app. clear.
+        cut (is_abs (trm_cst c) = false); auto.
+        generalize (trm_cst c); induction (List.map clos2trm (c0::l2));
+          intros; simpl*.
+      destruct (Hred _ _ _ Typ3) as [Hcl' [Hl' _]].
+      destruct c1; inversions Hcl'; apply* IHh; clear IHh;
         repeat apply* list_forall_app.
       rewrite trm_inst_nil.
       rewrite app2trm_app.
