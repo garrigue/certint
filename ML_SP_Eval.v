@@ -6,8 +6,8 @@
 Set Implicit Arguments.
 
 Require Import Arith List Metatheory.
-Require Import ML_SP_Definitions_red.
-Require Import ML_SP_Soundness_red.
+Require Import ML_SP_Definitions.
+Require Import ML_SP_Soundness.
 
 Module MkEval(Cstr:CstrIntf)(Const:CstIntf).
 
@@ -328,17 +328,6 @@ Definition skk' := eval nil 3 nil nil
 Eval compute in skk'.
 Eval compute in res2trm skk'.
 *)
-
-Lemma trm_inst_nil : forall t, trm_inst t nil = t.
-Proof.
-  unfold trm_inst; intros.
-  generalize 0; induction t; intros; simpl*.
-     destruct* (le_lt_dec n0 n).
-     destruct* (n-n0).
-    rewrite* IHt.
-   rewrite IHt1; rewrite* IHt2.
-  rewrite IHt1; rewrite* IHt2.
-Qed.
 
 Lemma term_trm_inst : forall n t tl,
   closed_n n t -> trm_inst_rec n tl t = t.

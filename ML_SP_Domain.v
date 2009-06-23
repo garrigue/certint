@@ -5,7 +5,7 @@
 
 Set Implicit Arguments.
 Require Import Lib_FinSet Metatheory List ListSet Arith.
-Require Import ML_SP_Eval_red.
+Require Import ML_SP_Eval.
 (* Require Import ML_SP_Unify ML_SP_Rename ML_SP_Inference. *)
 
 Section ListSet.
@@ -213,7 +213,7 @@ Module Delta.
          map (fun _ => None) (seq 0 (S (length l))))
     end.
 
-  Definition trm_default := trm_fvar var_default.
+  Definition trm_default := trm_abs trm_def.
 
   Definition reduce c tl (vl:list_for_n value (S(Const.arity c)) tl) :=
     match c with
@@ -235,19 +235,26 @@ Module Delta.
     intros. destruct H. induction H; auto.
   Qed.
 
+  Lemma term_default : term trm_default.
+  Proof.
+    unfold trm_default, trm_def.
+    apply (@term_abs {}).
+    intros. unfold trm_open; simpl. auto.
+  Qed.
+  Hint Resolve term_default.
+
   Lemma term : forall c tl vl,
     term (@reduce c tl vl).
   Proof.
     intros.
     case vl; clear vl; intros.
-    destruct c; simpl in *.
-      apply term_var.
+    destruct c; simpl in *. auto.
     assert (length l0 < S (length l0)) by auto.
     rewrite e in H.
-    case_eq (nth (length l0) tl trm_def); intros; try apply term_var.
-    destruct t; try apply term_var.
-    destruct c; try apply term_var.
-    case_eq (index eq_var_dec 0 v l0); intros; try apply term_var.
+    case_eq (nth (length l0) tl trm_def); intros; auto.
+    destruct* t.
+    destruct* c.
+    case_eq (index eq_var_dec 0 v l0); intros; auto.
     apply term_app.
       destruct (index_ok eq_var_dec var_default _ _ H1).
       apply value_term.
@@ -470,62 +477,6 @@ Module SndHyp.
     intros; rewrite* fold_right_app.
   Qed.
     
-
-  Lemma delta_matches : forall l n tl K E gc T,
-    list_for_n value (S (Const.arity (@Const.matches l n))) tl ->
-    K ; E |(false,gc)|= const_app (Const.matches n) tl ~: T ->
-    exists v, exists t, In v l /\
-      nth (length l) tl trm_def = trm_app (trm_cst (Const.tag v)) t.
-  Proof.
-    intros.
-    destruct (fold_app_inv _ _ H0) as [TL [Typ0 TypA]]; clear H0.
-    inversions Typ0; try discriminate. clear Typ0.
-    unfold sch_open in H1. simpl in H1.
-    rewrite fold_right_app_end in H1.
-    destruct H as [Hlen Htl]. simpl in Hlen.
-    destruct (fold_arrow_eq _ _ _ _ _ H1); clear H1.
-      generalize (For_all2_length _ _ _ TypA).
-      autorewrite with list. simpl. intros; omega.
-    forward~ (For_all2_nth _ trm_def typ_def _ TL TypA (n:=length l)) as Typn.
-      rewrite* <- Hlen.
-    forward~ (For_all2_nth _ typ_def typ_def _ TL H0 (n:=length l)) as Typn'.
-      autorewrite with list. simpl*. omega.
-    rewrite app_nth2 in Typn'; autorewrite with list in Typn' |- *; auto.
-    rewrite <- minus_n_n in Typn'.
-    simpl in Typn'.
-    puts (proj2 H6). simpl in H1.
-    do 2 destruct* Us.
-    simpl in Typn'.
-    destruct H1 as [Ht [_ HUs]].
-    inversions Ht; clear Ht.
-    rewrite <- H8 in *.
-    destruct (value_fvar_is_const Typn) as [v [t2 Hv]].
-      apply* (list_forall_out Htl). apply* nth_In. omega.
-    simpl.
-    rewrite Hv in *.
-    inversions Typn; clear Typn; try discriminate.
-    rewrite gc_lower_false in *.
-    inversions H10; clear H10; try discriminate.
-    destruct H15.
-    destruct H. simpl in H.
-    do 3 (destruct Us0; try discriminate).
-    simpl in *.
-    destruct H1 as [_ [Ht1 _]].
-    subst t1.
-    inversions Ht1; clear Ht1.
-    puts (binds_func H11 H3).
-    inversions H1; clear H H1 H11.
-    destruct H15; destruct H7. simpl in *.
-    destruct H; destruct H4. simpl in *. clear H10.
-    destruct k' as [[kcl kch] kv kr kh]; simpl in *.
-    assert (Hvt: In (v,t) kr) by auto*. clear H1.
-    destruct* kch.
-    unfold Cstr.valid in kv; simpl in kv.
-    assert (In v l) by auto*.
-    exists v. exists t2.
-    split*.
-Qed.
-
   Lemma delta_typed : forall c tl vl K E gc T,
     K ; E |(false,gc)|= const_app c tl ~: T ->
     K ; E |(false,gc)|= @Delta.reduce c tl vl ~: T.
@@ -618,25 +569,30 @@ Qed.
     rewrite map_length; rewrite seq_length; auto.
   Qed.
 
-  Definition get_tag cl :=
-    match cl with
-    | clos_const (Const.tag t) (cl1 :: nil) => Some (t, cl1)
-    | _ => None
-    end.
-
   Definition reduce_clos c (cl : list clos) :=
     match c with
     | Const.tag _ => (clos_def, nil)
     | Const.matches l nd =>
-      match get_tag (nth (length l) cl clos_def) with
-      | Some (t, cl1) =>
+      match nth (length l) cl clos_def with
+      | clos_const (Const.tag t) (cl1 :: nil) =>
         match index eq_var_dec 0 t l with
         | Some i => (nth i cl clos_def, cl1 :: nil)
         | None => (clos_def, nil)
         end
-      | None => (clos_def, nil)
+      | _ => (clos_def, nil)
       end
     end.
+
+  Lemma clos_ok_def : clos_ok clos_def.
+  Proof.
+    unfold clos_def.
+    constructor. auto.
+    unfold trm_def.
+    simpl.
+    constructor.
+    auto.
+  Qed.
+  Hint Resolve clos_ok_def.
 
   Lemma reduce_clos_sound :
     forall c cls (CLS : list_for_n clos_ok (S(Const.arity c)) cls) K E T,
@@ -647,57 +603,39 @@ Qed.
       Delta.reduce c (list_for_n_value CLS).
   Proof.
     intros.
-    puts (proj1 CLS).
-    destruct c.
-      simpl in H0.
-      do 3 (destruct cls; try discriminate).
-      unfold const_app in H; simpl in H.
-      inversions H; try discriminate. simpl in H5.
-      inversions H5; try discriminate. simpl in H6.
-      inversions H6; try discriminate.
-      destruct H12.
-      destruct H1. simpl in H1.
-      do 3 (destruct Us; try discriminate). simpl in *.
-      destruct H2 as [_ [Ht0 _]].
-      subst. inversion Ht0.
-    destruct (delta_matches n (list_for_n_value CLS) H) as [v [t [Hv Ht]]].
-    simpl in * |-. simpl reduce_clos.
-    rewrite (map_nth _ clos_def) in Ht; try omega.
-    case_rewrite R3 (nth (length l) cls clos_def).
-    simpl in Ht. unfold const_app in Ht.
-    destruct l0; try discriminate.
-    simpl in Ht.
-    destruct l0 using rev_ind.
-      simpl in Ht; inversion Ht; clear Ht. subst.
-      simpl.
-      case_eq (index eq_var_dec 0 v l); introv R1;
-        try elim (index_none_notin _ _ _ _ R1 Hv).
-      destruct (index_ok _ var_default _ _ R1).
-      rename n0 into i.
-      assert (clos_ok (nth i cls clos_def)).
+    clear H. (* Simpler to prove it independently of typability *)
+    unfold Delta.reduce.
+    destruct c. simpl*.
+    poses Hlen (proj1 CLS). simpl in Hlen.
+    rewrite (map_nth _ clos_def); try omega.
+    unfold reduce_clos.
+    case_eq (nth (length l) cls clos_def); introv R1; simpl*.
+    unfold const_app.
+    destruct l0; simpl. destruct* c.
+    destruct l0 using rev_ind; simpl.
+      destruct* c.
+      case_eq (index eq_var_dec 0 v l); introv R2; simpl*.
+      destruct (index_ok _ var_default _ _ R2).
+      rewrite (map_nth _ clos_def); try omega.
+      intros.
+      split. 
         apply (list_forall_out (proj2 CLS)).
         apply* nth_In.
         omega.
-      split*.
       assert (Htag: clos_ok (nth (length l) cls clos_def)).
         apply (list_forall_out (proj2 CLS)).
         apply* nth_In. omega.
-      rewrite R3 in Htag.
-      split.
-        inversion* Htag.
-      rewrite (map_nth _ clos_def); try omega.
-      rewrite R3. simpl.
-      rewrite R1.
-      rewrite (map_nth _ clos_def); auto. omega.
+      rewrite R1 in Htag.
+      inversion* Htag.
     clear IHl0.
-    elimtype False.
-    rewrite map_app in Ht; rewrite fold_left_app in Ht.
-    simpl in Ht.
-    inversions Ht.
-    clear -H2; destruct l0 using rev_ind. discriminate.
-    rewrite map_app in H2; rewrite fold_left_app in H2.
-    discriminate.
+    rewrite map_app; rewrite fold_left_app; simpl.
+    destruct l0 using rev_ind; simpl.
+      destruct* c.
+    clear IHl0.
+    rewrite map_app; rewrite fold_left_app; simpl.
+    destruct l0; destruct c; simpl*.
   Qed.
+
 End SndHyp.
 
 (* Module Sound3 := Infer2.Rename2.MyEval2.Mk3(SndHyp). *)

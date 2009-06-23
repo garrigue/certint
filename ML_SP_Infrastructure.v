@@ -6,7 +6,7 @@
 ***************************************************************************)
 
 Set Implicit Arguments.
-Require Import List Metatheory ML_SP_Definitions_red.
+Require Import List Metatheory ML_SP_Definitions.
 Require Import ProofIrrelevance.
 
 (* ====================================================================== *)
@@ -757,7 +757,18 @@ Proof.
   apply* kind_subst_entails.
 Qed.
 
-(** Properties of constants *)
+(** Properties of instantiation and constants *)
+
+Lemma trm_inst_nil : forall t, trm_inst t nil = t.
+Proof.
+  unfold trm_inst; intros.
+  generalize 0; induction t; intros; simpl*.
+     destruct* (Compare_dec.le_lt_dec n0 n).
+     destruct* (n-n0).
+    rewrite* IHt.
+   rewrite IHt1; rewrite* IHt2.
+  rewrite IHt1; rewrite* IHt2.
+Qed.
 
 Lemma trm_inst_app : forall c tl pl,
   trm_inst_rec 0 tl (const_app c pl) =

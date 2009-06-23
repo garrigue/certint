@@ -7,7 +7,7 @@
 
 Set Implicit Arguments.
 Require Import Arith List Metatheory 
-  ML_SP_Definitions_red ML_SP_Infrastructure_red.
+  ML_SP_Definitions ML_SP_Infrastructure.
 
 Module MkSound(Cstr:CstrIntf)(Const:CstIntf).
 
