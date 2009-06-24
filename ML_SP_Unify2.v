@@ -71,10 +71,20 @@ Section Moregen.
 
 End Moregen.
 
+Definition is_fvar t :=
+  match t with
+  | typ_fvar _ => true
+  | _ => false
+  end.
+
 Inductive Unify :
   subs -> kenv -> list(typ*typ) -> subs -> kenv -> list(typ*typ) -> Prop :=
-| Unify_eq  : forall S K t pairs, Unify S K ((t,t)::pairs) S K pairs
-| Unify_var : forall S K x t pairs,
+| Unify_eq   : forall S K t pairs, Unify S K ((t,t)::pairs) S K pairs
+| Unify_var  : forall S K x t pairs,
   x \notin typ_fv t ->
-  let (
-  Unify S K ((typ_fvar x,t)::pairs) (compose (x ~ t) S)
+  is_fvar t = false ->
+  Unify S K ((typ_fvar x,t)::pairs) (compose (x ~ t) S) K pairs
+| Unify_vars : forall S K x y pairs,
+  x <> y ->
+  Unify S K ((typ_fvar x,typ_fvar y)::pairs)
+    (compose (x ~ typ_fvar y) S) 
