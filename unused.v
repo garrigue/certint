@@ -731,3 +731,11 @@ Proof.
   intros. rewrite H1. apply* nth_In.
 Qed.
 
+Lemma map_map_env : forall f f1 f2 (E:Env.env A),
+  (forall x, f x = f1 (f2 x)) -> map f E = map f1 (map f2 E).
+Proof.
+  intros; induction E; simpl. auto.
+  destruct a; simpl.
+  rewrite H.
+  rewrite* IHE.
+Qed.
