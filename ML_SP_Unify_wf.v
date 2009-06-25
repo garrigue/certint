@@ -1739,6 +1739,55 @@ Proof.
   apply wk_any.
 Qed.
 
+Definition typ_kind K T :=
+  match T with
+  | typ_fvar x => get_kind x K
+  | _  => None
+  end.
+
+Lemma well_kinded_kind_entails: forall K k T,
+  well_kinded K k T -> kind_entails (typ_kind K T) k.
+Proof.
+  intros; unfold kind_entails.
+  inversions H. auto.
+  simpl.
+  rewrite* (binds_get_kind H0).
+Qed.
+
+Lemma well_kinded_typ_kind : forall K T,
+  well_kinded K (typ_kind K T) T.
+Proof.
+  destruct T; auto.
+  simpl.
+  apply well_kinded_get_kind.
+Qed.
+
+Lemma unify_vars_complete : forall v0 v K0,
+  ok K0 ->
+  typ_subst S' (typ_fvar v0) = typ_subst S' (typ_fvar v) ->
+  well_subst K0 K' S' ->
+  exists K, exists l,
+    unify_vars K0 v0 v = Some (K, l) /\ unifies S' l /\
+    well_subst K K' S'.
+Proof.
+  introv HK0 Heq WS.
+  unfold unify_vars.
+  puts (well_kinded_kind_entails (well_subst_get_kind v0 WS)).
+  puts (well_kinded_kind_entails (well_subst_get_kind v WS)).
+  rewrite Heq in H.
+  destruct* (unify_kinds_complete _ _ _ _ H H0) as [k [l [HU [Heq' Hke]]]].
+  rewrite HU; clear HU.
+  esplit; esplit; split*.
+  split*.
+  intro; intros.
+  unfold binds in H1; simpl in H1. destruct (Z == v). inversions H1.
+    apply* kind_entails_well_kinded.
+    apply well_kinded_typ_kind.
+  apply WS.
+  puts (binds_orig_remove_env _ (ok_remove_env v0 HK0) H1).
+  apply* binds_orig_remove_env.
+Qed.
+
 Lemma unify_mgu_vars : forall K0 S0 pairs K S t t0 v v0 k l,
   let S1 := compose (v ~ typ_fvar v0) S0 in
   let K1 := remove_env (remove_env K0 v) v0 & v0 ~ k in
@@ -1752,80 +1801,26 @@ Lemma unify_mgu_vars : forall K0 S0 pairs K S t t0 v v0 k l,
 Proof.
   intros until h; unfold S1 in *; clear S1.
   intros R4 HU R1 R2 HS0 HK0 n IHh Hext Heq WS.
-  assert (BS': typ_subst S' (typ_fvar v0) = typ_subst S' (typ_fvar v)).
-    rewrite <- R1; rewrite <- R2.
-    repeat rewrite Hext.
-    symmetry; apply* Heq.
-  assert (Hv: v # S0) by apply* typ_subst_res_fresh'.
-  assert (Hv0: v0 # S0) by apply* typ_subst_res_fresh'.
-  assert (Dis: disjoint (dom (v ~ typ_fvar v0)) (dom S0)).
-    simpl. intro x; destruct* (x == v).
-  assert (Sv: extends S' (v ~ typ_fvar v0)).
-    intro. induction T; simpl. auto.
-      destruct (v1 == v). subst. rewrite BS'. reflexivity.
-      reflexivity.
-    congruence.
-  poses Wk (well_subst_get_kind v WS).
-  rewrite <- Sv in Wk.
-  simpl typ_subst in Wk. destruct* (v == v). clear e.
-  poses Wk0 (well_subst_get_kind v0 WS).
-  assert (Hke: forall v1, typ_subst S' (typ_fvar v0) = typ_fvar v1 ->
-               let k' := get_kind v1 K' in
-               let gk x := kind_subst S' (get_kind x K0) in
-               kind_entails k' (gk v) /\ kind_entails k' (gk v0)).
-    intros.
-    split; [inversions Wk | inversions Wk0]; simpl*; unfold k', gk;
-      try (rewrite <- H2; simpl* );
-      rewrite <- H0; simpl in H; rewrite H in H1; inversions H1;
-      rewrite* (binds_get_kind H3).
-  assert (Hk: k = None /\ l = nil \/
-              exists v1, typ_subst S' (typ_fvar v0) = typ_fvar v1).
-    case_rewrite R5 (typ_subst S' (typ_fvar v0));
-    case_rewrite R6 (get_kind v0 K0);
-    simpl in Wk0 ; inversion_clear Wk0;
-    case_rewrite R7 (get_kind v K0);
-    simpl in Wk; inversion_clear Wk;
-    simpl in R4; inversion* R4.
-  destruct* IHh.
-      intro.
-      rewrite* typ_subst_compose.
-      rewrite Sv. rewrite* Hext.
-    intro; intros.
-    destruct (in_app_or _ _ _ H); clear H; try solve [apply* Heq].
-    destruct Hk as [[_ Hl]|[v1 R5]]. subst; elim H0.
-    destruct* (Hke v1); clear Hke.
-    destruct (unify_kinds_complete _ _ _ _ H H1) as [k3 [l3 [HU1 [HU2 HU3]]]].
-    rewrite R4 in HU1.
-    clearbody K1.
-    inversions HU1; clear HU1.
-    apply* HU2.
+  assert (Heq0: typ_subst S' (typ_fvar v) = typ_subst S' (typ_fvar v0)).
+    rewrite <- R1; rewrite <- R2. do 2 rewrite Hext. auto.
+  destruct* (unify_vars_complete v v0 HK0) as [K2 [l' [HU' [Heq' Hke]]]].
+  unfold unify_vars in HU'.
+  rewrite R4 in HU'.
+  inversions HU'; clear HU'.
+  simpl in K1. fold K1 in Hke.
+  apply* IHh.
+    intro. rewrite* typ_subst_compose.
+    rewrite* typ_subst_prebind.
   intro; intros.
-  destruct (Z == v0).
-    subst.
-    unfold binds in H; simpl in H; destruct* (v0 == v0).
-    clearbody K1.
-    inversions H; clear e H.
-    destruct Hk as [[Hk _]|[v1 R5]]. subst*.
-    rewrite R5.
-    destruct* (Hke v1); clear Hke.
-    destruct (unify_kinds_complete _ _ _ _ H H0) as [k3 [l3 [HU1 [HU2 HU3]]]].
-    rewrite R4 in HU1.
-    inversions HU1; clear HU1.
-    apply* kind_entails_well_kinded.
-    apply* well_kinded_get_kind.
-  destruct* k0.
-  unfold K1 in H.
-  unfold binds in H; simpl in H. destruct* (Z == v0). clear n1.
-  use (binds_orig_remove_env _ (ok_remove_env v HK0) H).
-  use (binds_orig_remove_env _ HK0 H0).
+  destruct* (in_app_or _ _ _ H).
 Qed.
+
 
 Lemma unifies_tl : forall S p pairs,
   unifies S (p::pairs) -> unifies S pairs.
 Proof.
   intros; intro; intros; apply* H.
 Qed.
-
 Hint Resolve unifies_tl.
 
 Lemma unify_mgu0 : forall pairs K0 S0 HS0 HK0 h K S,
@@ -1943,55 +1938,6 @@ Proof.
   apply* binds_orig_remove_env.
 Qed.
 
-Definition typ_kind K T :=
-  match T with
-  | typ_fvar x => get_kind x K
-  | _  => None
-  end.
-
-Lemma well_kinded_kind_entails: forall K k T,
-  well_kinded K k T -> kind_entails (typ_kind K T) k.
-Proof.
-  intros; unfold kind_entails.
-  inversions H. auto.
-  simpl.
-  rewrite* (binds_get_kind H0).
-Qed.
-
-Lemma well_kinded_typ_kind : forall T,
-  well_kinded K (typ_kind K T) T.
-Proof.
-  destruct T; auto.
-  simpl.
-  apply well_kinded_get_kind.
-Qed.
-
-Lemma unify_vars_complete : forall v0 v K0,
-  ok K0 ->
-  typ_subst S (typ_fvar v0) = typ_subst S (typ_fvar v) ->
-  well_subst K0 K S ->
-  exists K', exists l,
-    unify_vars K0 v0 v = Some (K', l) /\ unifies S l /\
-    well_subst K' K S.
-Proof.
-  introv HK0 Heq WS.
-  unfold unify_vars.
-  puts (well_kinded_kind_entails (well_subst_get_kind v0 WS)).
-  puts (well_kinded_kind_entails (well_subst_get_kind v WS)).
-  rewrite Heq in H.
-  destruct* (unify_kinds_complete _ _ _ _ H H0) as [k [l [HU [Heq' Hke]]]].
-  rewrite HU; clear HU.
-  esplit; esplit; split*.
-  split*.
-  intro; intros.
-  unfold binds in H1; simpl in H1. destruct (Z == v). inversions H1.
-    apply* kind_entails_well_kinded.
-    apply well_kinded_typ_kind.
-  apply WS.
-  puts (binds_orig_remove_env _ (ok_remove_env v0 HK0) H1).
-  apply* binds_orig_remove_env.
-Qed.
-
 Lemma unify_complete0 : forall pairs K0 S0,
   complete_spec K0 S0 pairs.
 Proof.
@@ -2005,40 +1951,34 @@ Proof.
   rewrite normalize_unify.
   destruct pairs as [|[T1 T2] pairs]; simpl lt2_wf; rewrite normalize_Acc_intro.
     intro; discriminate.
-  lazy [unify]; fold unify.
   assert (Heq0: unifies S pairs) by (intro; auto*).
+  lazy [unify]; fold unify.
   destruct (typ_subst_res HS0 T1) as [ST1 [D1 eq1]].
   destruct (typ_subst_res HS0 T2) as [ST2 [D2 eq2]].
   simpl proj1_sig; simpl proj2_sig.
   simpl pairs_eq.
-  revert D1 eq1 D2 eq2.
+  assert (E: typ_subst S ST1 = typ_subst S ST2).
+    rewrite <- eq1; rewrite <- eq2; do 2 rewrite Hext. auto.
+  revert D1 eq1 D2 eq2 E.
   case ST1; case ST2; intros; intro HU.
           destruct (n0 === n).
            subst.
            apply* H.
-          forward~ (Heq T1 T2) as E.
-          rewrite <- Hext in E; rewrite eq1 in E.
-          rewrite <- (Hext T2) in E; rewrite eq2 in E.
-          simpl in E. inversions* E.
+          inversions* E.
          rewrite size_pairs2_comm in Hsz.
          refine (unify_complete_nv _ _ HS0 HK0 eq2 eq1 WS _ _ _ _ HU); auto*.
            intro; simpl; intros. destruct H0; subst.
-             inversions H0; symmetry; apply* Heq.
+             inversions* H0; symmetry; apply* Heq.
            apply* Heq.
          intros x Hx; discriminate.
-        forward~ (Heq T1 T2) as E.
-        rewrite <- Hext in E; rewrite eq1 in E.
-        rewrite <- (Hext T2) in E; rewrite eq2 in E.
-        simpl in E; inversions E.
+        discriminate.
        refine (unify_complete_nv _ _ HS0 HK0 eq1 eq2 _ _ _ _ _ HU); auto*.
        intros x Hx; discriminate.
       destruct (v0 == v).
        subst.
        apply* H.
-      destruct* (unify_vars_complete v0 v HK0) as [K' [l' [HU' [Heq' Hke]]]].
-        rewrite <- eq1; rewrite <- eq2.
-        do 2 rewrite Hext.
-        apply* Heq.
+      destruct* (unify_vars_complete (K':=K) (S':=S) v0 v HK0)
+        as [K' [l' [HU' [Heq' Hke]]]].
       destruct (unify_vars_res pairs HS0 HK0
            (disjoint_eq (refl_equal (typ_fvar v0)) (proj41 conj D1 eq1))
            (disjoint_eq (refl_equal (typ_fvar v)) (proj41 conj D2 eq2)) n).
@@ -2053,16 +1993,11 @@ Proof.
             rewrite <- (typ_subst_idem T2 HS0).
             rewrite eq1; rewrite* eq2.
           intro. rewrite* typ_subst_compose.
-          rewrite typ_subst_prebind. apply Hext.
-          rewrite <- eq1; rewrite <- eq2; do 2 rewrite Hext.
-          symmetry; apply* Heq.
+          rewrite typ_subst_prebind. apply Hext. symmetry; auto.
         intro; intros. destruct* (in_app_or _ _ _ H0).
       rewrite e in HU'; discriminate.
      refine (unify_complete_nv _ _ HS0 HK0 eq1 eq2 _ _ _ _ _ HU); auto*.
      intro; discriminate.
-    forward~ (Heq T1 T2) as E.
-    rewrite <- (Hext T1) in E. rewrite eq1 in E.
-    rewrite <- (Hext T2) in E. rewrite eq2 in E.
     discriminate.
    rewrite size_pairs2_comm in Hsz.
    refine (unify_complete_nv _ _ HS0 HK0 eq2 eq1 WS _ _ _ _ HU); auto*.
@@ -2072,10 +2007,6 @@ Proof.
    intros; discriminate.
   refine (H _ _ _ _ _ _ _ _ _ _ _ _ HU); auto*.
   clear HU H; intro; intros.
-  forward~ (Heq T1 T2) as E.
-  rewrite <- (Hext T1) in E.
-  rewrite <- (Hext T2) in E.
-  rewrite eq1 in E; rewrite eq2 in E.
   inversions E.
   simpl in H; destruct H. inversions* H.
   destruct H. inversions* H.
