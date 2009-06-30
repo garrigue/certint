@@ -1067,6 +1067,100 @@ Proof.
   rewrite* trm_inst_nil.
 Qed.
 
+Require Import Relations.
+
+Fixpoint untyped (t:trm) : trm :=
+  match t with
+  | trm_let t1 t2 => trm_app (trm_abs (untyped t2)) (untyped t1)
+  | _ => t
+  end.
+
+Definition app_trm' t1 t2 :=
+  match t1 with
+  | trm_abs t => t ^^ t2
+  | _ => trm_app t1 t2
+  end.
+
+Definition app2trm' t args :=
+  List.fold_left app_trm' (List.map clos2trm args) t.
+
+Fixpoint stack2trm' t0 (l : list frame) {struct l} : trm :=
+  match l with
+  | nil => t0
+  | Frame benv args t :: rem =>
+    let t1 := trm_inst t (List.map clos2trm benv) in
+    let t2 := if is_bvar t0 then t1 else app_trm' t1 t0 in
+    stack2trm' (app2trm' t2 args) rem
+  end.
+
+Definition res2trm' res :=
+  match res with
+  | Result cl => clos2trm cl
+  | Inter l => stack2trm' trm_def l
+  end.
+
+Lemma eval_complete_rec : forall args benv t fl K T t',
+  list_forall clos_ok args ->
+  list_forall clos_ok benv ->
+  closed_n (length benv) t ->
+  list_forall frame_ok fl ->
+  let inst t := trm_inst t (List.map clos2trm benv) in
+  K ; E |Gc|=
+    stack2trm (app2trm (inst t) args) fl ~: T ->
+  clos_refl_trans _ red (inst t) (inst t') ->
+  forall h', exists h,
+    res2trm' (eval fenv h benv args t fl) =
+    res2trm' (eval fenv h' benv args t' fl).
+Proof.
+  introv Hargs. intros Hbenv Ht Hfl inst Typ Red.
+  gen_eq (inst t) as t1; gen_eq (inst t') as t1'.
+  subst inst; simpl.
+  gen args benv fl K T.
+  induction Red.
+    induction H; intros.
+         destruct t; try discriminate.
+           rewrite (trm_inst_n (clos2trm clos_def)) in H2;
+             [|rewrite* map_length].
+           rewrite map_nth in H2.
+           assert (clos_ok (nth n benv clos_def)).
+             apply* (list_forall_out Hbenv).
+             apply* nth_In. inversion* Ht.
+           set (cl := nth n benv clos_def) in *. clearbody cl.
+           inversions H3. discriminate.
+           simpl in H2.
+           clear -H2. elimtype False.
+           induction (List.map clos2trm cls) using rev_ind. discriminate.
+           unfold const_app in H2. rewrite fold_left_app in H2.
+           inversions H2.
+           clear -H0.
+           induction l using rev_ind. discriminate.
+           rewrite fold_left_app in H0; discriminate.
+         unfold trm_inst in H2; simpl in H2.
+         inversions H2; clear H2.
+         destruct h'; simpl.
+           rewrite <-H1.
+           exists 1; simpl.
+           rewrite* is_bvar_term.
+           unfold trm_inst at 1; rewrite <- H4. simpl.
+           unfold app2trm' at 2. simpl. reflexivity.
+         case_eq (trm2app t'); intros.
+           assert (trm2app t1 <> None).
+             unfold trm_inst, trm_open in H1.
+             destruct t'; try discriminate; destruct t1; try discriminate;
+               simpl in H1;
+               destruct n; try discriminate;
+               try solve [rewrite H1 in H0; destruct H0; inversion H0].
+
+
+Theorem eval_complete : forall K t t' T,
+  K ; E |Gc|= t ~: T ->
+  clos_refl_trans _ red t t' ->
+  value t' ->
+  exists h,
+    eval fenv h nil nil t nil = Result c /\
+    untyped t' = untyped (clos2trm cl).
+
+
 End Soundness.
 
 End Mk3.
