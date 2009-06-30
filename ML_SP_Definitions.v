@@ -208,7 +208,7 @@ Fixpoint trm_open_rec (k : nat) (u : trm) (t : trm) {struct t} : trm :=
 
 Definition trm_open t u := trm_open_rec 0 u t.
 
-Notation "{ k ~> u } t" := (trm_open_rec k u t) (at level 67).
+(* Notation "{ k ~> u } t" := (trm_open_rec k u t) (at level 67). *)
 Notation "t ^^ u" := (trm_open t u) (at level 67).
 Notation "t ^ x" := (trm_open t (trm_fvar x)).
 

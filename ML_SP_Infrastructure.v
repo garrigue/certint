@@ -189,7 +189,8 @@ Qed.
 (** Substitution on indices is identity on well-formed terms. *)
 
 Lemma trm_open_rec_core :forall t j v i u, i <> j ->
-  {j ~> v}t = {i ~> u}({j ~> v}t) -> t = {i ~> u}t.
+  trm_open_rec j v t = trm_open_rec i u (trm_open_rec j v t) ->
+  t = trm_open_rec i u t.
 Proof.
   induction t; introv Neq Equ;
   simpl in *; inversion* Equ; f_equal*.  
@@ -197,7 +198,7 @@ Proof.
 Qed.
 
 Lemma trm_open_rec : forall t u,
-  term t -> forall k, t = {k ~> u}t.
+  term t -> forall k, t = trm_open_rec k u t.
 Proof.
   induction 1; intros; simpl; f_equal*. 
   unfolds trm_open. pick_fresh x.

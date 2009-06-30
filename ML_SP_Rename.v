@@ -6,8 +6,7 @@
 Set Implicit Arguments.
 
 Require Import List Metatheory.
-Require Import ML_SP_Definitions ML_SP_Infrastructure.
-Require Import ML_SP_Soundness ML_SP_Unify.
+Require Import ML_SP_Definitions ML_SP_Unify.
 
 Module MkRename(Cstr:CstrIntf)(Const:CstIntf).
 

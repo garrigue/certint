@@ -46,7 +46,7 @@ Inductive closed_n : nat -> trm -> Prop :=
 Lemma trm_inst_rec_more : forall tl t1 t n,
   closed_n (S n + List.length tl) t ->
   list_forall term tl ->
-  {n~>t1}trm_inst_rec (S n) tl t = trm_inst_rec n (t1 :: tl) t.
+  trm_open_rec n t1 (trm_inst_rec (S n) tl t) = trm_inst_rec n (t1 :: tl) t.
 Proof.
   intros.
   remember (S n + length tl) as z.
@@ -404,7 +404,7 @@ Qed.
 
 Lemma trm_open_comm : forall i j u v t,
   i <> j -> term u -> term v ->
-  {i ~> u}({j ~> v}t) = {j ~> v}({i ~> u}t).
+  trm_open_rec i u (trm_open_rec j v t) = trm_open_rec j v (trm_open_rec i u t).
 Proof.
   intros.
   revert i j H.
