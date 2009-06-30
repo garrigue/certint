@@ -3,9 +3,8 @@
 * Jacques Garrigue, July 2008                                              *
 ***************************************************************************)
 
-Require Import Arith List Metatheory.
-Require Import ML_SP_Definitions ML_SP_Infrastructure Cardinal.
-Require Import ML_SP_Soundness ML_SP_Eval.
+Require Import Arith List Metatheory Cardinal.
+Require Import ML_SP_Definitions ML_SP_Eval.
 
 Set Implicit Arguments.
 
@@ -349,7 +348,7 @@ Qed.
 (* Decidability of membership *)
 
 Definition decidable (A : Type) (P : A -> Prop) :=
-  forall x, sumbool (P x) (~P x).
+  forall x, {P x}+{~P x}.
 
 Definition in_dec L : decidable (fun x => x \in L).
   intros L x.
@@ -1057,12 +1056,12 @@ Definition unify_vars_dep K x y S pairs :
   disjoint (dom S) {{x}} ->
   disjoint (dom S) {{y}} ->
   x <> y ->
-  sumor (sig (fun Kp:kenv*list(typ*typ) =>
+  {Kp:kenv*list(typ*typ) |
     unify_vars K x y = Some Kp /\
     let (K',l) := Kp in let S' := compose (x ~ typ_fvar y) S in
     is_subst S' /\ ok K' /\ size_pairs S' K' (l ++ pairs) <
-      size_pairs S K ((typ_fvar x,typ_fvar y)::pairs)))
-    (unify_vars K x y = None).
+      size_pairs S K ((typ_fvar x,typ_fvar y)::pairs)}
+   +{unify_vars K x y = None}.
 Proof.
   introv HS HK Dx Dy dxy.
   case_eq (unify_vars K x y); intros.
