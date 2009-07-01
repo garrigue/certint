@@ -1067,6 +1067,17 @@ Proof.
   rewrite* trm_inst_nil.
 Qed.
 
+Definition eval_restart h fl :=
+  match fl with
+  | nil => Inter fl
+  | Frame benv args t :: fl' =>
+    eval fenv h benv args t fl'
+  end.
+
+Lemma eval_restart_ok : forall h' fl' h benv args t fl,
+  eval fenv h benv args t fl = Inter fl' ->
+  eval fenv (h+h') benv args t fl = eval_restart h' fl'.
+
 Require Import Relations.
 
 Fixpoint untyped (t:trm) : trm :=

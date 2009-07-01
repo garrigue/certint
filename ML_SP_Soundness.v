@@ -679,8 +679,8 @@ Proof.
       assert (value t1). exists* n.
       exists* (t2 ^^ t1).
       exists* (trm_let t1' t2).
-  destruct~ IHTyp1 as [Val1 | [t1' Red1]]. 
-    destruct~ IHTyp2 as [Val2 | [t2' Red2]].
+  destruct~ IHTyp2 as [Val2 | [t2' Red2]].
+    destruct~ IHTyp1 as [Val1 | [t1' Red1]]. 
       use (typing_canonize Typ').
       remember (empty(A:=sch)) as E.
       remember (trm_app t1 t2) as t.
@@ -705,8 +705,8 @@ Proof.
       destruct* (H Xs); clear H.
       split*.
       destruct* (kenv_ok_concat_inv _ _ H0).
-      right; exists* (trm_app t1 t2').
-    right; exists* (trm_app t1' t2).
+      right; exists* (trm_app t1' t2).
+    right; exists* (trm_app t1 t2').
   left; exists* (Const.arity c).
   destruct (var_freshes L (length Ks)) as [Xs HXs].
   apply* (H1 Xs).

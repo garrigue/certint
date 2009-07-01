@@ -428,11 +428,11 @@ Inductive red : trm -> trm -> Prop :=
       red t1 t1' -> 
       red (trm_let t1 t2) (trm_let t1' t2)
   | red_app_1 : forall t1 t1' t2,
-      term t2 ->
+      value t2 ->
       red t1 t1' -> 
       red (trm_app t1 t2) (trm_app t1' t2)
   | red_app_2 : forall t1 t2 t2', 
-      value t1 ->
+      term t1 ->
       red t2 t2' ->
       red (trm_app t1 t2) (trm_app t1 t2').
                   
