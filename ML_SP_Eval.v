@@ -838,6 +838,19 @@ Qed.
 
 Hint Resolve term_const_app.
 
+Lemma clos2trm_const_eq : forall cl c tl,
+  clos2trm cl = const_app c tl ->
+  exists args, cl = clos_const c args /\ tl = List.map clos2trm args.
+Proof.
+  unfold const_app; intros.
+  destruct cl.
+    induction tl using rev_ind. discriminate.
+    rewrite fold_left_app in H; discriminate.
+  simpl in H.
+  destruct (const_app_eq _ _ _ _ H). subst.
+  exists* l.
+Qed.
+
 Theorem eval_sound_rec : forall h fl benv args K t T,
   list_forall clos_ok args ->
   list_forall clos_ok benv ->
@@ -1259,12 +1272,9 @@ Proof.
     destruct t; try discriminate; simpl.
       destruct (trm_inst_clos2trm _ _ Heqt1); try discriminate.
       destruct (nth n benv clos_def); try discriminate.
-      simpl in H. unfold const_app in H.
-      clear -H.
-      induction l0 using rev_ind.
-        inversions* H.
-      rewrite map_app in H; rewrite fold_left_app in H.
-      discriminate.
+      destruct (clos2trm_const_eq _ c nil (sym_equal H)) as [cl [eq1 eq2]].
+      inversions eq1.
+      destruct* cl; discriminate.
     inversions* Heqt1.
   destruct t; try discriminate.
     destruct (trm_inst_clos2trm _ _ Heqt1); try discriminate.
@@ -1300,6 +1310,28 @@ Proof.
   rewrite Eq1.
   esplit; split*.
   rewrite Eq1'. simpl. rewrite* Eq2'.
+Qed.
+
+Lemma value_const_app : forall c tl,
+  list_forall value tl ->
+  length tl <= Const.arity c ->
+  value (const_app c tl).
+Proof.
+  intros.
+  exists (Const.arity c - length tl).
+  induction tl using rev_ind. simpl. rewrite <- minus_n_O.
+    apply value_cst.
+  rewrite app_length. simpl.
+  unfold const_app; rewrite fold_left_app.
+  assert (value x) by apply* (list_forall_out H).
+  destruct H1.
+  apply* value_app.
+  rewrite app_length in H0; simpl in H0.
+  replace (S (Const.arity c - (length tl +1))) with (Const.arity c - length tl)
+    by omega.
+  apply IHtl.
+    apply list_forall_in; intros; apply* (list_forall_out H).
+  omega.
 Qed.
 
 Lemma eval_complete_rec : forall args benv t fl K T t',
@@ -1374,9 +1406,34 @@ Proof.
      unfold trm_inst in Hc; simpl in Hc.
      inversions Hc; clear H0 Hc.
      destruct (eval_value _ _ H1) as [h4 [cl4 [eq4 eq4']]].
-     exists (S h4 + 1); simpl.
+     assert (value (const_app c tl)).
+       apply* value_const_app.
+         apply list_forall_in; intros; apply* (list_forall_out Htl).
+       clear -Hlen.
+       rewrite app_length in Hlen. simpl in *; omega.
+     rewrite H3 in H0.
+     destruct (eval_value _ _ H0) as [h1 [cl1 [eq1 eq1']]].
+     unfold trm_inst in eq1'.
+     rewrite <- H3 in eq1'.
+     exists (S h4 + 0); simpl.
      rewrite <- eval_restart_ok'. rewrite eq4.
+Lemma eval_cst_args2 : forall c benv args cl t,
+  length args = Const.arity c ->
+  eval fenv h benv nil t nil = Result 0 (clos_const c args) ->
+  eval fenv (h+1) benv (cl::nil) t nil =
+    Result 0 (SH.reduce_clos
+Proof.
+  simpl; intros.
+  destruct (trm2app t).
+    destruct p. discriminate.
+  destruct* args.
+  inversions H0.
+  rewrite H2. simpl.
+  destruct* (le_lt_dec (Const.arity c) (length args)).
+  elimtype False; simpl in *; omega.
+Qed.
      simpl.
+
      unfold app2trm'. simpl.
      rewrite <- H.
      rewrite eq4'.
