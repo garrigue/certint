@@ -1922,15 +1922,20 @@ Proof.
                    inversions Eqargs; clear Eqargs.
                      inversions Eqfl; clear Eqfl.
                        simpl.
-                       rewrite 
-                     puts (For_all2_nth _ n0 Eqbenv).
+                       rewrite H1.
+                       rewrite* (@equiv_cl (clos_abs t0 l0) (clos_abs t1 l1)).
+                       rewrite <- R3; rewrite <- R2.
+Lemma equiv_cl_nth : forall n cls1 cls2,
+  list_forall2 equiv_clos cls1 cls2 ->
+  equiv_clos (nth n cls1 clos_def) (nth n cls2 clos_def).
+Proof.
+  intros; revert n; induction H; intros. simpl*.
+  destruct n; simpl*.
+Qed.
+                       apply* equiv_cl_nth.
                      clear Typ Typ'.
-                     destruct f; destruct f0; simpl.
-                     simpl in Eqfl. 
-                     destruct Eqfl as [[Eqt1 [Eqapp1 Eqbenv1]] Eqfl].
-                     simpl in Eqbenv1, Eqapp1, Eqt1.
-                     inversions Hfl.
-                     inversions H5.
+                     destruct a; destruct b; simpl.
+                     inversions H2; clear H2.
                      puts (clos_ok_nth n Hbenv).
                      rewrite R1 in H2.
                      apply* res2trm'_equiv.
