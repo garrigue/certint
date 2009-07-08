@@ -581,17 +581,6 @@ Module SndHyp.
       end
     end.
 
-  Lemma clos_ok_def : clos_ok clos_def.
-  Proof.
-    unfold clos_def.
-    constructor. auto.
-    unfold trm_def.
-    simpl.
-    constructor.
-    auto.
-  Qed.
-  Hint Resolve clos_ok_def.
-
   Lemma reduce_clos_sound :
     forall c cls (CLS : list_for_n clos_ok (S(Const.arity c)) cls) K E T,
       K; E |Gc|= const_app c (List.map clos2trm cls) ~: T ->
