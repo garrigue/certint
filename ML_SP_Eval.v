@@ -2239,36 +2239,41 @@ Proof.
        simpl.
        rewrite <- eval_restart_ok'. rewrite eq4.
        unfold eval_restart.
-       exists 1; simpl.
+       exists 0; simpl.
        destruct t3; try discriminate; simpl.
          destruct (inst_clos2trm _ _ H4).
            case_rewrite R1 (nth n benv clos_def).
-             simpl in *.
+             repeat (constructor; auto).
+             simpl.
+             rewrite <- H1.
+             inversions H2.
+             unfold trm_open.
              unfold trm_inst in H2.
-             unfold trm_inst at 1.
-             assert (clos_ok (clos_abs t l)) by (rewrite* <- R1).
-             rewrite <- trm_inst_rec_more.
-                 simpl in H2. inversion H2. rewrite <- H6; clear H6.
-                 rewrite* eq4'.
-               inversions H3.
-               rewrite* map_length.
+             puts (clos_ok_nth n Hbenv).
+             rewrite R1 in H3.
              inversions H3.
-             apply* (@list_forall_map _ clos_ok _ term clos2trm).
+             rewrite* trm_inst_rec_more.
+                 unfold inst, trm_inst. simpl.
+                 rewrite* eq4'.
+               rewrite* map_length.
+             apply* list_forall_map.
            simpl in H2.
            elimtype False.
            puts (is_const_app c (List.map clos2trm l)).
            rewrite <- H2 in H3; discriminate.
          discriminate.
-       unfold trm_inst at 1.
-       simpl in H4.
-       inversions H4.
-       unfold trm_open.
-       rewrite eq4'.
+       repeat (constructor; simpl*).
+       rewrite <- H1.
+       unfold inst, trm_inst.
+       simpl in *.
        rewrite* <- trm_inst_rec_more.
+           inversions H4.
+           unfold trm_open.
+           rewrite* eq4'.
          inversions Ht.
          inversions H6.
          rewrite* map_length.
-       apply* (@list_forall_map _ clos_ok _ term clos2trm).
+       apply* list_forall_map.
       destruct t; try discriminate.
         destruct (inst_clos2trm _ _ H2).
           puts (clos_ok_nth n Hbenv).
@@ -2279,30 +2284,25 @@ Proof.
             discriminate.
           rewrite fold_left_app in H3; discriminate.
         discriminate.
-      unfold trm_inst in H2; simpl in H2.
       inversions H2; clear H2.
       destruct (eval_value _ _ H0) as [h4 [cl4 [eq4 eq4']]].
       exists (S h4 + 1); exists 0; simpl.
       rewrite <- eval_restart_ok'. rewrite eq4.
       simpl.
-      unfold trm_inst at 1.
+      repeat (constructor; simpl*).
       rewrite <- H1.
-      rewrite <- (app2trm'_equiv _ _ _ Eqargs).
-      rewrite <- (stack2trm'_equiv _ _ Hfl Eqfl).
-      rewrite* <- trm_inst_rec_more.
-          unfold trm_open.
-          rewrite eq4'.
-          reflexivity.
+      unfold trm_open.
+      rewrite* trm_inst_rec_more.
+          unfold inst, trm_inst; simpl.
+          rewrite* eq4'.
         inversions Ht.
         rewrite* map_length.
-      apply* (@list_forall_map _ clos_ok _ term clos2trm).
-     gen vl. intros [Hlen Htl] H.
+      apply* list_forall_map.
+     generalize vl. intros [Hlen Htl].
      induction tl using rev_ind. discriminate.
      clear IHtl.
      poses Hc H0.
-     unfold const_app in Hc.
-     rewrite fold_left_app in Hc.
-     simpl in Hc. fold (const_app c tl) in Hc.
+     rewrite const_app_app in Hc. simpl in Hc.
      destruct t; try discriminate.
        destruct (inst_clos2trm _ _ Hc); try discriminate.
        puts (clos_ok_nth n Hbenv).
@@ -2315,7 +2315,6 @@ Proof.
        rewrite H7 in H5.
        elimtype False; omega.
      assert (value x) by apply* (list_forall_out Htl).
-     unfold trm_inst in Hc; simpl in Hc.
      inversions Hc; clear H0 Hc.
      destruct (eval_value _ _ H1) as [h4 [cl4 [eq4 eq4']]].
      assert (value (const_app c tl)).
@@ -2329,12 +2328,10 @@ Proof.
      assert (E1: eval fenv (S h4 + h2) benv args (trm_app t1 t2) nil =
               Inter (Frame benv (cls2 ++ cl4 :: args) t1' :: nil)).
        simpl. rewrite <- eval_restart_ok'. rewrite* eq4.
-     exists ((S h4 + h2)+1); exists 0.
+     remember 1 as h.
+     exists ((S h4 + h2)+S h).
      rewrite <- eval_restart_ok'. rewrite E1.
      simpl.
-     rewrite <- H.
-     rewrite <- (app2trm'_equiv _ _ _ Eqargs).
-     rewrite <- (stack2trm'_equiv _ _ Hfl Eqfl).
      case_eq (trm2app t1'); introv R1.
        destruct t1'; try discriminate.
      case_eq (cls2 ++ cl4 :: args); introv R2.
@@ -2352,11 +2349,10 @@ Proof.
        destruct (typing_stack2trm_inv _ _ Typ) as [T' [K' Typ']].
          apply* is_bvar_term.
          apply* term_app2trm.
-         unfold const_app. rewrite fold_left_app. simpl.
-         constructor.
-           apply value_regular.
-           unfold const_app in H3; rewrite* H3.
-         auto.
+         rewrite const_app_app. simpl.
+         constructor; auto.
+         apply value_regular.
+         rewrite* H3.
        destruct (typing_app2trm_inv _ _ Typ') as [T'' Typ''].
          unfold const_app. rewrite fold_left_app. auto.
        destruct (cut_ok _ l1 R4). subst l0.
@@ -2406,7 +2402,13 @@ Proof.
        rewrite map_app. rewrite Eq1''.
        simpl List.map. rewrite eq4'.
        intros Hcls [Ok5 [Ok4 Eqred]].
-       rewrite (ProofIrrelevance.proof_irrelevance _ (conj Hlen Htl) Hcls).
+       rewrite (ProofIrrelevance.proof_irrelevance _ vl Hcls) in H.
+       puts (trans_equal Eqred H).
+       destruct c2.
+         subst h.
+
+ repeat (constructor; simpl; auto).
+           rewrite <- H. refine (trans_equal _ Eqred). simpl.
        unfold trm_inst in Eqred.
        rewrite <- Eqred.
        destruct c2; simpl.
