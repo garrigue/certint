@@ -6,15 +6,14 @@
 Set Implicit Arguments.
 
 Require Import List Arith Metatheory.
-Require Import ML_SP_Definitions ML_SP_Infrastructure.
-Require Import ML_SP_Soundness ML_SP_Eval ML_SP_Unify ML_SP_Rename.
+Require Import ML_SP_Definitions ML_SP_Unify.
 
 Module MkInfer(Cstr:CstrIntf)(Const:CstIntf).
 
-Module Rename := MkRename(Cstr)(Const).
-Import Rename.
+Module Unify := MkUnify(Cstr)(Const).
 Import Unify.
 Import MyEval.
+Import Rename.
 Import Sound.
 Import Infra.
 Import Defs.
@@ -22,10 +21,9 @@ Import Metatheory_Env.Env.
 
 Module Mk2(Delta:DeltaIntf).
 
-Module Rename2 := Rename.Mk2(Delta).
-Import Rename2.
-Import MyEval2.Sound2.
-Import Sound.
+Module MyEval2 := MyEval.Mk2(Delta).
+Import MyEval2.Rename2.
+Import Sound2.
 Import JudgInfra.
 Import Judge.
 Import Unify.

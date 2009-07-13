@@ -4,8 +4,7 @@
 ***************************************************************************)
 
 Require Import Arith List Metatheory.
-Require Import ML_SP_Definitions ML_SP_Infrastructure Cardinal.
-Require Import ML_SP_Soundness ML_SP_Eval.
+Require Import ML_SP_Definitions Cardinal ML_SP_Eval.
 
 Set Implicit Arguments.
 
@@ -13,6 +12,7 @@ Module MkUnify(Cstr:CstrIntf)(Const:CstIntf).
 
 Module MyEval := MkEval(Cstr)(Const).
 Import MyEval.
+Import Rename.
 Import Sound.
 Import Infra.
 Import Defs.

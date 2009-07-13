@@ -6,7 +6,7 @@
 Set Implicit Arguments.
 Require Import Lib_FinSet Metatheory List ListSet Arith.
 Require Import ML_SP_Eval.
-(* Require Import ML_SP_Unify ML_SP_Rename ML_SP_Inference. *)
+(* Require Import ML_SP_Inference. *)
 
 Section ListSet.
   Variable A : Type.
@@ -163,10 +163,10 @@ End Const.
 
 (* Module Infer := MkInfer(Cstr)(Const).
 Import Infer.
-Import Rename.Unify.MyEval. *)
+Import Unify.MyEval. *)
 Module MyEval := MkEval(Cstr)(Const).
 Import MyEval.
-Import Sound.Infra.
+Import Rename.Sound.Infra.
 Import Defs.
 
 Module Delta.
@@ -338,10 +338,10 @@ Module Delta.
 End Delta.
 
 (* Module Infer2 := Infer.Mk2(Delta).
-Import Infer2.Rename2.MyEval2. *)
+Import Infer2.MyEval2. *)
 Module MyEval2 := Mk2(Delta).
 Import MyEval2.
-Import Sound2.
+Import Rename2.Sound2.
 Import JudgInfra.
 Import Judge.
 
@@ -373,8 +373,7 @@ Module SndHyp.
     destruct (IHtl (typ_arrow S T) H4).
     exists (x0 ++ S :: nil).
     rewrite fold_right_app; simpl.
-    split*. apply* For_all2_app.
-    simpl. split*.
+    split*.
   Qed.
 
   Lemma map_nth : forall (A B:Set) d1 d2 (f:A->B) k l,
@@ -623,8 +622,49 @@ Module SndHyp.
     destruct l0; destruct c; simpl*.
   Qed.
 
+  Lemma reduce_clos_regular : forall c cls cl' cls',
+    reduce_clos c cls = (cl', cls') ->
+    list_forall clos_ok cls ->
+    list_forall clos_ok (cl' :: cls').
+  Proof.
+    destruct c; simpl; intros.
+      inversions* H.
+    puts (clos_ok_nth (length l) H0).
+    destruct (nth (length l) cls clos_def); inversions H1.
+      inversions* H.
+    destruct c.
+      destruct l0.
+        inversions* H.
+      destruct l0.
+        destruct (index eq_var_dec 0 v l).
+          puts (clos_ok_nth n0 H0).
+          inversions* H.
+        inversions* H.
+      inversions* H.
+    inversions* H.
+  Qed.
+
+  Lemma reduce_clos_ext : forall c args args',
+    list_forall2 equiv_clos args args' ->
+    let (cl,arg) := reduce_clos c args in
+    let (cl',arg') := reduce_clos c args' in
+    equiv_clos cl cl' /\ list_forall2 equiv_clos arg arg'.
+  Proof.
+    destruct c; simpl; intros. split*.
+    puts (equiv_cl_nth (length l) H).
+    inversions* H0.
+    destruct c.
+      inversions H3. auto.
+      inversions H5.
+        destruct (index eq_var_dec 0 v l).
+          split*.
+          apply* equiv_cl_nth.
+        auto.
+      auto.
+    auto.
+  Qed.
 End SndHyp.
 
-(* Module Sound3 := Infer2.Rename2.MyEval2.Mk3(SndHyp). *)
+(* Module Sound3 := Infer2.MyEval2.Mk3(SndHyp). *)
 Module Sound3 := MyEval2.Mk3(SndHyp).
 

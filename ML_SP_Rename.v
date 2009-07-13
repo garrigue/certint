@@ -6,20 +6,20 @@
 Set Implicit Arguments.
 
 Require Import List Metatheory.
-Require Import ML_SP_Definitions ML_SP_Unify.
+Require Import ML_SP_Definitions ML_SP_Soundness.
 
 Module MkRename(Cstr:CstrIntf)(Const:CstIntf).
 
-Module Unify := MkUnify(Cstr)(Const).
-Import Unify.MyEval.Sound.
+Module Sound := MkSound(Cstr)(Const).
+Import Sound.
 Import Infra.
 Import Defs.
 Import Metatheory_Env.Env.
 
 Module Mk2(Delta:DeltaIntf).
 
-Module MyEval2 := Unify.MyEval.Mk2(Delta).
-Import MyEval2.Sound2.
+Module Sound2 := Sound.Mk2(Delta).
+Import Sound2.
 Import JudgInfra.
 Import Judge.
 
