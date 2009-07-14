@@ -210,63 +210,6 @@ Definition trm2app t :=
   | _             => None
   end.
 
-Section Forall2.
-Variables A B : Set.
-Variable P : A -> B -> Prop.
-
-Inductive list_forall2 : list A -> list B -> Prop :=
-  | list_forall2_nil : list_forall2 nil nil
-  | list_forall2_cons : forall a b la lb,
-      P a b ->
-      list_forall2 la lb ->
-      list_forall2 (a::la) (b::lb).
-
-Hint Constructors list_forall2.
-
-Lemma list_forall2_sound : forall la lb,
-  list_forall2 la lb -> For_all2 P la lb.
-Proof.
-  induction 1; simpl*.
-Qed.
-
-Lemma list_forall2_complete : forall la lb,
-  For_all2 P la lb -> list_forall2 la lb.
-Proof.
-  induction la; intros; destruct lb; try contradiction; auto.
-  simpl in H; destruct* H.
-Qed.
-
-Lemma list_forall2_app : forall l1 l2 l3 l4,
-  list_forall2 l1 l3 -> list_forall2 l2 l4 ->
-  list_forall2 (l1 ++ l2) (l3 ++ l4).
-Proof.
-  intros until 1.
-  revert l2 l4.
-  induction H; simpl*.
-Qed.
-
-Lemma list_forall2_app_inv : forall l2 l4 l1 l3,
-  list_forall2 (l1 ++ l2) (l3 ++ l4) ->
-  length l1 = length l3 ->
-  list_forall2 l1 l3 /\ list_forall2 l2 l4.
-Proof.
-  induction l1; intros; destruct l3; try discriminate; simpl in *.
-    auto.
-  inversions H.
-  destruct* (IHl1 l3).
-Qed.
-
-Lemma list_forall2_length : forall l1 l2,
-  list_forall2 l1 l2 -> length l1 = length l2.
-Proof.
-  induction 1; simpl*.
-Qed.
-End Forall2.
-
-Hint Constructors list_forall2.
-Hint Resolve list_forall2_sound list_forall2_app list_forall2_length.
-Hint Immediate list_forall2_complete.
-
 Lemma clos_ok_nth : forall benv n0,
   list_forall clos_ok benv ->
   clos_ok (nth n0 benv clos_def).
@@ -311,14 +254,6 @@ Qed.
 Definition equiv_frame f1 f2 :=
   inst (frm_trm f1) (frm_benv f1) = inst (frm_trm f2) (frm_benv f2) /\
   list_forall2 equiv_clos (frm_app f1) (frm_app f2).
-
-Lemma list_forall2_refl : forall (A:Set) (P:A->A->Prop),
-  (forall x, P x x) ->
-  forall l, list_forall2 P l l.
-Proof.
-  induction l; simpl*.
-Qed.
-Hint Resolve list_forall2_refl.
 
 Lemma equiv_clos_refl : forall cl, equiv_clos cl cl.
 Proof.

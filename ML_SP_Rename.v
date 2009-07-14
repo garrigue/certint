@@ -490,7 +490,7 @@ Proof.
   (* Var *)
   apply* typing_var.
   destruct H2; split*.
-  apply (For_all2_imp _ (well_kinded K') _ _ H5).
+  apply* list_forall2_imp.
   intros.
   inversions* H6.
   (* Let *)
@@ -506,7 +506,7 @@ Proof.
   (* Cst *)
   apply* typing_cst.
   destruct H1; split; intuition.
-  apply (For_all2_imp _ (well_kinded K') _ _ H4).
+  apply* list_forall2_imp.
   intros.
   inversions* H5.
   (* Gc *)
@@ -618,15 +618,15 @@ Qed.
 
 Lemma well_kinded_combine : forall K Ks' Xs Us,
   fresh (dom K) (length Ks') Xs ->
-  For_all2 (well_kinded
+  list_forall2 (well_kinded
     (K & combine Xs (List.map (fun k => kind_open k (Us ++ typ_fvars Xs)) Ks')))
    (List.map (fun k => kind_open k (Us ++ typ_fvars Xs)) Ks') (typ_fvars Xs).
 Proof.
   intros.
   assert (fresh (dom (empty(A:=kind))) (length Ks') Xs) by auto.
-  use (For_all2_binds _ _ _ H0).
+  use (list_forall2_binds _ _ _ H0).
   simpl in H1.
-  unfold typ_fvars; apply* For_all2_map.
+  unfold typ_fvars; apply* list_forall2_map.
   simpl; intros.
   destruct x; try apply wk_any.
   simpl.
@@ -642,7 +642,7 @@ Lemma well_kinded_combine2 : forall K U Ks Us Ks' Xs,
   typ_body U Ks ->
   typ_body U (Ks ++ Ks') ->
   fresh (dom K) (length Ks') Xs ->
-  For_all2
+  list_forall2
     (well_kinded (K & combine Xs (kinds_open Ks' (Us ++ typ_fvars Xs))))
     (kinds_open (Ks ++ Ks') (Us ++ typ_fvars Xs))
     (Us ++ typ_fvars Xs).
@@ -651,7 +651,7 @@ Proof.
   destruct PI as [HT HW].
   simpl in *.
   unfold kinds_open. rewrite map_app.
-  apply For_all2_app.
+  apply list_forall2_app.
     unfold kinds_open in HW.
     (* destruct HS0 as [L' HF]. *)
     destruct (var_freshes {} (length Ks)) as [Xs' Fr'].
@@ -667,17 +667,17 @@ Proof.
     clear HeqVs.
     gen Vs; induction Ks; destruct Vs; intros; simpl in *; try discriminate.
       auto.
-    destruct HW; inversion H0; inversions H; clear H H0.
-    split*. clear IHKs.
-    clear -H2 Fr Fr' H1 H8.
+    inversions HW; inversion H0; inversions H; clear HW H H0.
+    constructor; auto.
+    clear -Fr Fr' H1 H5 H8.
     destruct a; simpl in *; try apply wk_any.
-    destruct t; inversions H2; clear H2.
+    destruct t; inversions H5; clear H5.
     eapply wk_kind.
       apply* binds_concat_fresh.
       apply* notin_combine_fresh.
-      use (binds_dom H4).
+      use (binds_dom H3).
     destruct c as [kc kv kr kh]; simpl in *.
-    destruct H5; split*. clear H.
+    destruct H4; split*. clear H.
     intros.
     apply H0; clear H0.
     unfold All_kind_types in H8; simpl in *.

@@ -283,7 +283,7 @@ Definition kinds_open Ks Us :=
 
 Definition proper_instance K Ks Us :=
   types (length Ks) Us /\
-  For_all2 (well_kinded K) (kinds_open Ks Us) Us.
+  list_forall2 (well_kinded K) (kinds_open Ks Us) Us.
 
 Definition kinds_open_vars Ks Xs :=
   List.combine Xs (kinds_open Ks (typ_fvars Xs)).

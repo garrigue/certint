@@ -120,8 +120,8 @@ Proof.
   destruct* H0 as [TM FM]; split*.
   rewrite <- list_map_id.
   rewrite <- (list_map_id (kinds_open Ks Us)).
-  apply (For_all2_map _ (well_kinded (K&K'&K'')) _ _ _ _
-                        (well_kinded_weaken K K' K'' H) FM).
+  apply* list_forall2_map.
+  intros; apply* well_kinded_weaken.
 Qed.
 
 Lemma typing_weaken_kinds : forall gc K K' K'' E t T,
@@ -176,7 +176,7 @@ Proof.
   destruct* PI.
   split. rewrite map_length. apply* typ_subst_type_list.
   rewrite* <- kinds_subst_open.
-  apply* For_all2_map. intros.
+  apply* list_forall2_map. intros.
   apply* well_kinded_subst.
 Qed.
 
@@ -329,7 +329,7 @@ Definition has_scheme_vars gc L (K:kenv) E t M := forall Xs,
 
 Definition has_scheme gc K E t M := forall Vs,
   types (sch_arity M) Vs ->
-  For_all2 (well_kinded K) (kinds_open (sch_kinds M) Vs) Vs ->
+  list_forall2 (well_kinded K) (kinds_open (sch_kinds M) Vs) Vs ->
   K ; E |gc|= t ~: (M ^^ Vs).
 
 (* ********************************************************************** *)
@@ -358,7 +358,7 @@ Lemma well_subst_open_vars : forall (K:kenv) Vs (Ks:list kind) Xs,
   fresh (fv_in kind_fv K) (length Ks) Xs ->
   fresh (kind_fv_list Ks) (length Xs) Xs ->
   types (length Xs) Vs ->
-  For_all2 (well_kinded K) (kinds_open Ks Vs) Vs ->
+  list_forall2 (well_kinded K) (kinds_open Ks Vs) Vs ->
   well_subst (K & kinds_open_vars Ks Xs) K (combine Xs Vs).
 Proof.
   introv Fr Fr' TV WK.
@@ -384,8 +384,9 @@ Proof.
   puts (binds_map (kind_subst (combine Xs Vs)) B).
   simpl in H; do 2 rewrite map_combine in H.
   rewrite list_map_comp in H.
-  apply* (For_all2_get (well_kinded K) Xs).
-    rewrite* (list_map_ext Ks _ _ (kind_subst_open_combine _ _ Fr' TV)).
+  refine (list_forall2_get (P:=well_kinded K) Xs _ H _).
+    instantiate (1:=Vs).
+    rewrite* <- (list_map_ext Ks _ _ (kind_subst_open_combine _ _ Fr' TV)).
   simpl; case_eq (get x (combine Xs Vs)); intros. auto.
   elim (get_contradicts _ _ _ _ Bk0 H0); auto.
 Qed.

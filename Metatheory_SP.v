@@ -243,105 +243,125 @@ End Forall.
 Hint Resolve list_forall_apply.
 
 
-Section For_all2.
-  Fixpoint For_all2 (A B:Set) (P:A->B->Prop) (l1:list A) (l2:list B)
-    {struct l1} : Prop :=
-    match (l1, l2) with
-    | (nil,nil)   => True
-    | (a::l1',b::l2') => P a b /\ For_all2 P l1' l2'
-    | _ => False
-    end.
+Section Forall2.
 
-  Variables A B : Set.
-  Variable P : A -> B -> Prop.
+Inductive list_forall2 (A B:Set) (P:A->B->Prop) : list A -> list B -> Prop :=
+  | list_forall2_nil : list_forall2 P nil nil
+  | list_forall2_cons : forall a b la lb,
+      P a b ->
+      list_forall2 P la lb ->
+      list_forall2 P (a::la) (b::lb).
 
-  Lemma For_all2_In: forall x l1 l2,
-    In x l1 -> For_all2 P l1 l2 -> exists y:B, In y l2 /\ P x y.
-  Proof.
-    induction l1; destruct l2; intros; try contradiction.
-    simpl in *; destruct H; destruct H0.
-      exists b; intuition.
-      rewrite* <- H.
-    destruct (IHl1 l2 H H1).
-    exists* x0.
-  Qed.
+Hint Constructors list_forall2.
 
-  Lemma For_all2_get : forall Xs Ys Zs x y z,
-    For_all2 P Ys Zs ->
-    binds x y (combine Xs Ys) ->
-    binds x z (combine Xs Zs) ->
-    P y z.
-  Proof.
-    induction Xs; destruct Ys; destruct Zs; simpl; intros; auto*;
-      try discriminate.
-    unfold binds in H0, H1; simpl in H0, H1.
-    destruct (eq_var_dec x a).
-    generalize (proj1 H). inversion H0; inversion* H1.
-    apply* (IHXs _ _ _ _ _ (proj2 H) H0 H1).
-  Qed.
+Variables A B : Set.
+Variable P : A -> B -> Prop.
 
-  Lemma For_all2_app : forall l2 l2' l1 l1',
-    For_all2 P l1 l1' ->
-    For_all2 P l2 l2' ->
-    For_all2 P (l1 ++ l2) (l1' ++ l2').
-  Proof.
-    induction l1; destruct l1'; simpl; intros; try contradiction.
-      auto.
-    destruct H; split*.
-  Qed.
+Lemma list_forall2_app : forall l1 l2 l3 l4,
+  list_forall2 P l1 l3 -> list_forall2 P l2 l4 ->
+  list_forall2 P (l1 ++ l2) (l3 ++ l4).
+Proof.
+  intros until 1.
+  revert l2 l4.
+  induction H; simpl*.
+Qed.
 
-  Lemma For_all2_nth : forall d1 d2 n l1 l2,
-    For_all2 P l1 l2 -> n < length l1 ->
-    P (nth n l1 d1) (nth n l2 d2).
-  Proof.
-    induction n; intros; destruct* l1; try elim (lt_n_O _ H0);
-      destruct l2; try elim H; simpl; intros; auto.
-    apply* IHn. apply* lt_S_n.
-  Qed.
+Lemma list_forall2_app_inv : forall l2 l4 l1 l3,
+  list_forall2 P (l1 ++ l2) (l3 ++ l4) ->
+  length l1 = length l3 ->
+  list_forall2 P l1 l3 /\ list_forall2 P l2 l4.
+Proof.
+  induction l1; intros; destruct l3; try discriminate; simpl in *.
+    auto.
+  inversions H.
+  destruct* (IHl1 l3).
+Qed.
 
-  Lemma For_all2_length : forall l1 l2,
-    For_all2 P l1 l2 -> length l1 = length l2.
-  Proof.
-    induction l1; intros; destruct* l2; try elim H.
-    intros; simpl. rewrite* (IHl1 l2).
-  Qed.
+Lemma list_forall2_length : forall l1 l2,
+  list_forall2 P l1 l2 -> length l1 = length l2.
+Proof.
+  induction 1; simpl*.
+Qed.
 
-  Lemma For_all2_rev : forall l1 l2,
-    For_all2 P l1 l2 ->  For_all2 P (rev l1) (rev l2).
-  Proof.
-    induction l1; intros; destruct l2; simpl in *; auto; try elim H.
-    clear H; intros.
-    apply* For_all2_app.
-    simpl. auto.
-  Qed.
+Lemma list_forall2_In: forall x l1 l2,
+  In x l1 -> list_forall2 P l1 l2 -> exists y:B, In y l2 /\ P x y.
+Proof.
+  induction 2. elim H.
+  simpl in H; destruct H.
+    subst*.
+  destruct* IHlist_forall2.
+Qed.
 
-  Variables C D : Set.
-  Variable P' : A -> B -> Prop.
+Lemma list_forall2_get : forall Xs Ys Zs x y z,
+  list_forall2 P Ys Zs ->
+  binds x y (combine Xs Ys) ->
+  binds x z (combine Xs Zs) ->
+  P y z.
+Proof.
+  intros.
+  gen Xs; induction H; intros; destruct Xs; try discriminate.
+  simpl in *.
+  env_fix.
+  binds_cases H1; binds_cases H2;
+    try solve [elim Fr; apply S.singleton_2; reflexivity].
+    apply* IHlist_forall2.
+  subst*.
+Qed.
 
-  Lemma For_all2_map:
-    forall (P1:C->D->Prop) f g l1 l2,
-      (forall x y, P x y -> P1 (f x) (g y)) ->
-      For_all2 P l1 l2 ->
-      For_all2 P1 (List.map f l1) (List.map g l2).
-  Proof.
-    clear P'.
-    induction l1; introv; elim l2; simpls; auto*.
-  Qed.
+Lemma list_forall2_nth : forall d1 d2 n l1 l2,
+  list_forall2 P l1 l2 -> n < length l1 ->
+  P (nth n l1 d1) (nth n l2 d2).
+Proof.
+  induction n; intros; inversions H; try elim (lt_n_O _ H0).
+    auto.
+  simpl. apply* IHn. simpl in H0; auto with arith.
+Qed.
 
-  Lemma For_all2_imp : forall l1 l2,
-    For_all2 P l1 l2 ->
-    (forall x y, P x y -> P' x y) ->
-    For_all2 P' l1 l2.
-  Proof.
-    induction l1; destruct l2; simpl; intros; intuition.
-  Qed.
+Lemma list_forall2_rev : forall l1 l2,
+  list_forall2 P l1 l2 ->  list_forall2 P (rev l1) (rev l2).
+Proof.
+  induction 1; simpl. auto.
+  apply* list_forall2_app.
+Qed.
 
-  Lemma For_all2_map_iff1 : forall (f:C->A) l1 l2,
-    For_all2 P (List.map f l1) l2 <-> For_all2 (fun x => P (f x)) l1 l2.
-  Proof.
-    induction l1; destruct l2; simpl; intuition; destruct* (IHl1 l2).
-  Qed.
-End For_all2.
+Variables C D : Set.
+Variable P' : A -> B -> Prop.
+
+Lemma list_forall2_map: forall (P1:C->D->Prop) f g l1 l2,
+  list_forall2 P l1 l2 ->
+  (forall x y, P x y -> P1 (f x) (g y)) ->
+  list_forall2 P1 (List.map f l1) (List.map g l2).
+Proof.
+  clear P'.
+  induction 1; simpls; auto*.
+Qed.
+
+Lemma list_forall2_imp : forall l1 l2,
+  list_forall2 P l1 l2 ->
+  (forall x y, P x y -> P' x y) ->
+  list_forall2 P' l1 l2.
+Proof.
+  induction 1; simpls; auto*.
+Qed.
+
+Lemma For_all2_map_iff1 : forall (f:C->A) l1 l2,
+  list_forall2 P (List.map f l1) l2 <-> list_forall2 (fun x => P (f x)) l1 l2.
+Proof.
+  induction l1; destruct l2; simpl; split; intros; inversions H; auto;
+    destruct* (IHl1 l2).
+Qed.
+
+Lemma list_forall2_refl : forall (P:A->A->Prop),
+  (forall x, P x x) ->
+  forall l, list_forall2 P l l.
+Proof.
+  induction l; simpl*.
+Qed.
+End Forall2.
+
+Hint Constructors list_forall2.
+Hint Resolve list_forall2_app list_forall2_length
+  list_forall2_map list_forall2_imp list_forall2_refl.
 
 Section Cut.
   Variable A:Set.
@@ -890,14 +910,15 @@ Proof.
   use (IHXs _ _ (proj2 H)).
 Qed.
 
-Lemma For_all2_binds : forall (A:Set) (Ks':list A) Xs K,
+Lemma list_forall2_binds : forall (A:Set) (Ks':list A) Xs K,
   fresh (dom K) (length Ks') Xs ->
-  For_all2 (fun y x => binds x y (combine Xs Ks' & K)) Ks' Xs.
+  list_forall2 (fun y x => binds x y (combine Xs Ks' & K)) Ks' Xs.
 Proof.
   induction Ks'; destruct Xs; simpl; intros; try contradiction.
     auto.
   destruct H.
-  split. apply* binds_concat_fresh. apply (binds_head v a (combine Xs Ks')).
+  constructor.
+    apply* binds_concat_fresh. apply (binds_head v a (combine Xs Ks')).
   replace (((v, a) :: combine Xs Ks') & K)
     with (combine Xs Ks' & (v ~ a & K)).
     apply IHKs'. rewrite dom_concat. simpl. auto.
