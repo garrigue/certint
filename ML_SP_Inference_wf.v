@@ -6,14 +6,14 @@
 Set Implicit Arguments.
 
 Require Import List Arith Metatheory Cardinal.
-Require Import ML_SP_Definitions ML_SP_Rename_wf.
+Require Import ML_SP_Definitions ML_SP_Unify_wf.
 
 Module MkInfer(Cstr:CstrIntf)(Const:CstIntf).
 
-Module Rename := MkRename(Cstr)(Const).
-Import Rename.
+Module Unify := MkUnify(Cstr)(Const).
 Import Unify.
 Import MyEval.
+Import Rename.
 Import Sound.
 Import Infra.
 Import Defs.
@@ -21,10 +21,9 @@ Import Metatheory_Env.Env.
 
 Module Mk2(Delta:DeltaIntf).
 
-Module Rename2 := Rename.Mk2(Delta).
-Import Rename2.
-Import MyEval2.Sound2.
-Import Sound.
+Module MyEval2 := MyEval.Mk2(Delta).
+Import MyEval2.Rename2.
+Import Sound2.
 Import JudgInfra.
 Import Judge.
 Import Unify.
@@ -937,9 +936,9 @@ Proof.
   clear H2.
   destruct HUs.
   gen Ks; induction H3; destruct Ks; simpl; intros; try discriminate. auto.
-  split*.
-  destruct HW.
-  clear IHlist_forall H6.
+  inversions HW.
+  constructor; auto.
+  clear IHlist_forall H10.
   rewrite* <- kind_subst_open.
   apply* well_kinded_subst.
 Qed.
@@ -1253,7 +1252,7 @@ Qed.
 Lemma well_kinded_open_vars : forall S K Ks Xs,
   fresh (dom S \u dom K) (length Ks) Xs ->
   env_prop type S ->
-  For_all2
+  list_forall2
      (well_kinded (map (kind_subst S) (K & kinds_open_vars Ks Xs)))
      (kinds_open (List.map (kind_subst S) Ks) (typ_fvars Xs))
      (typ_fvars Xs).
@@ -2252,7 +2251,7 @@ Proof.
         unfold kinds_open in HWk. rewrite map_map in HWk.
         puts (binds_map (fun k => kind_open (kind_subst S k) Us) Bk).
         simpl in H0; rewrite map_combine in H0.
-        use (For_all2_get _ _ _ _ HWk H0 H).
+        use (list_forall2_get _ HWk H0 H).
       puts (fv_in_spec sch_fv _ _ _ (binds_in B)).
       puts (fv_in_spec kind_fv _ _ _ (binds_in Bk)).
       puts (fv_in_sch Xs M0).
@@ -2330,7 +2329,7 @@ Lemma in_kind_fv : forall k Ks,
   In k Ks -> kind_fv k << kind_fv_list Ks.
 Proof.
   induction Ks; simpl; intros; intros y Hy. elim H.
-  destruct H. subst. auto.
+  destruct H. subst*.
   use (IHKs H _ Hy).
 Qed.
 
@@ -2355,7 +2354,7 @@ Proof.
   replace (sch_kinds M')
     with (List.map (kind_subst (combine Ys Us)) (sch_kinds M')).
     rewrite* <- kinds_subst_open.
-    apply* For_all2_map.
+    apply* list_forall2_map.
     intros.
     inversions H. simpl*.
     binds_cases H0.
@@ -2939,30 +2938,30 @@ Proof.
   remember Ts as Us.
   pattern Us at 2 in H2. rewrite HeqUs in H2.
   clear HeqUs; gen Ts; induction K1; intros. elim (in_empty H0).
-  simpl in *. destruct* Ts.
-  destruct H2.
+  simpl in *.
+  inversions H2; clear H2.
   sets_solve.
-    inversions H. destruct a; try discriminate. elim (in_empty H2).
+    inversions H3. destruct a; try discriminate. elim (in_empty H).
     puts (kind_fv_open_min Us a).
     puts (kind_entails_fv (Some k') (Some k)).
     simpl in H6; rewrite H0 in H6.
-    puts (H6 H5); sets_solve.
-    puts (fv_in_spec kind_fv _ _ _ (binds_in H3) Hin0).
-    rewrite fv_in_concat in H4.
+    puts (H6 H4); sets_solve.
+    puts (fv_in_spec kind_fv _ _ _ (binds_in H1) Hin0).
+    rewrite fv_in_concat in H2.
     sets_solve.
     unfold kinds_open_vars in H7.
     rewrite fv_in_kind_fv_list in H7.
-      clear -Fr H2 H7.
+      clear -Fr H H7.
       set (n := length K2) in Fr.
       clearbody n; gen n; induction K2; intros. elim (in_empty H7).
       simpl in *.
       sets_solve.
-        puts (kind_fv_open _ _ H).
+        puts (kind_fv_open _ _ H0).
         sets_solve.
-        rewrite typ_fv_typ_fvars in H1.
+        rewrite typ_fv_typ_fvars in H2.
         elimtype False.
         destruct* (fresh_disjoint _ _ _ Fr y).
-      use (IHK2 H _ Fr).
+      use (IHK2 H0 _ Fr).
     unfold kinds_open. rewrite map_length.
     rewrite <- (fresh_length _ _ _ Fr).
     reflexivity.
@@ -3254,7 +3253,7 @@ Proof.
       unfold M0; simpl.
       rewrite kindl_generalize_reopen.
       unfold typ_fvars; repeat rewrite map_app.
-      apply For_all2_app.
+      apply list_forall2_app.
       assert (incl e2 K1). intro; intros.
         destruct (split_env_ok _ R1); auto.
         destruct (split_env_ok _ R2); [auto*|].
@@ -3269,7 +3268,7 @@ Proof.
       induction l; destruct l0; simpl; intros; auto;
         try discriminate.
       inversion H0; clear H0.
-      split.
+      constructor.
         fold (typ_subst (compose XYs S1) (typ_fvar a)).
         puts (well_subst_extends Hext WS). fold K1 in H; clear WS.
         assert (well_kinded K1 k (typ_fvar a)).
@@ -3330,7 +3329,7 @@ Proof.
       apply* (IHl l0).
      unfold l0'. clearbody Bs XYs S1. clear.
      induction Bs; simpl. auto.
-     split*.
+     constructor; auto.
      apply list_forall_app.
        puts (split_combine _ R3).
        apply* env_prop_list_forall.
@@ -3429,7 +3428,7 @@ Proof.
         split*.
         destruct H1. destruct H1.
         split*.
-        apply* For_all2_imp.
+        apply* list_forall2_imp.
         intros. apply* well_kinded_weaken.
         rewrite <- dom_concat in H0.
         apply* ok_kinds_open_vars.
@@ -3733,7 +3732,7 @@ Proof.
         puts (binds_map (fun k => kind_open k Us) Bk).
         simpl in H3; rewrite map_combine in H3.
         unfold kinds_open in Wk.
-        puts (For_all2_get _ _ _ _ Wk H3 H).
+        puts (list_forall2_get _ Wk H3 H).
         rewrite* kind_subst_fresh.
         rewrite H2; intro; auto.
         rewrite H2; rewrite* <- (fresh_length _ _ _ Fr).

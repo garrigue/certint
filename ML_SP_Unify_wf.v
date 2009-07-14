@@ -12,6 +12,7 @@ Module MkUnify(Cstr:CstrIntf)(Const:CstIntf).
 
 Module MyEval := MkEval(Cstr)(Const).
 Import MyEval.
+Import Rename.
 Import Sound.
 Import Infra.
 Import Defs.
