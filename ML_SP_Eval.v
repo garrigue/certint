@@ -102,6 +102,8 @@ Inductive clos_ok : clos -> Prop :=
 Reset clos_ok_ind.
 Hint Constructors clos_ok.
 
+Hint Extern 1 (clos_ok ?x) => solve [list_forall_find clos_ok x].
+
 Section ClosOkInd.
 Variable  P : clos -> Prop.
 Hypothesis Habs : forall t cls,
@@ -144,6 +146,14 @@ Qed.
 Record frame : Set := Frame
   { frm_benv : list clos; frm_app : list clos; frm_trm : trm }.
 
+Inductive frame_ok : frame -> Prop :=
+  frm_ok : forall benv app trm,
+    list_forall clos_ok benv ->
+    list_forall clos_ok app ->
+    closed_n (length benv) trm ->
+    frame_ok (Frame benv app trm).
+Hint Constructors frame_ok.
+
 Definition is_bvar t :=
   match t with trm_bvar _ => true | _ => false end.
 
@@ -171,6 +181,11 @@ Inductive eval_res : Set :=
   | Result : nat -> clos -> eval_res
   | Inter  : list frame -> eval_res.
 
+Inductive result_ok : eval_res -> Prop :=
+  | rok_R : forall n cl, clos_ok cl -> result_ok (Result n cl)
+  | rok_I : forall fl, list_forall frame_ok fl -> result_ok (Inter fl).
+Hint Constructors result_ok.
+
 Definition res2trm res :=
   match res with
   | Result _ cl => clos2trm cl
@@ -189,6 +204,12 @@ Proof.
   auto.
 Qed.
 Hint Resolve clos_ok_def.
+
+Lemma clos_ok_nil : forall c, clos_ok (clos_const c nil).
+Proof.
+  intros; constructor; auto. simpl; omega.
+Qed.
+Hint Resolve clos_ok_nil.
 
 Definition trm2clos (benv : list clos) (fenv : env clos) t :=
   match t with
@@ -528,14 +549,6 @@ Qed.
 
 Hint Resolve term_closed_n.
 
-Inductive frame_ok : frame -> Prop :=
-  frm_ok : forall benv app trm,
-    list_forall clos_ok benv ->
-    list_forall clos_ok app ->
-    closed_n (length benv) trm ->
-    frame_ok (Frame benv app trm).
-Hint Constructors frame_ok.
-
 Lemma cln_app_trm : forall n t1 t2,
   closed_n n t1 -> closed_n n t2 -> closed_n n (app_trm t1 t2).
 Proof.
@@ -583,8 +596,6 @@ Proof.
   rewrite map_app; rewrite fold_left_app; simpl.
   puts (list_forall_out H0).
   apply* term_app_trm.
-  apply IHcl.
-  apply* list_forall_in.
 Qed.
 
 Hint Resolve term_app_trm term_app2trm.
@@ -782,6 +793,53 @@ Proof.
   apply* is_abs_app2trm.
 Qed.
 
+Lemma trm_inst_n : forall d benv n,
+  closed_n (length benv) (trm_bvar n) ->
+  trm_inst (trm_bvar n) benv = nth n benv d.
+Proof.
+  unfold trm_inst; simpl; intros.
+  rewrite <- minus_n_O.
+  inversions H.
+  apply* nth_indep.
+Qed.  
+
+Lemma inst_n : forall benv n,
+  closed_n (length benv) (trm_bvar n) ->
+  inst (trm_bvar n) benv = clos2trm (nth n benv clos_def).
+Proof.
+  intros; unfold inst.
+  rewrite <- map_nth.
+  apply trm_inst_n.
+  rewrite* map_length.
+Qed.
+
+Lemma term_const_app : forall c cls,
+  list_forall clos_ok cls ->
+  term (const_app c (List.map clos2trm cls)).
+Proof.
+  intros.
+  unfold const_app.
+  cut (term (trm_cst c)).
+    generalize (trm_cst c).
+    induction H; simpl*.
+  auto.
+Qed.
+
+Hint Resolve term_const_app.
+
+Lemma clos2trm_const_eq : forall cl c tl,
+  clos2trm cl = const_app c tl ->
+  exists args, cl = clos_const c args /\ tl = List.map clos2trm args.
+Proof.
+  unfold const_app; intros.
+  destruct cl.
+    induction tl using rev_ind. discriminate.
+    rewrite fold_left_app in H; discriminate.
+  simpl in H.
+  destruct (const_app_eq _ _ _ _ H). subst.
+  exists* l.
+Qed.
+
 Section Soundness.
 
 Variables (E:Defs.env) (fenv:env clos).
@@ -792,6 +850,252 @@ Hypothesis fenv_ok : env_prop clos_ok fenv /\
   forall x M, binds x M E ->
     exists cl, binds x cl fenv /\
       has_scheme_vars Gc {} empty empty (clos2trm cl) M.
+
+Lemma clos_ok_get : forall v,
+  clos_ok match get v fenv with
+          | Some x => x
+          | None => clos_def
+          end.
+Proof.
+  intros.
+  case_eq (get v fenv); intros.
+    apply (proj1 fenv_ok _ _ (binds_in H)).
+  auto.
+Qed.
+Hint Resolve clos_ok_get.
+
+Lemma trm2clos_regular : forall benv t,
+  list_forall clos_ok benv ->
+  closed_n (length benv) t ->
+  clos_ok (trm2clos benv fenv t).
+Proof.
+  intros; destruct t; simpl*.
+  inversions* H0.
+Qed.
+Hint Resolve trm2clos_regular.
+
+Definition eval_restart h fl res :=
+  match res with
+  | Inter nil => Inter fl
+  | Inter (Frame benv args t :: fl') =>
+    eval fenv h benv args t (fl' ++ fl)
+  | Result h' c =>
+      match fl with
+      | nil => Result (h'+h) c
+      | Frame benv' app' t :: rem => eval fenv (h'+h) benv' (c::app') t rem
+      end
+  end.
+
+Lemma eval_restart_ok : forall h' fl' h benv args t fl,
+  eval_restart h' fl' (eval fenv h benv args t fl) =
+  eval fenv (h+h') benv args t (fl++fl').
+Proof.
+  induction h; simpl; intros. auto.
+  destruct (trm2app t).
+    destruct p. apply* IHh.
+  destruct args.
+    destruct* fl.
+    destruct f.
+    simpl*.
+  destruct* (trm2clos benv fenv t).
+  destruct (length l + length (c::args)).
+    destruct* fl. destruct f. simpl*.
+  destruct (le_lt_dec (Const.arity c0) n); simpl.
+    destruct (l ++ c :: args).
+      destruct (SH.reduce_clos c0 nil).
+      destruct* c1.
+    destruct (cut (Const.arity c0) l1).
+    destruct (SH.reduce_clos c0 (c1 :: l2)).
+    destruct* c2.
+  destruct* fl.
+  destruct f. simpl*.
+Qed.
+    
+Lemma eval_restart_ok' : forall h' fl' h benv args t,
+  eval_restart h' fl' (eval fenv h benv args t nil) =
+  eval fenv (h+h') benv args t fl'.
+Proof.
+  intros.
+  apply* eval_restart_ok.
+Qed.
+
+Lemma eval_restart_ok'' : forall h' h benv args t fl,
+  eval_restart h' nil (eval fenv h benv args t fl) =
+  eval fenv (h+h') benv args t fl.
+Proof.
+  intros.
+  rewrite eval_restart_ok. rewrite* <- app_nil_end.
+Qed.
+
+Lemma eval_restart_step : forall h c,
+  eval_restart 1 nil (Result h c) = Result (S h) c.
+Proof.
+  intros; simpl. rewrite plus_comm; reflexivity.
+Qed.
+
+Inductive eval_cont : clos -> list frame -> eval_res -> Prop :=
+  | Eval_nil : forall cl,
+      eval_cont cl nil (Result 0 cl)
+  | Eval_Frame : forall cl benv args t fl,
+      eval_cont cl (Frame benv args t :: fl)
+                    (Inter (Frame benv (cl::args) t :: fl)).
+Hint Constructors eval_cont.
+
+Lemma eval_cont_ok : forall cl fl,
+  eval_cont cl fl (eval_restart 0 fl (Result 0 cl)).
+Proof.
+  intros; simpl.
+  destruct fl. auto.
+  destruct f; auto.
+Qed.
+
+Definition reduce_clos c args args' :=
+  match SH.reduce_clos c args with
+  | (clos_const c' args'', args3) =>
+    Frame nil (args''++args3++args') (trm_cst c')
+  | (clos_abs t1 benv, args3) =>
+    Frame benv (args3++args') (trm_abs t1)
+  end.
+
+Inductive eval_spec : eval_res -> eval_res -> Prop :=
+  | Eval_trmapp : forall benv args t t1 t2 fl,
+      trm2app t = Some (t1, t2) ->
+      eval_spec (Inter (Frame benv args t :: fl))
+        (Inter (Frame benv nil t2 :: Frame benv args t1 :: fl))
+  | Eval_abs : forall benv args t t1 benv' cl fl,
+      trm2app t = None ->
+      trm2clos benv fenv t = clos_abs t1 benv' ->
+      eval_spec (Inter (Frame benv (cl::args) t :: fl))
+        (Inter (Frame (cl::benv') args t1 :: fl))
+  | Eval_abs' : forall benv t t1 benv' fl r,
+      trm2app t = None ->
+      trm2clos benv fenv t = clos_abs t1 benv' ->
+      eval_cont (clos_abs t1 benv') fl r ->
+      eval_spec (Inter (Frame benv nil t :: fl)) r
+  | Eval_const : forall benv args t c cls1 cls2 cls3 fl,
+      trm2app t = None ->
+      trm2clos benv fenv t = clos_const c cls1 ->
+      cls1 ++ args = cls2 ++ cls3 ->
+      length cls1 <= Const.arity c ->
+      length cls2 = S(Const.arity c) ->
+      eval_spec (Inter (Frame benv args t :: fl))
+        (Inter (reduce_clos c cls2 cls3 :: fl))
+  | Eval_const' : forall benv args t c cls1 fl r,
+      trm2app t = None ->
+      trm2clos benv fenv t = clos_const c cls1 ->
+      length (cls1 ++ args) <= Const.arity c ->
+      eval_cont (clos_const c (cls1++args)) fl r ->
+      eval_spec (Inter (Frame benv args t :: fl)) r
+  | Eval_stop : forall n cl,
+      eval_spec (Result n cl) (Result (S n) cl)
+  | Eval_error : eval_spec (Inter nil) (Inter nil).
+
+Hint Constructors eval_cont eval_spec.
+
+Lemma eval_spec_ok : forall r,
+  result_ok r ->
+  eval_spec r (eval_restart 1 nil r).
+Proof.
+  induction 1; simpl.
+    rewrite plus_comm; simpl*.
+  induction H as [|fl f Hfl IH [benv args t Hbenv Hargs Ht]]. auto.
+  rewrite <- app_nil_end.
+  case_eq (trm2app t); introv R1.
+    destruct* p.
+  poses Ht2 (trm2clos_regular Hbenv Ht).
+  destruct args.
+    case_rewrite R2 (trm2clos benv fenv t).
+      apply* Eval_abs'.
+      destruct* fl.
+      destruct* f0.
+    apply* Eval_const'; rewrite <- app_nil_end.
+      inversion* Ht2.
+    destruct* fl.
+    destruct* f0.
+  case_rewrite R2 (trm2clos benv fenv t).
+    auto.
+  case_eq (length l + length (c::args)); introv R3.
+    destruct l; discriminate.
+  destruct (le_lt_dec (Const.arity c0) n); simpl.
+    case_eq (l++c::args); introv R4.
+      destruct l; discriminate.
+    case_eq (cut (Const.arity c0) l1); introv R5.
+    assert (Const.arity c0 <= length l1). 
+      puts (f_equal (@length _) R4).
+      simpl in H. rewrite app_length in H. omega.
+    destruct (cut_ok _ H R5).
+    subst.
+    replace (c1::l2++l3) with ((c1::l2)++l3) in R4 by reflexivity.
+    assert (length l <= Const.arity c0).
+      clear IH.
+      assert (clos_ok (clos_const c0 l)).
+        rewrite <- R2.
+        destruct t; try discriminate; simpl*.
+      inversions* H1.
+    puts (Eval_const benv (c::args) t _ _ fl R1 R2 R4 H1 (f_equal S H0)).
+    unfold reduce_clos in H2.
+    case_rewrite R6 (SH.reduce_clos c0 (c1::l2)).
+    destruct* c2.
+  apply* Eval_const'.
+    unfold lt in l0.
+    rewrite <- R3 in l0.
+    rewrite* app_length.
+  destruct* fl.
+  destruct* f0.
+Qed.
+
+Lemma eval_spec_ok' : forall r r',
+  eval_spec r r' ->
+  r' = eval_restart 1 nil r.
+Proof.
+  induction 1; simpl; try rewrite H; try rewrite H0;
+    repeat rewrite <- app_nil_end; auto.
+  (* clos *)
+  inversions* H1.
+  (* const *)
+  puts (f_equal (@length _) H1).
+  do 2 rewrite app_length in H4.
+  destruct args.
+    rewrite <- app_nil_end in H1.
+    elimtype False.
+    simpl in H4; omega.
+  case_eq (length cls1 + length (c0::args)); introv R1.
+    destruct cls1; discriminate.
+  simpl in *.
+  destruct (le_lt_dec (Const.arity c) n); try solve [elimtype False; omega].
+  simpl.
+  rewrite H1.
+  destruct cls2. discriminate.
+  simpl.
+  simpl in H3. inversions H3; clear H3.
+  case_eq (cut (length cls2) (cls2 ++ cls3)); introv R2.
+  assert (length cls2 <= length (cls2 ++ cls3)).
+    rewrite app_length; omega.
+  destruct (cut_ok _ H3 R2).
+  assert (l0 = cls2 /\ l1 = cls3).
+    clear -H5 H7; gen l0.
+    induction cls2; destruct l0; simpl; intros; try discriminate. auto.
+    inversions H7.
+    destruct* (IHcls2 l0).
+    split; congruence.
+  destruct H8; subst.
+  unfold reduce_clos.
+  destruct (SH.reduce_clos c (c1 :: cls2)).
+  destruct* c2.
+  (* const' *)
+  destruct args.
+    rewrite <- app_nil_end in *.
+    inversions* H2.
+  case_eq (length cls1 + length (c0::args)); introv R1.
+    destruct cls1; discriminate.
+  destruct (le_lt_dec (Const.arity c) n); simpl.
+    elimtype False.
+    rewrite <- app_length in R1.
+    omega.
+  inversions* H2.
+  (* stop *)
+  apply f_equal2; auto; omega.
+Qed.
 
 Lemma concat_empty : forall (A:Set) (K:env A), empty & K = K.
 Proof. intros; symmetry; apply (app_nil_end K). Qed.
@@ -819,26 +1123,6 @@ Proof.
   apply* kenv_ok_concat.
   rewrite* dom_kinds_open_vars.
   apply* fresh_disjoint.
-Qed.
-
-Lemma trm_inst_n : forall d benv n,
-  closed_n (length benv) (trm_bvar n) ->
-  trm_inst (trm_bvar n) benv = nth n benv d.
-Proof.
-  unfold trm_inst; simpl; intros.
-  rewrite <- minus_n_O.
-  inversions H.
-  apply* nth_indep.
-Qed.  
-
-Lemma inst_n : forall benv n,
-  closed_n (length benv) (trm_bvar n) ->
-  inst (trm_bvar n) benv = clos2trm (nth n benv clos_def).
-Proof.
-  intros; unfold inst.
-  rewrite <- map_nth.
-  apply trm_inst_n.
-  rewrite* map_length.
 Qed.
 
 Lemma retypable_clos : forall benv t,
@@ -890,100 +1174,27 @@ Lemma clos_ok_trm : forall benv K t T,
 Proof.
   intros.
   destruct t; simpl*; try discriminate.
-    inversions H1; try discriminate.
-    destruct (proj2 fenv_ok _ _ H6) as [cl [B Typ]].
-    rewrite* B.
-   inversions* H0.
-  constructor; auto.
-  simpl; omega.
-Qed.
-
-Lemma term_const_app : forall c cls,
-  list_forall clos_ok cls ->
-  term (const_app c (List.map clos2trm cls)).
-Proof.
-  intros.
-  unfold const_app.
-  cut (term (trm_cst c)).
-    generalize (trm_cst c).
-    induction H; simpl*.
-  auto.
-Qed.
-
-Hint Resolve term_const_app.
-
-Lemma clos2trm_const_eq : forall cl c tl,
-  clos2trm cl = const_app c tl ->
-  exists args, cl = clos_const c args /\ tl = List.map clos2trm args.
-Proof.
-  unfold const_app; intros.
-  destruct cl.
-    induction tl using rev_ind. discriminate.
-    rewrite fold_left_app in H; discriminate.
-  simpl in H.
-  destruct (const_app_eq _ _ _ _ H). subst.
-  exists* l.
-Qed.
-
-Inductive result_ok : eval_res -> Prop :=
-  | rok_R : forall n cl, clos_ok cl -> result_ok (Result n cl)
-  | rok_I : forall fl, list_forall frame_ok fl -> result_ok (Inter fl).
-
-Hint Constructors result_ok.
-
-Lemma clos_ok_get : forall v,
-  clos_ok match get v fenv with
-          | Some x => x
-          | None => clos_def
-          end.
-Proof.
-  intros.
-  case_eq (get v fenv); intros.
-    apply (proj1 fenv_ok _ _ (binds_in H)).
-  auto.
-Qed.
-Hint Resolve clos_ok_get.
-
-Lemma clos_ok_nil : forall c, clos_ok (clos_const c nil).
-Proof.
-  intros; constructor; auto. simpl; omega.
-Qed.
-Hint Resolve clos_ok_nil.
-
-Ltac list_forall_find P l :=
-  match goal with
-  | H: list_forall P ?l1 |- _ =>
-    match l1 with context[l] => apply* (list_forall_out H) end
-  end.
-
-Ltac list_forall_solve :=
-  match goal with
-  | |- list_forall ?P ?l =>
-    apply list_forall_in; intros; list_forall_find P l
-  | |- list_forall ?P (?l1++?l2) =>
-    let a := fresh "a" in let H := fresh "Hin" in
-    apply list_forall_in; intros a H;
-    destruct (in_app_or _ _ _ H);
-      [list_forall_find P l1 | list_forall_find P l2]
-  | |- list_forall ?P (?a :: ?l) =>
-    let x := fresh "x" in let H := fresh "Hin" in
-    apply list_forall_in; intros x H; simpl in H;
-    destruct H; [subst x; list_forall_find P a | list_forall_find P l]
-  end.
-
-Hint Extern 1 (list_forall _ _) => solve [list_forall_solve].
-
-Hint Extern 1 (clos_ok ?x) => solve [list_forall_find clos_ok x].
-
-Lemma trm2clos_regular : forall benv t,
-  list_forall clos_ok benv ->
-  closed_n (length benv) t ->
-  clos_ok (trm2clos benv fenv t).
-Proof.
-  intros; destruct t; simpl*.
   inversions* H0.
 Qed.
-Hint Resolve trm2clos_regular.
+
+Lemma eval_regular1 : forall r r',
+  result_ok r ->
+  eval_spec r r' ->
+  result_ok r'.
+Proof.
+  induction 1; intros.
+    inversions* H0.
+  induction H.
+    inversions* H0.
+  clear IHlist_forall.
+  destruct x as [benv args t].
+  inversions H1.
+  inversions H0.
+  (* app *)
+  destruct t; try discriminate.
+    inversions H10.
+    inversions* H7.
+    repeat (constructor; auto).
 
 Lemma eval_regular : forall h fl benv args t,
   list_forall clos_ok args ->
@@ -994,6 +1205,14 @@ Lemma eval_regular : forall h fl benv args t,
 Proof.
   induction h; introv; intros Hargs Hbenv Ht Hfl.
     simpl*.
+  replace (S h) with (h+1) by omega.
+  rewrite <- eval_restart_ok''.
+  assert (result_ok (eval fenv h benv args t fl)) by auto*.
+  poses Hr (eval_spec_ok H).
+  set (r := eval fenv h benv args t fl) in *. clearbody r.
+  clear -H Hr.
+  
+  unfold eval_restart in Hr. rewrite app_
   simpl.
   case_eq (trm2app t); intros.
     destruct p.
@@ -1239,57 +1458,6 @@ Proof.
   apply* eval_sound_rec.
   unfold app2trm; simpl.
   unfold inst; rewrite* trm_inst_nil.
-Qed.
-
-Definition eval_restart h fl res :=
-  match res with
-  | Inter nil => Inter fl
-  | Inter (Frame benv args t :: fl') =>
-    eval fenv h benv args t (fl' ++ fl)
-  | Result h' c =>
-      match fl with
-      | nil => Result (h'+h) c
-      | Frame benv' app' t :: rem => eval fenv (h'+h) benv' (c::app') t rem
-      end
-  end.
-
-Lemma eval_restart_ok : forall h' fl' h benv args t fl,
-  eval_restart h' fl' (eval fenv h benv args t fl) =
-  eval fenv (h+h') benv args t (fl++fl').
-Proof.
-  induction h; simpl; intros. auto.
-  destruct (trm2app t).
-    destruct p. apply* IHh.
-  destruct args.
-    destruct* fl.
-    destruct f.
-    simpl*.
-  destruct* (trm2clos benv fenv t).
-  destruct (length l + length (c::args)).
-    destruct* fl. destruct f. simpl*.
-  destruct (le_lt_dec (Const.arity c0) n); simpl.
-    destruct (l ++ c :: args).
-      destruct (SH.reduce_clos c0 nil).
-      destruct* c1.
-    destruct (cut (Const.arity c0) l1).
-    destruct (SH.reduce_clos c0 (c1 :: l2)).
-    destruct* c2.
-  destruct* fl.
-  destruct f. simpl*.
-Qed.
-    
-Lemma eval_restart_ok' : forall h' fl' h benv args t,
-  eval_restart h' fl' (eval fenv h benv args t nil) =
-  eval fenv (h+h') benv args t fl'.
-Proof.
-  intros.
-  apply* eval_restart_ok.
-Qed.
-
-Lemma eval_restart_step : forall h c,
-  eval_restart 1 nil (Result h c) = Result (S h) c.
-Proof.
-  intros; simpl. rewrite plus_comm; reflexivity.
 Qed.
 
 Require Import Relations.
@@ -1619,170 +1787,6 @@ Proof.
 Qed.
 Hint Resolve equiv_trm_abs.
 
-Inductive eval_cont : clos -> list frame -> eval_res -> Prop :=
-  | Eval_nil : forall cl,
-      eval_cont cl nil (Result 0 cl)
-  | Eval_Frame : forall cl benv args t fl,
-      eval_cont cl (Frame benv args t :: fl)
-                    (Inter (Frame benv (cl::args) t :: fl)).
-Hint Constructors eval_cont.
-
-Lemma eval_cont_ok : forall cl fl,
-  eval_cont cl fl (eval_restart 0 fl (Result 0 cl)).
-Proof.
-  intros; simpl.
-  destruct fl. auto.
-  destruct f; auto.
-Qed.
-
-Definition reduce_clos c args args' :=
-  match SH.reduce_clos c args with
-  | (clos_const c' args'', args3) =>
-    Frame nil (args''++args3++args') (trm_cst c')
-  | (clos_abs t1 benv, args3) =>
-    Frame benv (args3++args') (trm_abs t1)
-  end.
-
-Inductive eval_spec : eval_res -> eval_res -> Prop :=
-  | Eval_trmapp : forall benv args t t1 t2 fl,
-      trm2app t = Some (t1, t2) ->
-      eval_spec (Inter (Frame benv args t :: fl))
-        (Inter (Frame benv nil t2 :: Frame benv args t1 :: fl))
-  | Eval_abs : forall benv args t t1 benv' cl fl,
-      trm2app t = None ->
-      trm2clos benv fenv t = clos_abs t1 benv' ->
-      eval_spec (Inter (Frame benv (cl::args) t :: fl))
-        (Inter (Frame (cl::benv') args t1 :: fl))
-  | Eval_abs' : forall benv t t1 benv' fl r,
-      trm2app t = None ->
-      trm2clos benv fenv t = clos_abs t1 benv' ->
-      eval_cont (clos_abs t1 benv') fl r ->
-      eval_spec (Inter (Frame benv nil t :: fl)) r
-  | Eval_const : forall benv args t c cls1 cls2 cls3 fl,
-      trm2app t = None ->
-      trm2clos benv fenv t = clos_const c cls1 ->
-      cls1 ++ args = cls2 ++ cls3 ->
-      length cls1 <= Const.arity c ->
-      length cls2 = S(Const.arity c) ->
-      eval_spec (Inter (Frame benv args t :: fl))
-        (Inter (reduce_clos c cls2 cls3 :: fl))
-  | Eval_const' : forall benv args t c cls1 fl r,
-      trm2app t = None ->
-      trm2clos benv fenv t = clos_const c cls1 ->
-      length (cls1 ++ args) <= Const.arity c ->
-      eval_cont (clos_const c (cls1++args)) fl r ->
-      eval_spec (Inter (Frame benv args t :: fl)) r
-  | Eval_stop : forall n cl,
-      eval_spec (Result n cl) (Result (S n) cl)
-  | Eval_error : eval_spec (Inter nil) (Inter nil).
-
-Hint Constructors eval_cont eval_spec.
-
-Lemma eval_spec_ok : forall r,
-  result_ok r ->
-  eval_spec r (eval_restart 1 nil r).
-Proof.
-  induction 1; simpl.
-    rewrite plus_comm; simpl*.
-  induction H as [|fl f Hfl IH [benv args t Hbenv Hargs Ht]]. auto.
-  rewrite <- app_nil_end.
-  case_eq (trm2app t); introv R1.
-    destruct* p.
-  poses Ht2 (trm2clos_regular Hbenv Ht).
-  destruct args.
-    case_rewrite R2 (trm2clos benv fenv t).
-      apply* Eval_abs'.
-      destruct* fl.
-      destruct* f0.
-    apply* Eval_const'; rewrite <- app_nil_end.
-      inversion* Ht2.
-    destruct* fl.
-    destruct* f0.
-  case_rewrite R2 (trm2clos benv fenv t).
-    auto.
-  case_eq (length l + length (c::args)); introv R3.
-    destruct l; discriminate.
-  destruct (le_lt_dec (Const.arity c0) n); simpl.
-    case_eq (l++c::args); introv R4.
-      destruct l; discriminate.
-    case_eq (cut (Const.arity c0) l1); introv R5.
-    assert (Const.arity c0 <= length l1). 
-      puts (f_equal (@length _) R4).
-      simpl in H. rewrite app_length in H. omega.
-    destruct (cut_ok _ H R5).
-    subst.
-    replace (c1::l2++l3) with ((c1::l2)++l3) in R4 by reflexivity.
-    assert (length l <= Const.arity c0).
-      clear IH.
-      assert (clos_ok (clos_const c0 l)).
-        rewrite <- R2.
-        destruct t; try discriminate; simpl*.
-      inversions* H1.
-    puts (Eval_const benv (c::args) t _ _ fl R1 R2 R4 H1 (f_equal S H0)).
-    unfold reduce_clos in H2.
-    case_rewrite R6 (SH.reduce_clos c0 (c1::l2)).
-    destruct* c2.
-  apply* Eval_const'.
-    unfold lt in l0.
-    rewrite <- R3 in l0.
-    rewrite* app_length.
-  destruct* fl.
-  destruct* f0.
-Qed.
-
-Lemma eval_spec_ok' : forall r r',
-  eval_spec r r' ->
-  r' = eval_restart 1 nil r.
-Proof.
-  induction 1; simpl; try rewrite H; try rewrite H0;
-    repeat rewrite <- app_nil_end; auto.
-  (* clos *)
-  inversions* H1.
-  (* const *)
-  puts (f_equal (@length _) H1).
-  do 2 rewrite app_length in H4.
-  destruct args.
-    rewrite <- app_nil_end in H1.
-    elimtype False.
-    simpl in H4; omega.
-  case_eq (length cls1 + length (c0::args)); introv R1.
-    destruct cls1; discriminate.
-  simpl in *.
-  destruct (le_lt_dec (Const.arity c) n); try solve [elimtype False; omega].
-  simpl.
-  rewrite H1.
-  destruct cls2. discriminate.
-  simpl.
-  simpl in H3. inversions H3; clear H3.
-  case_eq (cut (length cls2) (cls2 ++ cls3)); introv R2.
-  assert (length cls2 <= length (cls2 ++ cls3)).
-    rewrite app_length; omega.
-  destruct (cut_ok _ H3 R2).
-  assert (l0 = cls2 /\ l1 = cls3).
-    clear -H5 H7; gen l0.
-    induction cls2; destruct l0; simpl; intros; try discriminate. auto.
-    inversions H7.
-    destruct* (IHcls2 l0).
-    split; congruence.
-  destruct H8; subst.
-  unfold reduce_clos.
-  destruct (SH.reduce_clos c (c1 :: cls2)).
-  destruct* c2.
-  (* const' *)
-  destruct args.
-    rewrite <- app_nil_end in *.
-    inversions* H2.
-  case_eq (length cls1 + length (c0::args)); introv R1.
-    destruct cls1; discriminate.
-  destruct (le_lt_dec (Const.arity c) n); simpl.
-    elimtype False.
-    rewrite <- app_length in R1.
-    omega.
-  inversions* H2.
-  (* stop *)
-  apply f_equal2; auto; omega.
-Qed.
-
 Inductive equiv_result : eval_res -> eval_res -> Prop :=
   | Equiv_result : forall n cl1 cl2,
       equiv_clos cl1 cl2 ->
@@ -1791,14 +1795,6 @@ Inductive equiv_result : eval_res -> eval_res -> Prop :=
       list_forall2 equiv_frame fl1 fl2 ->
       equiv_result (Inter fl1) (Inter fl2).
 Hint Constructors equiv_result.
-
-Lemma eval_restart_ok'' : forall h' h benv args t fl,
-  eval_restart h' nil (eval fenv h benv args t fl) =
-  eval fenv (h+h') benv args t fl.
-Proof.
-  intros.
-  rewrite eval_restart_ok. rewrite* <- app_nil_end.
-Qed.
 
 Lemma clos2trm_equiv : forall cl1 cl2,
   clos2trm cl1 = clos2trm cl2 ->

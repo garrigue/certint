@@ -480,12 +480,10 @@ Proof.
   destruct H.
   unfold typ_open_vars in *; simpl in *.
   rewrite* (IHn (S ++ (v,t)::nil) Xs).
-      fold (((v,t)::nil) & S).
-      repeat rewrite <- concat_assoc. simpl*.
     fold (((v,t)::nil) & S).
-    rewrite* dom_concat.
-  split. inversion* H0.
-  inversion* H1.
+    repeat rewrite <- concat_assoc. simpl*.
+  fold (((v,t)::nil) & S).
+  rewrite* dom_concat.
 Qed.
 
 Lemma dom_kinds_open_vars : forall Xs Ks,

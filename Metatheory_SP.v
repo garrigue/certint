@@ -242,6 +242,28 @@ End Forall.
 
 Hint Resolve list_forall_apply.
 
+Ltac list_forall_find P l :=
+  match goal with
+  | H: list_forall P ?l1 |- _ =>
+    match l1 with context[l] => apply* (list_forall_out H) end
+  end.
+
+Ltac list_forall_solve :=
+  match goal with
+  | |- list_forall ?P ?l =>
+    apply list_forall_in; intros; list_forall_find P l
+  | |- list_forall ?P (?l1++?l2) =>
+    let a := fresh "a" in let H := fresh "Hin" in
+    apply list_forall_in; intros a H;
+    destruct (in_app_or _ _ _ H);
+      [list_forall_find P l1 | list_forall_find P l2]
+  | |- list_forall ?P (?a :: ?l) =>
+    let x := fresh "x" in let H := fresh "Hin" in
+    apply list_forall_in; intros x H; simpl in H;
+    destruct H; [subst x; list_forall_find P a | list_forall_find P l]
+  end.
+
+Hint Extern 1 (list_forall _ _) => solve [list_forall_solve].
 
 Section Forall2.
 
