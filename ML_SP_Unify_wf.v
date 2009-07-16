@@ -531,6 +531,52 @@ Definition unify_kinds (k1 k2:kind) : option (kind * list (typ*typ)).
   unfold krp; apply unify_coherent.
 Defined.
 
+Inductive unif_res : Set :=
+  | Uok   : list (typ*typ) -> kenv -> subs -> unif_res
+  | Ufail : unif_res.
+
+Definition unify_vars K S x y :=
+  match unify_kinds (get_kind x K) (get_kind y K) with
+  | Some (k, pairs) => Uok pairs (remove_env (remove_env K x) y & y ~ k)
+                                 (compose (x ~ typ_fvar y) S)
+  | None            => Ufail
+  end.
+
+Definition unify_nv K S x T :=
+  if S.mem x (typ_fv T) then Ufail else
+    match get_kind x K with
+    | Some _ => Ufail
+    | None => Uok nil (remove_env K x) (compose (x ~ T) S)
+    end.
+
+Definition unify1 (T1 T2:typ) (K:kenv) (S:subs) : unif_res :=
+  match typ_subst S T1, typ_subst S T2 with
+  | typ_bvar n, typ_bvar m =>
+    if n === m then Uok nil K S else Ufail
+  | typ_fvar x, typ_fvar y =>
+    if x == y then Uok nil K S else unify_vars K S x y
+  | typ_fvar x, T =>
+    unify_nv K S x T 
+  | T, typ_fvar x =>
+    unify_nv K S x T 
+  | typ_arrow T11 T12, typ_arrow T21 T22 =>
+    Uok ((T11,T21)::(T12,T22)::nil) K S
+  | _, _ =>
+    Ufail
+  end.
+
+Inductive unify_spec : list (typ*typ) -> kenv -> subs ->
+                       option (kenv*subs) -> Prop :=
+  | USnil  : forall K S,
+    unify_spec nil K S (Some (K,S))
+  | USok   : forall T1 T2 pairs K S pairs' K' S' r,
+    unify1 T1 T2 K S = Uok pairs' K' S' ->
+    unify_spec (pairs' ++ pairs) K' S' r ->
+    unify_spec ((T1,T2)::pairs) K S r
+  | USfail : forall T1 T2 pairs K S,
+    unify1 T1 T2 K S = Ufail ->
+    unify_spec ((T1,T2)::pairs) K S None.
+
 (* Termination measure *)
 
 Section Accum.
@@ -903,6 +949,7 @@ Proof.
     apply le_n_S. apply cardinal_subset. auto.
   unfold pairs_size; simpl. omega.
 Qed.
+Hint Resolve size_pairs2_tl.
 
 Lemma size_pairs2_comm : forall S K T1 T2 pairs,
   size_pairs2 S K ((T1,T2)::pairs) = size_pairs2 S K ((T2,T1)::pairs).
@@ -910,6 +957,79 @@ Proof.
   intros. unfold size_pairs2. rewrite size_pairs_comm.
   unfold pairs_size; simpl. rewrite* (plus_comm (typ_size (typ_subst S T1))).
 Qed.
+
+Section Unify1.
+Variables (pairs pairs':list (typ*typ)) (K K':kenv) (S S':subs) (T1 T2:typ).
+Hypothesis HK : ok K.
+Hypothesis HS : is_subst S.
+Definition size := size_pairs2 S K ((T1,T2)::pairs).
+Definition size' := size_pairs2 S' K' (pairs' ++ pairs).
+
+Lemma size_pairs2_nv : forall v T,
+  typ_subst S T1 = typ_fvar v ->
+  typ_subst S T2 = T ->
+  v \notin typ_fv T ->
+  lt2 (size_pairs2 (compose (v ~ T) S) (remove_env K v) pairs) size.
+Proof.
+  introv R1 R2 R3.
+  left. simpl.
+  unfold size_pairs at 2, size_pairs, really_all_fv, all_fv; simpl.
+  rewrite* <- (typ_subst_idem T1 HS).
+  rewrite* <- (typ_subst_idem T2 HS).
+  rewrite R1; rewrite R2.
+  apply* (@size_pairs_decr v T K S pairs).
+    apply* typ_subst_res_fresh'.
+  apply disjoint_comm; apply* disjoint_union.
+Qed.
+
+Lemma size_pairs2_arrow : forall t t0 t1 t2,
+  typ_subst S T1 = typ_arrow t1 t2 ->
+  typ_subst S T2 = typ_arrow t t0 ->
+  lt2 (size_pairs2 S K ((t1, t) :: (t2, t0) :: pairs)) size.
+Proof.
+  introv R1 R2.
+  unfold size, size_pairs2, size_pairs, really_all_fv, all_fv, pairs_size;
+    simpl.
+  rewrite <- (typ_subst_idem T1 HS).
+  rewrite <- (typ_subst_idem T2 HS).
+  rewrite R1; rewrite R2.
+  right; simpl; split.
+    repeat rewrite union_assoc.
+    rewrite <- (union_assoc _ (typ_fv (typ_subst S t))).
+    rewrite <- (union_comm _ (typ_fv (typ_subst S t))).
+    rewrite* union_assoc.
+  omega.
+Qed.
+
+Hint Resolve size_pairs2_tl size_pairs2_nv size_pairs2_arrow.
+
+Lemma unify1_decr : unify1 T1 T2 K S = Uok pairs' K' S' -> lt2 size' size.
+Proof.
+  unfold unify1, size'.
+  introv HU.
+  case_rewrite R1 (typ_subst S T1);
+    case_rewrite R2 (typ_subst S T2);
+      try discriminate.
+         destruct (n === n0); try discriminate.
+         unfold size; inversions* HU.
+Lemma unify1_decr_nv : forall v T,
+  unify_nv K S v T = Uok pairs' K' S' ->
+  typ_subst S T1 = typ_fvar v ->
+  typ_subst S T2 = T ->
+  lt2 size' size.
+Proof.
+  unfold unify_nv, size', size.
+  introv HU R1 R2.
+  case_rewrite R3 (S.mem v (typ_fv T)).
+  use (mem_3 R3).
+  case_rewrite R4 (get_kind v K).
+  inversions HU.
+  apply* size_pairs2_nv.
+Qed.
+  
+  case_rewrite R4 (get_kind v K).
+  inversions HU.
+  apply lt2_lt.
 
 (* Termination lemmas used directly inside the algorithm *)
 
@@ -1178,46 +1298,6 @@ Qed.
 
 Hint Resolve kind_entails_well_kinded.
 
-Lemma size_pairs2_nv : forall S K T1 T2 v T pairs,
-  is_subst S -> ok K ->
-  typ_subst S T1 = typ_fvar v ->
-  typ_subst S T2 = T ->
-  v \notin typ_fv T ->
-  lt2 (size_pairs2 (compose (v ~ T) S) (remove_env K v) pairs)
-    (size_pairs2 S K ((T1, T2) :: pairs)).
-Proof.
-  left. simpl.
-  unfold size_pairs at 2, size_pairs, really_all_fv, all_fv; simpl.
-  rewrite* <- (typ_subst_idem T1 H).
-  rewrite* <- (typ_subst_idem T2 H).
-  rewrite H1; rewrite H2.
-  puts size_pairs_decr.
-  apply* (@size_pairs_decr v T K S pairs).
-    apply* typ_subst_res_fresh'.
-  apply disjoint_comm; apply* disjoint_union.
-Qed.
-
-Lemma size_pairs2_arrow : forall S K T1 T2 t t0 t1 t2 pairs,
-  is_subst S ->
-  typ_subst S T1 = typ_arrow t1 t2 ->
-  typ_subst S T2 = typ_arrow t t0 ->
-  lt2 (size_pairs2 S K ((t1, t) :: (t2, t0) :: pairs))
-     (size_pairs2 S K ((T1, T2) :: pairs)).
-Proof.
-  intros.
-  unfold size_pairs2, size_pairs, really_all_fv, all_fv, pairs_size; simpl.
-  rewrite <- (typ_subst_idem T1 H).
-  rewrite <- (typ_subst_idem T2 H).
-  rewrite H0; rewrite H1.
-  right; simpl; split.
-    repeat rewrite union_assoc.
-    rewrite <- (union_assoc _ (typ_fv (typ_subst S t))).
-    rewrite <- (union_comm _ (typ_fv (typ_subst S t))).
-    rewrite* union_assoc.
-  omega.
-Qed.
-
-Hint Resolve size_pairs2_tl size_pairs2_nv size_pairs2_arrow.
 
 Section Soundness.
 
