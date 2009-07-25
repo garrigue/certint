@@ -414,6 +414,35 @@ Section Cut.
   Qed.
 End Cut.
 
+(** Properties of mkset *)
+
+Fixpoint mkset (l:list var) {struct l} : vars :=
+  match l with
+  | nil => {}
+  | h :: t => {{h}} \u mkset t
+  end.
+
+Lemma in_mkset : forall x Xs,
+  In x Xs -> x \in mkset Xs.
+Proof.
+  induction Xs; intros. elim H.
+  simpl.
+  simpl in H; destruct H.
+    apply S.union_2. auto with sets.
+  apply* S.union_3.
+Qed.
+
+(** Disjointness *)
+
+Definition disjoint s1 s2 :=
+  forall x, x \in s1 -> x \notin s2.
+
+Lemma disjoint_comm : forall A B,
+  disjoint A B -> disjoint B A.
+Proof.
+  intros. intros x Hx Hx'. elim (H _ Hx' Hx).
+Qed.
+
 (********************************************************************)
 (* A clever tactic to handle finite sets                            *)
 
@@ -434,7 +463,7 @@ Proof.
   case_eq (S.mem v S); intros; auto with sets.
 Qed.
 
-Lemma remove_4 : forall y x L, y \in S.remove x L -> ~ E.eq x y.
+Lemma remove_4 : forall y x L, y \in S.remove x L -> ~E.eq x y.
 Proof.
   intros; intro.
   elim (S.remove_1 H0 H).
@@ -494,8 +523,21 @@ Ltac find_in_solve x :=
 Ltac union_solve x :=
   try sets_simpl_hyps x;
   try match goal with
+  | H: ~E.eq ?y ?y |- _ => elim H; reflexivity
+  | H: ?y <> ?y |- _ => elim H; reflexivity
   | H: x \in _ \u _ |- _ =>
     destruct (S.union_1 H); clear H; union_solve x
+  | H: x \notin ?L1 |- _ =>
+    match L1 with context[{{x}}] =>
+      elim H; find_in_solve x
+    end ||
+    match goal with
+    | H': x \in L1 |- _ => elim (H H')
+    | H': x \in ?L2 |- _ =>
+      match L1 with context[L2] =>
+        elim H; find_in_solve x
+      end
+    end
   | H: ?L1 << ?L2 |- _ =>
     match goal with
     | H': x \in L1 |- _ =>
@@ -507,6 +549,25 @@ Ltac union_solve x :=
         clear H; union_solve x
       end
     end
+  | H: disjoint ?L1 ?L2 |- _ =>
+    match goal with
+    | H': x \in L1 |- _ =>
+      let H1 := fresh "Hin" in poses H1 (H _ H'); clear H; union_solve x
+    | H': x \in L2 |- _ =>
+      let H1 := fresh "Hin" in
+      poses H1 (disjoint_comm H H'); clear H; union_solve x
+    | H': x \in ?L3 |- _ =>
+      match L1 with context[L3] =>
+        let H1 := fresh "Hin" in 
+        assert (H1: x \notin L2) by (apply H; find_in_solve x);
+        clear H; union_solve x
+      end ||
+      match L2 with context[L3] =>
+        let H1 := fresh "Hin" in 
+        assert (H1: x \notin L1) by (apply (disjoint_comm H); find_in_solve x);
+        clear H; union_solve x
+      end
+    end
   end.
 
 Ltac sets_solve :=
@@ -515,6 +576,11 @@ Ltac sets_solve :=
   | |- _ << _ =>
     let y := fresh "y" in let Hy := fresh "Hy" in
     intros y Hy; sets_solve
+  | |- ?x \notin _ =>
+    let H := fresh "Hin" in intro H; try union_solve x
+  | |- disjoint _ _ =>
+    let y := fresh "y" in let Hy := fresh "Hy" in let Hy' := fresh "Hy'" in
+    intros y Hy Hy'; try union_solve y
   end.
 
 Lemma test_self : forall x, x \in {{x}}.
@@ -533,26 +599,74 @@ Proof.
   intros; sets_solve.
 Qed.
 
-Hint Extern 1 (_ \in _) => solve [sets_solve].
-Hint Extern 1 (_ << _) => solve [sets_solve].
+Local Hint Extern 1 (_ \in _) => solve [sets_solve].
+Local Hint Extern 1 (_ << _) => solve [sets_solve].
+Local Hint Extern 1 (_ \notin _) => solve [sets_solve].
+Local Hint Extern 1 (disjoint _ _) => solve [sets_solve].
 
-(** Properties of mkset *)
+(** More results on disjointness *)
 
-Fixpoint mkset (l:list var) {struct l} : vars :=
-  match l with
-  | nil => {}
-  | h :: t => {{h}} \u mkset t
-  end.
-
-Lemma in_mkset : forall x Xs,
-  In x Xs -> x \in mkset Xs.
+Lemma disjoint_union : forall A B C,
+  disjoint A B -> disjoint A C -> disjoint A (B \u C).
 Proof.
-  induction Xs; intros. elim H.
-  simpl in H; destruct H.
-    simpl; rewrite* H. auto with sets.
-  simpl. eauto with sets.
+  intros. auto.
 Qed.
 
+Lemma disjoint_empty : forall A, disjoint A {}.
+  auto*.
+Qed.
+
+Lemma disjoint_empty_l : forall A, disjoint {} A.
+  auto*.
+Qed.
+
+Lemma notin_disjoint : forall x A, x \notin A -> disjoint A {{x}}.
+  auto*.
+Qed.
+
+Lemma notin_disjoint_l : forall x L, x \notin L -> disjoint {{x}} L.
+  auto*.
+Qed.
+
+Lemma ok_disjoint : forall (A:Set) (E F:Env.env A),
+  ok (E & F) -> disjoint (dom E) (dom F).
+Proof.
+  induction F; simpls; intros. auto.
+  destruct a; simpl.
+  inversions H.
+  rewrite dom_concat in H4.
+  use (IHF H2).
+Qed.
+Hint Resolve ok_disjoint.
+
+Lemma fresh_disjoint : forall n Xs L,
+  fresh L n Xs -> disjoint (mkset Xs) L.
+Proof.
+  induction n; destruct Xs; simpl; intros; auto*.
+  destruct H.
+  sets_solve.
+  apply* (IHn _ _ H0).
+Qed.
+Hint Immediate fresh_disjoint.
+
+Lemma neq_disjoint : forall x y, x <> y -> disjoint {{x}} {{y}}.
+  auto*.
+Qed.
+
+Lemma disjoint_notin : forall s v, disjoint s {{v}} -> v \notin s.
+  auto*.
+Qed.
+
+Lemma diff_disjoint : forall L1 L2, disjoint (S.diff L1 L2) L2.
+  auto*.
+Qed.
+
+Lemma fresh_notin_mkset : forall n x Xs,
+  fresh {{x}} n Xs -> x \notin mkset Xs.
+Proof.
+  intros.
+  apply* disjoint_notin.
+Qed.
 
 (** Results on environments *)
 
@@ -953,33 +1067,25 @@ Lemma notin_subset : forall S1 S2,
   S1 << S2 ->
   forall x, x \notin S2 -> x \notin S1.
 Proof.
-  intros.
-  intro. elim H0. apply* (H x).
+  auto*.
 Qed.
 
 Lemma notin_remove_self : forall v L, v \notin S.remove v L.
-Proof.
-  intros. apply S.remove_1. reflexivity.
+  auto*.
 Qed.
 
-Lemma notin_remove : forall x v L,
-  v \notin L -> v \notin S.remove x L.
-Proof.
-  intros; intro.
-  elim H; apply* S.remove_3.
+Lemma notin_remove : forall x v L, v \notin L -> v \notin S.remove x L.
+  auto*.
 Qed.
 
-Hint Resolve notin_remove_self notin_remove.
-
-Lemma mkset_notin : forall x l, ~In x l -> x \notin mkset l.
+Lemma notin_mkset : forall x l, ~In x l -> x \notin mkset l.
 Proof.
   induction l; simpl; intros. auto.
   intuition.
-  destruct* (S.union_1 H0).
-  elim H1; rewrite* (S.singleton_1 H3).
+  union_solve x; auto*.
 Qed.
 
-Hint Resolve mkset_notin.
+Hint Resolve notin_mkset.
 
 (** Other results on sets *)
 
@@ -995,7 +1101,7 @@ Lemma mkset_in : forall x l, x \in mkset l -> In x l.
 Proof.
   intros.
   destruct* (In_dec eq_var_dec x l).
-  elim (mkset_notin _  n H).
+  elim (notin_mkset _  n H).
 Qed.
 
 Lemma remove_notin : forall v L,
@@ -1009,10 +1115,7 @@ Qed.
 
 Lemma remove_single : forall v, S.remove v {{v}} = {}.
 Proof.
-  intros; apply eq_ext; intros; split; intro.
-    use (S.remove_3 H).
-    elim (S.remove_1 (S.singleton_1 H0) H).
-  elim (in_empty H).
+  intros; apply eq_ext; auto*.
 Qed.
 
 Lemma subset_incl_elements : forall L1 L2,
@@ -1047,8 +1150,7 @@ Proof.
 Qed.
 
 Lemma singleton_subset : forall v L, {{v}} << L -> v \in L.
-Proof.
-  intros. auto.
+  auto*.
 Qed.
 
 Lemma eq_subset : forall L1 L2, L1 = L2 -> L1 << L2.
@@ -1064,77 +1166,4 @@ Proof.
     use (H _ (binds_in H0)).
     apply* in_dom.
   use (get_none_notin _ H0).
-Qed.
-
-(** Disjointness *)
-
-Definition disjoint s1 s2 :=
-  forall x, x \notin s1 \/ x \notin s2.
-
-Lemma disjoint_union : forall A B C,
-  disjoint A C -> disjoint B C -> disjoint (A \u B) C.
-Proof.
-  intros. intro x; destruct* (H x); destruct* (H0 x).
-Qed.
-
-Lemma disjoint_comm : forall A B,
-  disjoint A B -> disjoint B A.
-Proof.
-  intros. intro x; destruct* (H x).
-Qed.
-
-Lemma ok_disjoint : forall (A:Set) (E F:Env.env A),
-  ok (E & F) -> disjoint (dom E) (dom F).
-Proof.
-  induction F; simpls; intros.
-    intro; right*.
-  destruct a; simpl.
-  inversion H.
-  clear x a0 H0 H1 H3.
-  intro y.
-  destruct* (eq_var_dec y v).
-    rewrite* e.
-  destruct* (IHF H2 y).
-Qed.
-
-Lemma fresh_disjoint : forall n Xs L,
-  fresh L n Xs -> disjoint L (mkset Xs).
-Proof.
-  induction n; destruct Xs; simpl; intros; auto*.
-    intro; auto.
-  destruct H.
-  intro x.
-  assert (fresh L n Xs). auto*.
-  destruct* (IHn Xs L H1 x).
-  destruct* (eq_var_dec x v).
-Qed.
-
-Lemma notin_disjoint : forall x L, x \notin L -> disjoint {{x}} L.
-Proof.
-  intros; intro v. destruct (x == v); try subst; auto.
-Qed.
-
-Hint Resolve notin_disjoint.
-
-Lemma notin_disjoint_r : forall x L, x \notin L -> disjoint L {{x}}.
-Proof.
-  intros; apply* disjoint_comm.
-Qed.
-
-Hint Resolve notin_disjoint_r.
-
-Lemma disjoint_notin : forall s v,
-  disjoint s {{v}} -> v \notin s.
-Proof.
-  intros.
-  destruct* (H v).
-Qed.
-
-Hint Immediate disjoint_notin.
-
-Lemma diff_disjoint : forall L1 L2, disjoint (S.diff L1 L2) L2.
-Proof.
-  intros. intro y.
-  destruct* (in_vars_dec y (S.diff L1 L2)).
-  use (S.diff_2 i).
 Qed.

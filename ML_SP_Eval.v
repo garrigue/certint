@@ -891,7 +891,7 @@ Proof.
   clear IHtl2.
   autorewrite with list in *. simpl in *.
   inversions H. rewrite <- fold_left_app in H2.
-  destruct* (IHtl tl2). omega.
+  destruct* (IHtl tl2).
   subst*.
 Qed.
 
@@ -1239,8 +1239,6 @@ Proof.
   rewrite concat_empty.
   rewrite concat_empty in H4.
   apply* kenv_ok_concat.
-  rewrite* dom_kinds_open_vars.
-  apply* fresh_disjoint.
 Qed.
 
 Lemma retypable_clos : forall benv t,

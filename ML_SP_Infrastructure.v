@@ -19,26 +19,36 @@ Import Defs.
 
 (* These tactics needs definitions *)
 
-Ltac disjoint_solve_from_one v :=
-  match goal with
-  | H: disjoint _ _ |- _ => destruct (H v); clear H
-  | H: fresh _ _ _ |- _ => destruct (fresh_disjoint _ _ _ H v); clear H
-  | H: ok (_ & _) |- _ => destruct (ok_disjoint _ _ H v); clear H
-  | H: kenv_ok (_ & _) |- _ => destruct (ok_disjoint _ _ (proj1 H) v); clear H
+Ltac disjoint_simpls :=
+  repeat match goal with
+  | H: fresh _ _ _ |- _ =>
+    let Hf := fresh "Hf" in poses Hf (fresh_disjoint _ _ H);
+    let Hn := fresh "Hn" in poses Hn (fresh_length _ _ _ H); clear H
+  | H: ok (_ & _) |- _ =>
+    let Ho := fresh "Ho" in poses Ho (ok_disjoint _ _ H); clear H
+  | H: kenv_ok (_ & _) |- _ =>
+    let Hk := fresh "Hk" in poses Hk (ok_disjoint _ _ (proj1 H)); clear H
+  | H: binds _ _ _ |- _ =>
+    let Hb := fresh "Hb" in poses Hb (binds_dom H); clear H
+  | H: get _ _ = None |- _ =>
+    let Hn := fresh "Hn" in poses Hn (get_none_notin _ H); clear H
+  | H: In _ _ |- _ =>
+    let Hi := fresh "Hi" in poses Hi (in_mkset H); clear H
+  | H: ~In _ _ |- _ =>
+    let Hn := fresh "Hn" in poses Hn (notin_mkset _ H); clear H
   end.
-
-Ltac disjoint_solve_from v :=
-  repeat (disjoint_solve_from_one v;
-    try solve [left ; notin_solve];
-    try solve [right ; notin_solve]).
 
 Ltac disjoint_solve :=
-  match goal with
-    |- disjoint ?L1 ?L2 =>
-      let v := fresh "v" in intro v; disjoint_solve_from v
-  end.
+  disjoint_simpls;
+  fold kind in *; fold env_fv in *;
+  repeat rewrite dom_concat in *; repeat rewrite fv_in_concat in *;
+  simpl dom_concat in *; simpl fv_in in *;
+  sets_solve.
 
-(* Hint Extern 1 (disjoint _ _) => try solve [disjoint_solve]. *)
+Hint Extern 1 (_ \in _) => solve [disjoint_solve].
+Hint Extern 1 (_ << _) => solve [disjoint_solve].
+Hint Extern 1 (_ \notin _) => solve [disjoint_solve].
+Hint Extern 1 (disjoint _ _) => solve [disjoint_solve].
 
 Lemma disjoint_fresh : forall n L1 Xs L2,
   fresh L1 n Xs ->
@@ -46,21 +56,23 @@ Lemma disjoint_fresh : forall n L1 Xs L2,
   fresh L2 n Xs.
 Proof.
   induction n; destruct Xs; simpl; intros; auto; try discriminate.
-  split. destruct* (H0 v).
-  destruct H; apply* IHn. disjoint_solve.
+  split*.
 Qed.
 
-Hint Extern 1 (?n = length ?Xs) =>
-  match goal with
-  | H : fresh _ n Xs |- _ => apply (fresh_length _ _ _ H)
-  | H : types n Xs |- _ => apply (proj1 H)
-  end.
+Ltac length_hyps :=
+  repeat match goal with
+  | H: fresh _ _ _ |- _ => puts (fresh_length _ _ _ H); clear H
+  | H: types _ _ |- _ => puts (proj1 H); clear H
+  | H: list_for_n _ _ _ |- _ => puts (proj1 H); clear H
+  | H: list_forall2 _ _ _ |- _ => puts (list_forall2_length H); clear H
+  end;
+  repeat progress
+    (simpl in *; unfold typ_fvars, kinds_open_vars, kinds_open in *;
+      try rewrite map_length in *; try rewrite app_length in *).
 
-Hint Extern 1 (length ?Xs = ?n) =>
-  match goal with
-  | H : fresh _ n Xs |- _ => symmetry; apply (fresh_length _ _ _ H)
-  | H : types n Xs |- _ => symmetry; apply (proj1 H)
-  end.
+Hint Extern 1 (_ = length _) => length_hyps; omega.
+Hint Extern 1 (length _ = _) => length_hyps; omega.
+
 
 (* ====================================================================== *)
 (** * Additional Definitions used in the Proofs *)
@@ -326,9 +338,7 @@ Lemma typ_subst_fresh : forall S T,
   typ_subst S T = T.
 Proof.
   intros. induction T; simpls; f_equal*.
-    rewrite* get_notin_dom.
-    apply IHT1. disjoint_solve.
-  apply IHT2. disjoint_solve.
+  rewrite* get_notin_dom.
 Qed.
 
 Lemma ckind_pi : forall k k',
@@ -361,8 +371,8 @@ Proof.
   clear -H; induction* kr; intros.
   destruct a; simpl.
   rewrite* IHkr.
-    rewrite* typ_subst_fresh. simpl in H. disjoint_solve.
-  simpl in *. disjoint_solve.
+    rewrite* typ_subst_fresh. simpl in H. auto.
+  simpl in *. auto.
 Qed.
 
 Lemma typ_subst_fresh_list : forall S ts,
@@ -370,8 +380,7 @@ Lemma typ_subst_fresh_list : forall S ts,
   ts = List.map (typ_subst S) ts.
 Proof.
   induction ts; simpl; intros Fr.
-  auto. f_equal. rewrite~ typ_subst_fresh. disjoint_solve.
-  apply IHts. disjoint_solve.
+  auto. f_equal*. rewrite~ typ_subst_fresh.
 Qed.
 
 Lemma typ_subst_fresh_trm_fvars : forall S xs,
@@ -383,7 +392,7 @@ Proof.
     destruct H.
     destruct* (eq_var_dec v a).
   destruct (fresh_union_r _ _ _ _ H0).
-  destruct* (IHxs H1 v).
+  use (IHxs H1).
 Qed.
 
 (** Substitution distributes on the open operation. *)
@@ -491,7 +500,6 @@ Lemma dom_kinds_open_vars : forall Xs Ks,
   dom (kinds_open_vars Ks Xs) = mkset Xs.
 Proof.
   intros. unfold kinds_open_vars; rewrite* dom_combine.
-  unfold kinds_open, typ_fvars; repeat rewrite* map_length.
 Qed.
 
 Lemma typ_subst_intro0 : forall S Xs Us T, 
@@ -509,12 +517,9 @@ Proof.
       rewrite* (binds_concat_fresh (combine Xs Us) H2).
         rewrite* <- typ_open_type.
       rewrite* dom_combine.
-      destruct* (fresh_disjoint _ _ _ H v).
     rewrite* get_notin_dom.
     rewrite dom_concat.
     rewrite* dom_combine.
-    destruct* (fresh_disjoint _ _ _ H v).
-    use (get_none_notin _ H2).
   rewrite* IHT1. rewrite* IHT2.
 Qed.
 
@@ -586,11 +591,9 @@ Proof.
   rewrite* typ_subst_fresh.
     simpl. apply (f_equal (Sch T)).
     induction* K.
-      simpl in *; rewrite* IHK.
-      rewrite* kind_subst_fresh.
-      disjoint_solve.
-    disjoint_solve.
-  simpl; disjoint_solve.
+    simpl in *; rewrite* IHK.
+    rewrite* kind_subst_fresh.
+  simpl*.
 Qed.
 
 (** Trivial lemma to unfolding definition of [sch_subst] by rewriting. *)
@@ -691,9 +694,6 @@ Proof.
   induction 2.
     apply wk_any.
   apply* wk_kind.
-  apply* binds_concat_fresh.
-  destruct* (H x).
-  elim (binds_fresh H0 H2).
 Qed.
 
 Lemma well_kinded_comm : forall K K' K'',
@@ -720,9 +720,7 @@ Proof.
   intros. apply* well_kinded_comm.
   apply* well_kinded_extend.
   rewrite dom_concat.
-  destruct (ok_concat_inv _ _ H).
-  disjoint_solve.
-  rewrite dom_concat in H1. auto.
+  destruct* (ok_concat_inv _ _ H).
 Qed.
 
 (** Well substitutions *)
@@ -879,10 +877,8 @@ Proof.
   destruct a; unfold concat.
   apply ok_cons.
     apply* IHF. inversion* H0.
-    disjoint_solve.
   fold (E&F). rewrite dom_concat.
-  inversions H0.
-  destruct* (H1 v).
+  inversions* H0.
 Qed.
 
 Lemma incr_subst_fresh : forall a t S Xs,
@@ -920,14 +916,6 @@ Proof.
   simpls; auto*.
 Qed.
 
-Lemma types_length : forall n Us,
-  types n Us -> n = length Us.
-Proof.
-  intros. destruct* H.
-Qed.
-
-Hint Resolve types_length.
-        
 Lemma typ_fv_typ_fvars : forall Ys,
   typ_fv_list (typ_fvars Ys) = mkset Ys.
 Proof.
@@ -948,6 +936,7 @@ Proof.
     rewrite* map_length.
   induction Xs; simpl*.
 Qed.
+Hint Immediate types_typ_fvars.
 
 (** Schemes are stable by type substitution. *)
 

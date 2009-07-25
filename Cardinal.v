@@ -81,13 +81,7 @@ Qed.
 Lemma remove_union : forall a L1 L2,
   S.remove a (L1 \u L2) = S.remove a L1 \u S.remove a L2.
 Proof.
-  intros; apply eq_ext; intro; split; intro.
-    destruct (a == a0).
-      elim (S.remove_1 e H).
-    destruct (S.union_1 (S.remove_3 H)); eauto with sets.
-  destruct (a == a0).
-    destruct (S.union_1 H); elim (S.remove_1 e H0).
-  apply* S.remove_2.
+  intros; apply eq_ext; intro; split; intro; sets_solve.
 Qed.
 
 Lemma nodup_notin_split : forall a l2 l1,
@@ -109,20 +103,15 @@ Lemma diff_remove : forall a L1 L2,
   a \in L2 -> S.diff (S.remove a L1) (S.remove a L2) = S.diff L1 L2.
 Proof.
   intros.
-  apply eq_ext; intros; split; intro.
-    apply S.diff_3. eauto with sets.
-    destruct (a == a0).
-      use (S.diff_1 H0).
-      elim (S.remove_1 e H1).
+  apply eq_ext; intros; split; intro; sets_solve.
+    apply* S.diff_3.
+    destruct* (a == a0).
     intro.
-    elim (S.diff_2 H0).
+    elim Hn.
     apply* S.remove_2.
   apply S.diff_3.
-    apply S.remove_2.
-      intro. rewrite H1 in *.
-      elim (S.diff_2 H0 H).
-    apply* S.diff_1.
-  intro; elim (S.diff_2 H0).
+    apply* S.remove_2.
+  intro; elim Hn.
   apply* S.remove_3.
 Qed.
 
@@ -185,19 +174,15 @@ Proof.
   intro.
   assert (forall a b x, x \in S.remove a (S.remove b L) ->
                         x \in S.remove b (S.remove a L)).
-    intros.
-    use (S.remove_3 H).
+    intros; sets_solve.
   intros.
-  apply eq_ext; intro; split; intro; auto.
+  apply eq_ext; intro; split; intro; sets_solve.
 Qed.
 
 Lemma remove_idem : forall a L,
   S.remove a (S.remove a L) = S.remove a L.
 Proof.
-  intros; apply eq_ext; intro; split; intro.
-    apply* S.remove_3.
-  apply* S.remove_2.
-  intro. elim (S.remove_1 H0 H).
+  intros; apply eq_ext; intro; split; intro; sets_solve.
 Qed.
 
 Lemma elements_remove : forall a L,
@@ -379,9 +364,8 @@ Proof.
   intros.
   rewrite S.cardinal_1 in H.
   case_rewrite R1 (S.elements L).
-  apply eq_ext; intros; split; intro; intros.
-    use (S.elements_1 H0).
-    rewrite R1 in H1.
-    inversion H1.
-  elim (in_empty H0).
+  apply eq_ext; intros; split; intro; intros; sets_solve.
+  use (S.elements_1 H0).
+  rewrite R1 in H1.
+  inversion H1.
 Qed.

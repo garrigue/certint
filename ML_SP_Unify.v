@@ -271,21 +271,11 @@ Lemma disjoint_subst : forall x T L T',
   disjoint L (typ_fv T') ->
   disjoint ({{x}} \u L) (typ_fv (typ_subst (x ~ T) T')).
 Proof.
-  induction T'; simpl; intros.
-      intro; auto.
-    destruct (v == x).
-      subst.
-      disjoint_solve.
-    simpl.
-    assert (disjoint {{v}} {{x}}); disjoint_solve.
-    destruct* (v0 == v).
-    destruct* (v0 == x).
-    subst. elim (n e0).
-  assert (disjoint L (typ_fv T'1)) by disjoint_solve.
-  assert (disjoint L (typ_fv T'2)) by disjoint_solve.
-  use (IHT'1 H H1).
-  use (IHT'2 H H2).
-  disjoint_solve.
+  induction T'; simpl; intros; auto.
+    destruct* (v == x).
+    simpl*.
+  forward~ IHT'1 as HT1.
+  forward~ IHT'2 as HT2.
 Qed.
 
 Lemma add_binding_is_subst : forall S x T,
@@ -305,11 +295,9 @@ Proof.
     use (H _ _ B').
     simpl in *.
     apply* disjoint_subst.
-    intro y; destruct* (H0 y). destruct* (y == x).
   simpl in H3. destruct* H3.
   inversions H3.
   disjoint_solve.
-  destruct* (v == x0).
 Qed.
 
 Hint Resolve add_binding_is_subst.
@@ -317,13 +305,10 @@ Hint Resolve add_binding_is_subst.
 Lemma typ_subst_disjoint : forall S T,
   is_subst S -> disjoint (dom S) (typ_fv (typ_subst S T)).
 Proof.
-  intros; induction T; simpl in *.
-      intro; auto.
-    case_eq (get v S); intros.
-      use (H _ _ (binds_in H0)).
-    use (get_none_notin _ H0).
-    simpl; intro x; destruct* (x == v).
-  disjoint_solve.
+  intros; induction T; simpl in *; auto.
+  case_eq (get v S); intros.
+    use (H _ _ (binds_in H0)).
+  simpl*.
 Qed.
 
 Lemma typ_subst_res_fresh : forall S T T',
@@ -339,6 +324,7 @@ Lemma typ_subst_res_fresh' : forall S T v,
 Proof.
   intros.
   use (typ_subst_res_fresh _ H H0).
+  simpl  in H1. auto.
 Qed.
 
 Hint Resolve typ_subst_disjoint typ_subst_res_fresh typ_subst_res_fresh'.
@@ -363,20 +349,19 @@ Lemma typ_subst_id : forall T, typ_subst id T = T.
 Proof.
   intro.
   apply typ_subst_fresh.
-  simpl. intro; auto.
+  simpl*.
 Qed.
 
 Lemma is_subst_id : is_subst id.
 Proof.
-  unfold id, is_subst. intro; intros. elim H.
+  unfold id, is_subst. intro; intros. simpl*.
 Qed.
 
 Lemma dom_remove_env : forall (A:Set) v (K:Env.env A),
   ok K -> dom (remove_env K v) = S.remove v (dom K).
 Proof.
   induction K; simpl; intros.
-    apply eq_ext; intros; split; intro. elim (in_empty H0).
-    use (S.remove_3 H0).
+    apply eq_ext; intros; split; intro; auto.
   destruct a.
   inversions H.
   destruct (v == v0).
@@ -430,9 +415,7 @@ Proof.
   rewrite* dom_remove_env.
   unfold compose.
   rewrite dom_concat.
-  simpl; rewrite dom_map.
-  intro x; destruct (v == x). subst*.
-  destruct* (H1 x).
+  simpl; rewrite* dom_map.
 Qed.
 
 Hint Resolve disjoint_add_binding.
@@ -675,7 +658,7 @@ Proof.
         simpl. destruct* (v == v).
         rewrite typ_subst_compose.
         rewrite* (typ_subst_fresh (v ~ typ_subst S T2)).
-        simpl. intro x; destruct* (x == v).
+        simpl*. disjoint_solve. elim H4; rewrite* (S.singleton_1 H1).
       rewrite <- (typ_subst_extend _ _ _ H4 H0).
       rewrite <- (typ_subst_extend _ _ _ H4 H0 T2).
       do 2 rewrite typ_subst_compose. rewrite H1; rewrite H2.
@@ -913,9 +896,7 @@ Proof.
         destruct* k.
         use (binds_map (kind_subst S') H2).
         simpl in *; apply* wk_kind. apply entails_refl.
-      simpl; intro. destruct* (x == Z). subst.
-      destruct* (H1 Z).
-      elim (binds_fresh H2 H3).
+      simpl*.
     intros until 1.
     intros R1 R2 Hs HS1 n R3 IHh HK Dis.
     unfold S1, K1 in *; clear S1 K1.
@@ -937,14 +918,7 @@ Proof.
     repeat rewrite* dom_remove_env.
     unfold compose.
     rewrite dom_concat. rewrite dom_map. simpl.
-    intro x; destruct* (x == v).
-      subst; right.
-      apply* notin_union_l.
-    destruct* (x == v0).
-      subst; left.
-      use (typ_subst_res_fresh' _ HS R2).
-    destruct* (Dis x).
-    right; apply* notin_union_l.
+    use (typ_subst_res_fresh' _ HS R2).
   intuition.
   subst; apply* well_subst_unify.
   apply* typ_subst_res_fresh'.
@@ -1045,8 +1019,7 @@ Proof.
     rewrite <- R2. rewrite Hext. rewrite* <- (Heq t t0).
     rewrite <- R1. rewrite* Hext.
   assert (Hv: v # S0) by apply* typ_subst_res_fresh'.
-  assert (Dis: disjoint (dom (v ~ T)) (dom S0)).
-    simpl. intro x; destruct* (x == v).
+  assert (Dis: disjoint (dom (v ~ T)) (dom S0)) by simpl*.
   assert (Sv: extends S' (v ~ T)).
     intro.
     induction T0; simpl. auto.
@@ -1172,8 +1145,8 @@ Proof.
     symmetry; apply* Heq.
   assert (Hv: v # S0) by apply* typ_subst_res_fresh'.
   assert (Hv0: v0 # S0) by apply* typ_subst_res_fresh'.
-  assert (Dis: disjoint (dom (v ~ typ_fvar v0)) (dom S0)).
-    simpl. intro x; destruct* (x == v).
+  assert (Dis: disjoint (dom (v ~ typ_fvar v0)) (dom S0))
+    by (clear -Hv; simpl*).
   assert (Sv: extends S' (v ~ typ_fvar v0)).
     intro. induction T; simpl. auto.
       destruct (v1 == v). subst. rewrite BS'. reflexivity.
@@ -1316,10 +1289,8 @@ Lemma typ_fv_decr : forall v T S T1,
 Proof.
   intros.
   rewrite* typ_subst_compose.
-  induction (typ_subst S T1); simpl in *; sets_solve.
-  destruct (v0 == v).
-    subst.
-    destruct* (H0 y).
+  induction (typ_subst S T1); simpl in *; disjoint_solve.
+  destruct* (v0 == v).
   simpl in Hy. auto.
 Qed.
 
@@ -1362,14 +1333,12 @@ Proof.
   sets_solve.
     use (typ_fv_decr _ _ _ H H0 H1).
     apply* remove_subset.
-    sets_solve.
-    rewrite <- (@typ_subst_fresh S T) in H3; auto.
-    disjoint_solve.
+    forward~ (@typ_subst_fresh S T) as E.
+    disjoint_solve. rewrite <- E in H3. auto.
    use (typ_fv_decr _ _ _ H H0 H2).
    apply* remove_subset.
-   sets_solve.
-   rewrite <- (@typ_subst_fresh S T) in H3; auto.
-   disjoint_solve.
+   forward~ (@typ_subst_fresh S T) as E.
+   disjoint_solve. rewrite <- E in H3. auto.
   use (IHpairs H H0 _ H2).
   apply* remove_subset.
   simpl.
@@ -1387,12 +1356,11 @@ Proof.
   sets_solve.
     unfold all_fv; simpl. rewrite* get_notin_dom.
     repeat rewrite union_assoc.
-    rewrite* typ_subst_fresh; try disjoint_solve.
-    rewrite remove_union; apply S.union_2.
-    rewrite union_comm; rewrite union_assoc.
-    rewrite remove_union; apply S.union_2.
-    refine (fv_in_decr _ _ _ _ _ _ _ _ _); auto.
-    intros; apply* kind_fv_decr.
+    rewrite* typ_subst_fresh.
+    forward~ (fv_in_decr _ _ K kind_fv kind_subst Hv Dis); intros.
+        apply* kind_fv_decr.
+      apply H.
+    auto*.
   use (all_fv_decr _ _ _ Hv Dis H).
 Qed.
 
@@ -1444,16 +1412,10 @@ Lemma size_pairs_decr' : forall S0 K0 t t0 pairs h v,
   size_pairs (compose (v ~ typ_subst S0 t0) S0) (remove_env K0 v) pairs < h.
 Proof.
   intros.
-  use (typ_subst_res_fresh _ H H3).
+  use (typ_subst_res_fresh' _ H H3).
   use (typ_subst_disjoint t0 H).
   eapply lt_le_trans.
     apply* size_pairs_decr.
-    assert (disjoint {{v}} (typ_fv (typ_subst S0 t0))).
-      intro v0. destruct* (v0 == v).
-      subst.
-      right; intro.
-      rewrite (S.mem_1 H6) in H1. discriminate.
-    disjoint_solve.
   replace (size_pairs S0 K0 ((typ_fvar v, typ_subst S0 t0) :: pairs))
     with (size_pairs S0 K0 ((t, t0) :: pairs)).
     omega.
@@ -1485,10 +1447,8 @@ Lemma in_typ_fv : forall t l,
   In t l -> typ_fv t << typ_fv_list l.
 Proof.
   induction l; simpl; intros H x Hx. elim H.
-  destruct H.
-    subst; simpl.
-    auto with sets.
-  apply S.union_3; apply* IHl.
+  destruct* H.
+  subst; simpl*.
 Qed.
 
 Lemma unify_kinds_fv : forall k k0 k1 l S,
@@ -1575,7 +1535,7 @@ Proof.
   replace (really_all_fv S0 K0 ((t, t0) :: pairs))
     with (really_all_fv S0 K0 ((typ_fvar v, typ_fvar v0) :: pairs)).
     apply* really_all_fv_decr.
-      simpl; intro x; destruct* (x == v0). subst*.
+      rewrite H3 in H7. simpl typ_fv in *. clearbody S. disjoint_solve.
     fold S.
     unfold really_all_fv in *.
     simpl in *.
@@ -1605,7 +1565,7 @@ Proof.
              typ_size (typ_subst S (typ_arrow  T1 T2))).
     intros.
     case_eq (typ_size T); intros. destruct T; discriminate.
-    destruct n. destruct T. elim (in_empty H0).
+    destruct n. destruct* T. elim (in_empty H0).
         rewrite (S.singleton_1 H0) in H1.
         destruct H1; subst; simpl; omega.
       destruct T3; simpl in H2; omega.
