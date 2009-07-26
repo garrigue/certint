@@ -7,12 +7,15 @@ Set Implicit Arguments.
 
 Require Import List Arith Metatheory ML_SP_Domain.
 Import Infer2.
+Import MyEval2.
 Import Sound3.
-Import Infer.Rename.Unify.MyEval.
-Import Sound.Infra.
+Import Infer.Unify.
+Import MyEval.
+Import Rename.Sound.Infra.
 Import Defs.
-Import Rename2.MyEval2.Sound2.JudgInfra.
+Import Rename2.Sound2.JudgInfra.
 Import Judge.
+Import Infer2.
 
 Definition t :=
   trm_app
@@ -22,8 +25,8 @@ Definition t :=
 (* This doesn't seem to work inside Coq (some things don't get evaluated) *)
 (* Eval compute in typinf' t. *)
 
-Definition decidable (A : Set) (P : A -> Prop) :=
-  forall x, sumbool (P x) (~P x).
+(* Definition decidable (A : Set) (P : A -> Prop) :=
+  forall x, sumbool (P x) (~P x). *)
 
 Definition ok_dec : decidable (@ok sch).
   intro E; induction E.
@@ -92,9 +95,7 @@ Definition list_forall_dec : forall (A:Set) (P:A->Prop),
   decidable P -> decidable (list_forall P).
   introv HP l; induction l.
     left*.
-  destruct (HP a).
-    destruct* IHl.
-    right; intro. inversion* H.
+  destruct* (HP a).
   right; intro. inversion* H.
 Defined.
   
@@ -147,8 +148,8 @@ Proof.
 Qed.
 
 Definition typinf1 : forall E t,
-  sum (sig (fun p:kenv*typ => let (K,T) := p in K; E |Gc|= t ~: T))
-    (sumbool (env_fv E <> {}) (forall K T, ~ K;E |Gc|= t ~: T)).
+  {p:kenv*typ | let (K,T) := p in K; E |Gc|= t ~: T}+
+  ({env_fv E <> {}}+{forall K T, ~ K;E |Gc|= t ~: T}).
   intros.
   case_eq (S.is_empty (env_fv E)); intros.
     assert (Hempty: env_fv E = {}).

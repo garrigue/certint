@@ -119,14 +119,8 @@ Proof.
       disjoint_solve.
     simpl.
     assert (disjoint {{v}} {{x}}); disjoint_solve.
-    destruct* (v0 == v).
-    destruct* (v0 == x).
-    subst. elim (n e0).
-  assert (disjoint L (typ_fv T'1)) by disjoint_solve.
-  assert (disjoint L (typ_fv T'2)) by disjoint_solve.
-  use (IHT'1 H H1).
-  use (IHT'2 H H2).
-  disjoint_solve.
+  forward~ (IHT'1 H) as HT1.
+  forward~ (IHT'2 H) as HT2.
 Qed.
 
 Lemma add_binding_is_subst : forall S x T,
@@ -146,11 +140,9 @@ Proof.
     use (H _ _ B').
     simpl in *.
     apply* disjoint_subst.
-    intro y; destruct* (H0 y). destruct* (y == x).
   simpl in H3. destruct* H3.
   inversions H3.
   disjoint_solve.
-  destruct* (v == x0).
 Qed.
 Hint Resolve add_binding_is_subst.
 
@@ -179,6 +171,7 @@ Lemma typ_subst_res_fresh' : forall S T v,
 Proof.
   intros.
   use (typ_subst_res_fresh _ H H0).
+  simpl in H1. auto.
 Qed.
 
 Hint Resolve typ_subst_disjoint typ_subst_res_fresh typ_subst_res_fresh'.
@@ -463,9 +456,7 @@ Proof.
   rewrite* dom_remove_env.
   unfold compose.
   rewrite dom_concat.
-  simpl; rewrite dom_map.
-  intro x; destruct (v == x). subst*.
-  destruct* (H1 x).
+  simpl; rewrite* dom_map.
 Qed.
 
 Hint Resolve disjoint_add_binding.
@@ -678,9 +669,7 @@ Proof.
   intros.
   rewrite* typ_subst_compose.
   induction (typ_subst S T1); simpl in *; sets_solve.
-  destruct (v0 == v).
-    subst.
-    destruct* (H0 y).
+  destruct* (v0 == v).
   simpl in Hy. auto.
 Qed.
 
@@ -721,13 +710,9 @@ Proof.
   induction pairs; intros; simpl*.
   rewrite* get_notin_dom.
   destruct a; simpl.
-  sets_solve;
-    try solve [
-      use (typ_fv_decr _ _ _ H H0 H2);
-      apply* remove_subset;
-        sets_solve;
-        rewrite <- (@typ_subst_fresh S T) in H3; auto;
-        disjoint_solve].
+  forward~ (@typ_subst_fresh S T) as HT.
+  disjoint_solve; try solve [use (typ_fv_decr _ _ _ H H0 H2);
+    apply* remove_subset; sets_solve; rewrite <- HT in H3; auto].
   use (IHpairs H H0 _ H1).
   apply* remove_subset.
   simpl.
@@ -745,12 +730,11 @@ Proof.
   sets_solve.
     unfold all_fv; simpl. rewrite* get_notin_dom.
     repeat rewrite union_assoc.
-    rewrite* typ_subst_fresh; try disjoint_solve.
-    rewrite remove_union; apply S.union_2.
-    rewrite union_comm; rewrite union_assoc.
-    rewrite remove_union; apply S.union_2.
-    refine (fv_in_decr _ _ _ _ _ _ _ _ _); auto.
-    intros; apply* kind_fv_decr.
+    rewrite* typ_subst_fresh.
+    forward~ (fv_in_decr _ _ K kind_fv kind_subst Hv Dis); intros.
+        apply* kind_fv_decr.
+      apply H.
+    auto*.
   use (all_fv_decr _ _ _ Hv Dis H).
 Qed.
 
@@ -891,7 +875,7 @@ Proof.
   apply cardinal_subset.
   sets_solve.
   apply* really_all_fv_decr.
-    simpl; intro x; destruct* (x == v0). subst*.
+    clearbody S; simpl*.
   fold S.
   unfold really_all_fv in *.
   simpl in *.
@@ -1017,7 +1001,7 @@ Proof.
   rewrite R1; rewrite R2.
   apply* (@size_pairs_decr v T K S pairs).
     apply* typ_subst_res_fresh'.
-  apply disjoint_comm; apply* disjoint_union.
+  use (typ_subst_res_fresh _ HS R2).
 Qed.
 
 Lemma size_pairs2_arrow : forall t t0 t1 t2 T1 T2,
@@ -1423,18 +1407,16 @@ Proof.
   intros until S.
   apply (unify_ind (fun _ _ => unifies S')); intros;
     try (intro; simpl; intros); intuition;
+    try fold (v \notin typ_fv T) in H2;
     try (match goal with H: _ = _ |- _ => inversion H; clear H; subst t t0 end);
     try (match goal with H: unify_spec _ _ _ _ |- _ =>
            rewrite <- (typ_subst_extend H);
            rewrite <- (typ_subst_extend H T2) end);
-    try (unfold S1; do 2 rewrite typ_subst_compose);
-    try (rewrite H0; rewrite H1; auto);
-    try (simpl; destruct* (v == v);
-      rewrite (typ_subst_fresh (v ~ T)); auto;
-      simpl; disjoint_solve; destruct* (v0 == v);
-      simpl; intro x; destruct* (x == v)).
-      rewrite H1; rewrite H2.
-      simpl. destruct* (v == v). destruct* (v0 == v).
+    try (subst S1 K1; do 2 rewrite typ_subst_compose);
+    try (rewrite H0; rewrite H1; simpl*);
+    try (rewrite H1; rewrite H2; simpl; destruct* (v == v);
+         destruct* (v0 == v)).
+      destruct* (v == v). rewrite* (typ_subst_fresh (v ~ T)). simpl*.
     simpl.
     rewrite* (H2 t1 t3).
     rewrite* (H2 t2 t4).
@@ -1583,9 +1565,7 @@ Proof.
         destruct* k.
         use (binds_map (kind_subst S') H2).
         simpl in *; apply* wk_kind. apply entails_refl.
-      simpl; intro. destruct* (x == Z). subst.
-      destruct* (H1 Z).
-      elim (binds_fresh H2 H3).
+      simpl*.
     intros until K1.
     intros H R1 R2 n R3 IH Dis.
     subst S1 K1.
@@ -1605,14 +1585,7 @@ Proof.
     repeat rewrite* dom_remove_env.
     unfold compose.
     rewrite dom_concat. rewrite dom_map. simpl.
-    intro x; destruct* (x == v).
-      subst; right.
-      apply* notin_union_l.
-    destruct* (x == v0).
-      subst; left.
-      use (typ_subst_res_fresh' _ HS R2).
-    destruct* (Dis x).
-    right; apply* notin_union_l.
+    use (typ_subst_res_fresh' _ HS R2).
   intuition.
   subst; apply* well_subst_unify.
   apply* typ_subst_res_fresh'.

@@ -5,8 +5,7 @@
 
 Set Implicit Arguments.
 Require Import Lib_FinSet Metatheory List ListSet Arith.
-Require Import ML_SP_Eval.
-(* Require Import ML_SP_Inference. *)
+Require Import ML_SP_Inference_wf.
 
 Section ListSet.
   Variable A : Type.
@@ -161,11 +160,11 @@ Module Const.
     end.
 End Const.
 
-(* Module Infer := MkInfer(Cstr)(Const).
+Module Infer := MkInfer(Cstr)(Const).
 Import Infer.
-Import Unify.MyEval. *)
-Module MyEval := MkEval(Cstr)(Const).
-Import MyEval.
+Import Unify.MyEval.
+(* Module MyEval := MkEval(Cstr)(Const).
+Import MyEval. *)
 Import Rename.Sound.Infra.
 Import Defs.
 
@@ -337,10 +336,10 @@ Module Delta.
   Qed.
 End Delta.
 
-(* Module Infer2 := Infer.Mk2(Delta).
-Import Infer2.MyEval2. *)
-Module MyEval2 := Mk2(Delta).
-Import MyEval2.
+Module Infer2 := Infer.Mk2(Delta).
+Import Infer2.MyEval2.
+(* Module MyEval2 := Mk2(Delta).
+Import MyEval2. *)
 Import Rename2.Sound2.
 Import JudgInfra.
 Import Judge.
@@ -665,6 +664,5 @@ Module SndHyp.
   Qed.
 End SndHyp.
 
-(* Module Sound3 := Infer2.MyEval2.Mk3(SndHyp). *)
-Module Sound3 := MyEval2.Mk3(SndHyp).
-
+Module Sound3 := Infer2.MyEval2.Mk3(SndHyp).
+(* Module Sound3 := MyEval2.Mk3(SndHyp). *)
