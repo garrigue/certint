@@ -503,8 +503,7 @@ Proof.
       apply binds_prepend.
       use (binds_map (kind_subst S) B0).
     apply entails_refl.
-  simpl.
-  disjoint_solve.
+  simpl; disjoint_solve.
   rewrite dom_kinds_open_vars in Hb; auto.
 Qed.
 
@@ -1171,7 +1170,6 @@ Proof.
   gen L1; induction H0; intros. simpl*.
   simpl in *. split*.
   apply IHsort.
-  forward~ (IHsort (L1 \u {{a}})).
   disjoint_solve.
   elim (sort_lt_notin H0 H).
   puts (mkset_in _ Hy').
@@ -1206,8 +1204,7 @@ Proof.
   rewrite H.
   puts (incl_subset_dom Inc4).
   rewrite dom_concat in H0.
-  assert (dom e2 << dom e).
-    intros v Hv. apply* (H0 v).
+  assert (dom e2 << dom e) by auto.
   puts (disjoint_subset H1
           (typing_let_disjoint _ _ Ok HK' Inc2 Dise Se0)).
   assert (disjoint (sch_fv M) (dom e2)).
@@ -1418,11 +1415,10 @@ Proof.
   assert (HK': kenv_ok K') by auto.
   assert (Hkt: list_forall (All_kind_types type) (l0 ++ l0')).
     apply list_forall_app.
-      refine (env_prop_list_forall l _ _ _ _).
+      refine (env_prop_list_forall l _ _ _ _); auto*.
         rewrite He2. intro; intros. apply* (proj2 HK' x).
         apply Inc2. apply* in_or_concat.
-       rewrite* He2.
-      apply* split_length.
+      rewrite* He2.
     unfold l0'. clear; induction Bs; simpl*.
   assert (HM: scheme M).
     subst M; unfold l0'.
@@ -1744,10 +1740,9 @@ Proof.
     case_eq (get v S0); intros.
       rewrite Hsub. rewrite Hsub.
           rewrite Hext. reflexivity.
-        simpl. intros x Hx. rewrite <- (S.singleton_1 Hx).
-        puts (binds_dom H). auto with sets.
-      simpl; rewrite H; intros x Hx.
-      use (fv_in_spec typ_fv _ _ _ (binds_in H) Hx).
+        simpl; use (binds_dom H).
+      simpl. rewrite H.
+      use (fv_in_spec typ_fv _ _ _ (binds_in H)).
     simpl; rewrite* H.
   simpl. congruence.
 Qed.
@@ -1764,18 +1759,14 @@ Lemma unifies_open : forall S n Us L Xs M0 T,
   typ_subst (S & combine Xs Us) T.
 Proof.
   intros until T; intros HTS HUs Fr Hsub HM0 HU.
-  rewrite (Hsub T).
-    rewrite <- HU.
-    unfold sch_open_vars, sch_open.
-    rewrite <- typ_subst_intro0.
-          reflexivity.
-        rewrite <- (fresh_length _ _ _ Fr).
-        apply* fresh_sub.
-        unfold sch_fv in HM0.
-        intros y Hy; auto with sets.
-      rewrite* <- (fresh_length _ _ _ Fr).
-    auto.
-  intros y Hy; auto with sets.
+  rewrite* (Hsub T).
+  rewrite <- HU.
+  unfold sch_open_vars, sch_open.
+  rewrite* <- typ_subst_intro0.
+    unfold sch_fv in HM0.
+    rewrite <- (fresh_length _ _ _ Fr).
+    apply* disjoint_fresh.
+  rewrite* <- (fresh_length _ _ _ Fr).
 Qed.
 
 Lemma kind_subst_intro0 : forall S Xs Us k, 
@@ -1867,9 +1858,7 @@ Proof.
   unfold kinds_open_vars, kinds_open in B1.
   elim (get_none_notin _ H).
   puts (binds_dom B1).
-  rewrite dom_combine. rewrite dom_combine in H0. auto.
-  rewrite map_length. rewrite* (fresh_length _ _ _ Fr).
-  rewrite <- AryM. rewrite* (fresh_length _ _ _ Fr).
+  rewrite* dom_combine. rewrite dom_combine in H0; auto.
 Qed.
 
 Definition moregen_scheme K M0 M :=
@@ -1971,12 +1960,10 @@ Proof.
       puts (kind_entails_fv _ _ H0).
       use (fv_in_spec kind_fv _ _ _ (binds_in B)).
     apply* well_kinded_subst.
-    apply well_subst_open_vars.
-          auto.
-        unfold sch_fv in FrYs.
-        apply* (fresh_resize (sch_arity M)).
-      rewrite* <- (fresh_length _ _ _ FrYs).
-    intuition.
+    apply* well_subst_open_vars.
+      unfold sch_fv in FrYs.
+      apply* (fresh_resize (sch_arity M)).
+    rewrite* <- (fresh_length _ _ _ FrYs).
   rewrite (list_map_ext (sch_kinds M') (kind_subst (combine Ys Us))
                (fun x:kind => x)).
     apply list_map_id.
@@ -1988,9 +1975,8 @@ Proof.
   destruct (proj1 (in_map_iff (kind_subst S) _ _) H) as [k1 [Hk1 Bk1]].
   subst x.
   puts (kind_fv_subst S k1).
-  puts (in_kind_fv _ _ Bk1).
   unfold sch_fv in FrYs; simpl in FrYs.
-  auto.
+  use (in_kind_fv _ _ Bk1).
 Qed.
 
 Lemma sch_open_inf : forall M Us S M0 Vs Ys,
@@ -2596,9 +2582,7 @@ Proof.
       clear H0.
       sets_solve. apply* close_fvk_subset.
       refine (close_fvk_ok _ OkK _ R2 H0). apply* close_fvk_subset.
-    rewrite get_notin_dom in Hx.
-      auto*.
-    rewrite* dom_concat.
+    rewrite get_notin_dom in Hx; auto*.
   auto.
 Qed.
 
@@ -2717,7 +2701,7 @@ Proof.
   puts (split_combine _ R3).
   destruct* (in_vars_dec x ftve).
   elimtype False.
-  destruct* (@sch_generalize_disjoint (l++Bs) T1 (l0 ++ l0') x).
+  elim (@sch_generalize_disjoint (l++Bs) T1 (l0 ++ l0') x). auto.
   rewrite mkset_app.
   unfold Bs; rewrite mkset_elements.
   rewrite <- H1. rewrite dom_combine; [|apply* split_length].
@@ -2890,7 +2874,7 @@ Proof.
     apply sch_subst_fresh.
     rewrite* DXYs.
   assert (HXYs: env_prop type XYs).
-     unfold XYs. apply list_forall_env_prop. apply (proj2 (types_typ_fvars Ys)).
+     apply list_forall_env_prop. apply (proj2 (types_typ_fvars Ys)).
   exists (List.map (typ_subst (compose XYs S1)) (typ_fvars (l ++ Bs))).
   split.
     split.
@@ -2920,12 +2904,12 @@ Proof.
       unfold l0'. clearbody Bs XYs S1. clear.
       induction Bs; simpl. auto.
      constructor; auto.
-     apply list_forall_app.
-       puts (split_combine _ R3).
-       refine (env_prop_list_forall l _ _ _ _); auto*.
-         fold kind; rewrite H6. destruct* (kenv_ok_concat_inv _ _ Oke2).
-       fold kind; rewrite* H6. destruct* Oke2.
-     unfold l0'; clearbody Bs; clear. induction Bs; simpl*.
+    apply list_forall_app.
+      puts (split_combine _ R3).
+      refine (env_prop_list_forall l _ _ _ _); auto*.
+        fold kind; rewrite H6. destruct* (kenv_ok_concat_inv _ _ Oke2).
+      fold kind; rewrite* H6. destruct* Oke2.
+    unfold l0'; clearbody Bs; clear. induction Bs; simpl*.
    rewrite kinds_subst_open.
      clearbody M0; clear -H5. unfold sch_subst in H5; simpl in H5.
      inversion H5. rewrite* H1.
