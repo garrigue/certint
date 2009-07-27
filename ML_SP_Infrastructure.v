@@ -19,6 +19,36 @@ Import Defs.
 
 (* These tactics needs definitions *)
 
+Ltac instantiate_fail :=
+  instantiate;
+  try ((instantiate (1 := nil) || instantiate (1:={})) ; fail 1);
+  try (match goal with H: _ |- _ =>
+   (instantiate (1:=nil) in H || instantiate (1:={}) in H) end;
+   fail 1).
+
+Ltac length_hyps :=
+  instantiate_fail;
+  repeat match goal with
+  | H: fresh _ _ _ |- _ => puts (fresh_length _ _ _ H); clear H
+  | H: types _ _ |- _ => puts (proj1 H); clear H
+  | H: list_for_n _ _ _ |- _ => puts (proj1 H); clear H
+  | H: list_forall2 _ _ _ |- _ => puts (list_forall2_length H); clear H
+  | H: split _ = (_,_) |- _ => puts (split_length _ H); clear H
+  end;
+  repeat progress
+    (simpl in *; unfold typ_fvars, kinds_open_vars, kinds_open in *;
+      try rewrite map_length in *; try rewrite app_length in *).
+
+Hint Extern 1 (_ = length _) => length_hyps; omega.
+Hint Extern 1 (length _ = _) => length_hyps; omega.
+
+Lemma dom_kinds_open_vars : forall Xs Ks,
+  length Ks = length Xs ->
+  dom (kinds_open_vars Ks Xs) = mkset Xs.
+Proof.
+  intros. unfold kinds_open_vars; rewrite* dom_combine.
+Qed.
+
 Ltac disjoint_simpls :=
   repeat match goal with
   | H: fresh _ _ _ |- _ =>
@@ -36,13 +66,19 @@ Ltac disjoint_simpls :=
     let Hi := fresh "Hi" in poses Hi (in_mkset H); clear H
   | H: ~In _ _ |- _ =>
     let Hn := fresh "Hn" in poses Hn (notin_mkset _ H); clear H
+  | x := ?y : env _ |- _ => subst x
   end.
 
 Ltac disjoint_solve :=
+  instantiate_fail;
   disjoint_simpls;
-  fold kind in *; fold env_fv in *;
-  repeat rewrite dom_concat in *; repeat rewrite fv_in_concat in *;
-  simpl dom_concat in *; simpl fv_in in *;
+  fold kind in *; unfold env_fv in *;
+  repeat progress
+    (simpl dom in *; simpl fv_in in *; simpl typ_fv in *;
+     try rewrite dom_concat in *; try rewrite fv_in_concat in *;
+     try rewrite dom_map in *;
+     try (rewrite dom_combine in * by (length_hyps; omega));
+     try (rewrite dom_kinds_open_vars in * by (length_hyps; omega)));
   sets_solve.
 
 Hint Extern 1 (_ \in _) => solve [disjoint_solve].
@@ -58,20 +94,6 @@ Proof.
   induction n; destruct Xs; simpl; intros; auto; try discriminate.
   split*.
 Qed.
-
-Ltac length_hyps :=
-  repeat match goal with
-  | H: fresh _ _ _ |- _ => puts (fresh_length _ _ _ H); clear H
-  | H: types _ _ |- _ => puts (proj1 H); clear H
-  | H: list_for_n _ _ _ |- _ => puts (proj1 H); clear H
-  | H: list_forall2 _ _ _ |- _ => puts (list_forall2_length H); clear H
-  end;
-  repeat progress
-    (simpl in *; unfold typ_fvars, kinds_open_vars, kinds_open in *;
-      try rewrite map_length in *; try rewrite app_length in *).
-
-Hint Extern 1 (_ = length _) => length_hyps; omega.
-Hint Extern 1 (length _ = _) => length_hyps; omega.
 
 
 (* ====================================================================== *)
@@ -403,7 +425,6 @@ Lemma typ_subst_open : forall S T1 T2, env_prop type S ->
 Proof.
   intros. induction T1; intros; simpl; f_equal*.
   apply list_map_nth. apply* typ_subst_fresh.
-    intro; auto.
   case_eq (get v S); intros. apply* typ_open_type.
   auto.
 Qed.
@@ -495,13 +516,6 @@ Proof.
   rewrite* dom_concat.
 Qed.
 
-Lemma dom_kinds_open_vars : forall Xs Ks,
-  length Ks = length Xs ->
-  dom (kinds_open_vars Ks Xs) = mkset Xs.
-Proof.
-  intros. unfold kinds_open_vars; rewrite* dom_combine.
-Qed.
-
 Lemma typ_subst_intro0 : forall S Xs Us T, 
   fresh (typ_fv T) (length Xs) Xs -> 
   types (length Xs) Us ->
@@ -515,11 +529,8 @@ Proof.
       apply* typ_subst_nth.
     case_eq (get v S); intros.
       rewrite* (binds_concat_fresh (combine Xs Us) H2).
-        rewrite* <- typ_open_type.
-      rewrite* dom_combine.
+      rewrite* <- typ_open_type.
     rewrite* get_notin_dom.
-    rewrite dom_concat.
-    rewrite* dom_combine.
   rewrite* IHT1. rewrite* IHT2.
 Qed.
 
@@ -589,11 +600,10 @@ Proof.
   intros. destruct M as [T K]. unfold sch_subst.
   unfold sch_fv in H; simpl in H.
   rewrite* typ_subst_fresh.
-    simpl. apply (f_equal (Sch T)).
-    induction* K.
-    simpl in *; rewrite* IHK.
-    rewrite* kind_subst_fresh.
-  simpl*.
+  simpl. apply (f_equal (Sch T)).
+  induction* K.
+  simpl in *; rewrite* IHK.
+  rewrite* kind_subst_fresh.
 Qed.
 
 (** Trivial lemma to unfolding definition of [sch_subst] by rewriting. *)
@@ -660,6 +670,7 @@ Lemma entails_refl : forall k, entails k k.
 Proof.
   intros. split*.
 Qed.
+Hint Resolve entails_refl.
 
 Lemma entails_trans : forall k1 k2 k3,
   entails k1 k2 -> entails k2 k3 -> entails k1 k3.
@@ -684,6 +695,7 @@ Proof.
   rewrite <- e.
   apply* (in_map (fun XT : var * typ => (fst XT, typ_subst S (snd XT)))).
 Qed.
+Hint Resolve kind_subst_entails.
 
 (** Properties of well-kindedness *)
 
@@ -695,6 +707,7 @@ Proof.
     apply wk_any.
   apply* wk_kind.
 Qed.
+Hint Resolve well_kinded_extend.
 
 Lemma well_kinded_comm : forall K K' K'',
   ok (K & K' & K'') ->
@@ -705,7 +718,7 @@ Proof.
   introv OK; introv WK. gen_eq (K & K'' & K') as H. gen K''.
   induction WK; introv Ok EQ; subst.
     apply wk_any.
-  apply* wk_kind.
+  apply* (@wk_kind k').
   destruct* (binds_concat_inv H).
   destruct H1.
   destruct* (binds_concat_inv H2).
@@ -719,9 +732,9 @@ Lemma well_kinded_weaken : forall K K' K'',
 Proof.
   intros. apply* well_kinded_comm.
   apply* well_kinded_extend.
-  rewrite dom_concat.
   destruct* (ok_concat_inv _ _ H).
 Qed.
+Hint Resolve well_kinded_weaken.
 
 (** Well substitutions *)
 
@@ -745,14 +758,13 @@ Proof.
   case_eq (get x S); intros; rewrite H2 in H3.
     subst.
     simpl. apply* wk_kind.
-    apply* entails_trans.
-    apply* kind_subst_entails.
+    refine (entails_trans H6 _); auto.
   simpl.
   inversions H3.
   apply* wk_kind.
-  apply* entails_trans.
-  apply* kind_subst_entails.
+  refine (entails_trans H6 _); auto.
 Qed.
+Hint Resolve well_kinded_subst.
 
 (** Properties of instantiation and constants *)
 
@@ -877,7 +889,7 @@ Proof.
   destruct a; unfold concat.
   apply ok_cons.
     apply* IHF. inversion* H0.
-  fold (E&F). rewrite dom_concat.
+  fold (E&F).
   inversions* H0.
 Qed.
 

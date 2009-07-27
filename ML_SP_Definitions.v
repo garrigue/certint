@@ -271,7 +271,7 @@ Definition kenv_ok K :=
 Inductive well_kinded : kenv -> kind -> typ -> Prop :=
   | wk_any : forall K T,
       well_kinded K None T
-  | wk_kind : forall K k x k',
+  | wk_kind : forall k' K k x,
       binds x (Some k') K ->
       entails k' k ->
       well_kinded K (Some k) (typ_fvar x).

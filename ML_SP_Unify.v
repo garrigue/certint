@@ -24,6 +24,14 @@ Definition compose S1 S2 : subs := S1 & map (typ_subst S1) S2.
 Definition extends S S0 :=
   forall T, typ_subst S (typ_subst S0 T) = typ_subst S T.
 
+Lemma extends_trans : forall S1 S2 S3,
+  extends S1 S2 -> extends S2 S3 -> extends S1 S3.
+Proof.
+  intros; intro.
+  rewrite <- H. rewrite <- (H T).
+  rewrite* H0.
+Qed.
+
 (* Unifiers *)
 Definition unifies S pairs :=
   forall T1 T2, In (T1, T2) pairs -> typ_subst S T1 = typ_subst S T2.
@@ -153,6 +161,7 @@ Proof.
   case_rewrite R (get x K).
   subst*.
 Qed.
+Hint Resolve get_kind_binds.
 
 Definition unify_vars (K:kenv) (x y:var) :=
   match unify_kinds (get_kind x K) (get_kind y K) with
@@ -250,7 +259,6 @@ Proof.
     simpl.
     case_eq (get v S1); intros.
       rewrite* (binds_concat_fresh (map (typ_subst S1) S2) H0).
-      rewrite dom_map. apply* get_none_notin.
     case_eq (get v (S1 & map (typ_subst S1) S2)); intros; auto.
     destruct (binds_concat_inv H1).
       destruct H2. rewrite H3 in H0. discriminate.
@@ -296,8 +304,7 @@ Proof.
     simpl in *.
     apply* disjoint_subst.
   simpl in H3. destruct* H3.
-  inversions H3.
-  disjoint_solve.
+  inversions* H3.
 Qed.
 
 Hint Resolve add_binding_is_subst.
@@ -324,7 +331,6 @@ Lemma typ_subst_res_fresh' : forall S T v,
 Proof.
   intros.
   use (typ_subst_res_fresh _ H H0).
-  simpl  in H1. auto.
 Qed.
 
 Hint Resolve typ_subst_disjoint typ_subst_res_fresh typ_subst_res_fresh'.
@@ -348,8 +354,7 @@ Definition id := Env.empty (A:=typ).
 Lemma typ_subst_id : forall T, typ_subst id T = T.
 Proof.
   intro.
-  apply typ_subst_fresh.
-  simpl*.
+  apply* typ_subst_fresh.
 Qed.
 
 Lemma is_subst_id : is_subst id.
@@ -406,6 +411,8 @@ Proof.
   simpl. destruct* (x == v0).
 Qed.
 
+Hint Resolve binds_remove_env.
+
 Lemma disjoint_add_binding : forall v T S (K:kenv),
   is_subst S -> ok K ->
   disjoint (dom S) (dom K) ->
@@ -436,7 +443,7 @@ Lemma kind_entails_well_kinded : forall k k' K T,
 Proof.
   unfold kind_entails; intros.
   inversions H0; clear H0; destruct* k'; try apply wk_any.
-  apply* wk_kind. apply* entails_trans.
+  apply (wk_kind H1). apply (entails_trans H2 H).
 Qed.
 
 Hint Resolve kind_entails_well_kinded.
@@ -551,10 +558,10 @@ Proof.
     clear H H0 h pairs K S; intros.
     destruct H6; split*.
     intros. apply H7.
-    unfold S1. apply* binds_add_binding.
+    apply* binds_add_binding.
   intros.
   intuition.
-  apply H8; unfold S1. apply* binds_add_binding.
+  apply H8. apply* binds_add_binding.
 Qed.
 
 Lemma binds_subst_idem : forall x T S,
@@ -566,6 +573,7 @@ Proof.
   rewrite typ_subst_idem in H2; auto.
   congruence.
 Qed.
+Hint Resolve binds_subst_idem.
 
 Lemma typ_subst_extend : forall h pairs K S,
   is_subst S ->
@@ -893,13 +901,12 @@ Proof.
       intuition.
       intro; intros.
       rewrite* typ_subst_fresh.
-        destruct* k.
-        use (binds_map (kind_subst S') H2).
-        simpl in *; apply* wk_kind. apply entails_refl.
-      simpl*.
+      destruct* k.
+      use (binds_map (kind_subst S') H2).
+      apply* wk_kind.
     intros until 1.
     intros R1 R2 Hs HS1 n R3 IHh HK Dis.
-    unfold S1, K1 in *; clear S1 K1.
+    subst S1 K1.
     destruct* IHh.
     intuition.
     clear -R3 H3.
@@ -910,7 +917,7 @@ Proof.
     use (H3 _ _ (binds_remove_env H n)).
   intros until K1.
   intros R3 H R1 R2 HS HS1 n IHh HK Dis.
-  unfold S1, K1 in *; clear S1 K1.
+  subst S1 K1.
   destruct* IHh.
       constructor. repeat apply ok_remove_env. auto.
       rewrite* dom_remove_env.
@@ -1111,10 +1118,7 @@ Lemma well_kinded_get_kind : forall K x,
   well_kinded K (get_kind x K) (typ_fvar x).
 Proof.
   intros.
-  case_eq (get_kind x K); intros.
-    apply* wk_kind. apply* get_kind_binds.
-    apply entails_refl.
-  apply wk_any.
+  case_eq (get_kind x K); intros; auto*.
 Qed.
 
 Lemma well_subst_get_kind : forall K K' S x,
@@ -1291,7 +1295,6 @@ Proof.
   rewrite* typ_subst_compose.
   induction (typ_subst S T1); simpl in *; disjoint_solve.
   destruct* (v0 == v).
-  simpl in Hy. auto.
 Qed.
 
 Lemma kind_fv_decr : forall v T S k,
@@ -1331,19 +1334,13 @@ Proof.
   induction pairs; intros; simpl*.
   rewrite* get_notin_dom.
   sets_solve.
-    use (typ_fv_decr _ _ _ H H0 H1).
-    apply* remove_subset.
-    forward~ (@typ_subst_fresh S T) as E.
-    disjoint_solve. rewrite <- E in H3. auto.
-   use (typ_fv_decr _ _ _ H H0 H2).
-   apply* remove_subset.
-   forward~ (@typ_subst_fresh S T) as E.
-   disjoint_solve. rewrite <- E in H3. auto.
+    puts (typ_fv_decr _ _ _ H H0 H1).
+    rewrite* (@typ_subst_fresh S T).
+   puts (typ_fv_decr _ _ _ H H0 H2).
+   rewrite* (@typ_subst_fresh S T).
   use (IHpairs H H0 _ H2).
-  apply* remove_subset.
-  simpl.
-  rewrite* get_notin_dom.
-  simpl*.
+  simpl in H1.
+  rewrite get_notin_dom in H1; auto.
 Qed.
 
 Lemma really_all_fv_decr : forall S K pairs v T,
@@ -1381,7 +1378,6 @@ Proof.
     auto.
   unfold really_all_fv, all_fv; simpl.
   rewrite* get_notin_dom.
-  simpl*.
 Qed.
 
 Lemma size_pairs_decr : forall v T K S pairs,
@@ -1565,7 +1561,7 @@ Proof.
              typ_size (typ_subst S (typ_arrow  T1 T2))).
     intros.
     case_eq (typ_size T); intros. destruct T; discriminate.
-    destruct n. destruct* T. elim (in_empty H0).
+    destruct n. destruct T. elim (in_empty H0).
         rewrite (S.singleton_1 H0) in H1.
         destruct H1; subst; simpl; omega.
       destruct T3; simpl in H2; omega.
@@ -1732,7 +1728,6 @@ Proof.
     rewrite Hv1.
     case_rewrite R3 (get_kind v1 K).
       destruct* k1.
-      simpl. use (get_kind_binds _ _ R3).
     destruct* (kind_subst S k1).
   unfold S0'; apply* size_pairs_decr_vars.
 Qed.
@@ -1847,13 +1842,5 @@ Proof.
 Qed.
 
 End Completeness.
-
-Lemma extends_trans : forall S1 S2 S3,
-  extends S1 S2 -> extends S2 S3 -> extends S1 S3.
-Proof.
-  intros; intro.
-  rewrite <- H. rewrite <- (H T).
-  rewrite* H0.
-Qed.
 
 End MkUnify.

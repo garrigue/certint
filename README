@@ -11,6 +11,7 @@ and principality of the type inference algorithm.
   ML_SP_Unify: soundness and completeness of unification
   ML_SP_Inference: soundness and principality of type inference
   ML_SP_Domain: instantiation of all the above proofs to polymorphic variants
+  ML_SP_Unify/Inference_wf: termination counters are in Prop
 
 I started from a proof of type soundness for coer ML by Arthur
 Chargueraud, which accompanied "Engineering formal metatheory" [2].

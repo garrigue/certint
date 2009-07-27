@@ -1356,7 +1356,10 @@ module MkSound =
     module Mk3 = 
      functor (SH:SndHypIntf) ->
      struct 
+      (** val dummy_env : 'a1 Env.env **)
       
+      let dummy_env =
+        Env.empty
      end
    end
  end
