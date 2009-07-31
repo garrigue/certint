@@ -333,17 +333,6 @@ Proof.
   destruct (n0 === n); reflexivity.
 Qed.
 
-Lemma lt_wf : forall n, Acc lt n.
-Proof.
-  induction n.
-    apply Acc_intro; intros. elim (le_Sn_O _ H).
-  apply Acc_intro; intros.
-  unfold lt in H.
-  destruct (Lt.le_lt_or_eq _ _ (Le.le_S_n _ _ H)).
-    apply (Acc_inv IHn _ H0).
-  subst*.
-Defined.
-
 Lemma dom_inv_abs : forall t t1 x,
    Acc lt (trm_depth t) ->
    t = trm_abs t1 -> Acc lt (trm_depth (t1 ^ x)).
@@ -662,7 +651,7 @@ Fixpoint typinf K E t T L S (h:Acc lt (trm_depth t)) (HS:is_subst S) (HK:ok K)
         (ok_kinds_open_vars _ _ HK (fresh_sub _ _ Fr (dom_K_L _ HL)))
         (disjoint_fvar _ _ _ D HL Fr) with
       | inleft (exist (K',S') (conj _ (conj HKSD' HL'))) =>
-        Some (exist (typinf_res E L) (K',S',L \u mkset Vs)
+        Some (exist _ (K',S',L \u mkset Vs)
           (conj HKSD' (subset_fvar _ _ Fr eq1 HL (HL' E))))
       | inright _ => None
       end
@@ -679,7 +668,7 @@ Fixpoint typinf K E t T L S (h:Acc lt (trm_depth t)) (HS:is_subst S) (HK:ok K)
         (subset_abs _ HL (HL' E)) with
       | None => None
       | Some (exist (K',S',L') (conj HKSD' HL')) =>
-        Some (exist (typinf_res E L) (K',S',L') (conj HKSD' (subset_abs2 HL')))
+        Some (exist _ (K',S',L') (conj HKSD' (subset_abs2 HL')))
       end
     end
   | trm_let t1 t2 => fun eq =>
@@ -698,8 +687,7 @@ Fixpoint typinf K E t T L S (h:Acc lt (trm_depth t)) (HS:is_subst S) (HK:ok K)
           (dom_inv_let2 x h eq) HS' HKA DKA HL'' with
         | None => None
         | Some (exist (K',S',L') (conj HKSD' HL'')) =>
-          Some (exist (typinf_res E L) (K',S',L')
-            (conj HKSD' (subset_let2 HL' HL'')))
+          Some (exist _ (K',S',L') (conj HKSD' (subset_let2 HL' HL'')))
         end
       end
     | None => None
@@ -713,8 +701,7 @@ Fixpoint typinf K E t T L S (h:Acc lt (trm_depth t)) (HS:is_subst S) (HK:ok K)
         (subset_app2 HL') with
       | None => None
       | Some (exist (K',S',L') (conj HKSD' HL'')) =>
-        Some (exist (typinf_res E L) (K',S',L')
-          (conj HKSD' (subset_app3 HL' HL'')))
+        Some (exist _ (K',S',L') (conj HKSD' (subset_app3 HL' HL'')))
       end
     | None => None
     end
