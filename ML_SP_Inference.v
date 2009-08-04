@@ -1985,7 +1985,7 @@ Definition principality S0 K0 E0 S K E t T L h :=
   K; E |(false,GcAny)|= t ~: typ_subst S T ->
   trm_depth t < h ->
   exists K', exists S', exists L',
-    typinf K0 E0 t T L S0 (lt_wf _) = (Some (K', S'), L') /\ extends S' S0 /\
+    typinf K0 E0 t T L S0 (lt_wf _) = (Some (K', S'), L') /\
     exists S'',
       dom S'' << S.diff L' L /\ env_prop type S'' /\ extends (S & S'') S' /\
       well_subst K' K (S & S'').
@@ -2047,8 +2047,6 @@ Proof.
       auto.
     unfold fvs in HL.
     destruct* (unify_kinds_ok _ _ H4).
-    split.
-      apply (typ_subst_extend _ _ _ HS0 H4).
     exists (combine Xs Vs').
     intuition.
     apply* list_forall_env_prop.
@@ -2221,12 +2219,9 @@ Proof.
       rewrite <- (proj1 MGE). rewrite dom_map. auto.
      simpl in Hh.
      rewrite trm_depth_open. omega.
-    destruct H9 as [S2 [L' [TI [Hext2 [S3 [HS3 [TS3 [Hext3 WS3]]]]]]]].
+    destruct H9 as [S2 [L' [TI [S3 [HS3 [TS3 [Hext3 WS3]]]]]]].
     unfold typinf0.
     esplit; esplit; esplit; split*.
-    split.
-      apply* extends_trans.
-      apply* typ_subst_extend.
     exists (combine Xs Us & S3).
     rewrite <- concat_assoc.
     split.
@@ -2939,7 +2934,7 @@ Proof.
     unfold fvs in HL; auto.
   destruct* (IHh (L \u {{x1}}) S0 K0 E0 (S & x1 ~ MXs)
                 (K & kinds_open_vars (sch_kinds M) Xs) E t1 (typ_fvar x1))
-    as [K' [S' [L' [HI [Hext' [S'' H'']]]]]].
+    as [K' [S' [L' [HI [S'' H'']]]]].
        split. rewrite <- (proj1 MGE). repeat rewrite* dom_map.
        intros. destruct (proj2 MGE _ _ H) as [M1 [BM1 MGM1]].
        exists M1.
@@ -3051,7 +3046,7 @@ Proof.
   assert (OkE0': env_ok (E0 & x ~ M0)). split*.
   assert (HT: type T) by apply* (typ_subst_type' S).
   destruct* (IHh L' S' (e0&e4) (E0&x~M0) (S& x1~MXs &S'') K (E&x~M) (t2 ^ x) T)
-    as [K'' [S1' [L'' [HI' [Hext'' [S1'' H1'']]]]]].
+    as [K'' [S1' [L'' [HI' [S1'' H1'']]]]].
        split.
          repeat rewrite dom_concat.
          rewrite <- (proj1 MGE). repeat rewrite dom_map.
@@ -3127,13 +3122,13 @@ Proof.
    puts (Max.le_max_r (trm_depth t1) (trm_depth t2)). omega.
   env_fix. esplit; esplit; esplit; split*.
   destruct* (typinf_sound _ (lt_n_Sn _) HI').
-  split*. apply* extends_trans.
   exists (x1~MXs & S'' & S1'').
   repeat rewrite <- concat_assoc.
-  intuition.
-  repeat rewrite dom_concat; simpl.
-  sets_solve. rewrite <- (S.singleton_1 H30) in *. apply* S.diff_3.
-  use (notin_subset H28 Hn).
+  intuition trivial.
+    repeat rewrite dom_concat; simpl.
+    sets_solve. rewrite <- (S.singleton_1 H30) in *. apply* S.diff_3.
+    use (notin_subset H28 Hn).
+  auto.
 Qed.
 
 Lemma principal_app : forall h L S0 K0 E0 S K E t1 t2 T,
@@ -3158,7 +3153,7 @@ Proof.
     unfold fvs in HL; auto.
   destruct* (IHh (L \u {{x1}}) S0 K0 E0 (S & x1 ~ S1) K E t1
                  (typ_arrow (typ_fvar x1) T))
-    as [K' [S' [L' [HI [Hext' [S'' H'']]]]]].
+    as [K' [S' [L' [HI [S'' H'']]]]].
        split.
          rewrite <- (proj1 MGE). repeat rewrite dom_map. auto.
        intros.
@@ -3166,7 +3161,7 @@ Proof.
        exists M2. split*.
        rewrite* (env_subst_ext_fv (S & x1 ~ S1) S).
        intros; unfold fvs in HL; auto.
-     rewrite Hcb; apply* (@well_subst_concat E0). 
+     rewrite Hcb; apply* (@well_subst_concat E0).
     simpl. destruct* (x1 == x1). env_fix. rewrite* Hsub.
    clear -Hh.
    puts (Max.le_max_l (trm_depth t1) (trm_depth t2)). omega.
@@ -3181,7 +3176,7 @@ Proof.
     clear -H H12; intro v.
     destruct* (in_vars_dec v (typ_fv t)).
   destruct* (IHh L' S' K' E0 (S & x1 ~ S1 & S'') K E t2 (typ_fvar x1))
-    as [K'' [S1' [L'' [HI' [Hext'' [S1'' H''']]]]]].
+    as [K'' [S1' [L'' [HI' [S1'' H''']]]]].
       split. rewrite <- (proj1 MGE). repeat rewrite dom_map. auto.
       intros.
       destruct (proj2 MGE _ _ H12) as [M2 [BM2 HM2]].
@@ -3195,14 +3190,14 @@ Proof.
   intuition.
   unfold typinf0.
   esplit; esplit; esplit; split*.
-  split. apply* extends_trans.
   destruct* (typinf_sound _ (lt_n_Sn _) HI'). simpl*. intros y Hy; apply* H11.
   exists (x1 ~ S1 & S'' & S1'').
   repeat rewrite <- concat_assoc.
-  intuition.
-  repeat rewrite dom_concat; simpl*.
-  sets_solve. apply* S.diff_3. apply* H23. apply* S.union_3.
-  apply* S.diff_3.
+  intuition trivial.
+    repeat rewrite dom_concat; simpl*.
+    sets_solve. apply* S.diff_3. apply* H23. apply* S.union_3.
+    apply* S.diff_3.
+  auto.
 Qed.
 
 Lemma principal_cst : forall h L S0 K0 E0 S K E c T,
@@ -3269,8 +3264,6 @@ Proof.
     destruct* (unify_mgu0 (K':=K) (S':=S & combine Xs Us) _ H).
     unfold fvs in HL.
     destruct* (unify_kinds_ok _ _ H).
-    split.
-      apply (typ_subst_extend _ _ _ HS0 H).
     exists (combine Xs Us).
     intuition.
     apply* list_forall_env_prop. apply (proj2 TUs).
@@ -3316,12 +3309,12 @@ Proof.
   intuition.
   unfold typinf'. rewrite H.
   esplit; esplit; split*.
-  destruct H2 as [S''].
+  destruct H0 as [S''].
   intuition.
   exists (var_default ~ T & S'').
   split.
     apply* well_subst_extends.
-  rewrite H3.
+  rewrite H2.
   rewrite typ_subst_concat_fresh.
     simpl. destruct* (var_default == var_default).
   simpl.
