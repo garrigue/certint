@@ -2302,7 +2302,7 @@ Definition principality S0 K0 E0 HS0 (HK0:kenv_ok K0) D0 S K E t T L HL h :=
   trm_depth t < h ->
   exists K', exists S', exists L', exists H',
     @typinf0 K0 E0 t T L S0 HS0 (proj1 HK0) D0 HL = Some (exist _ (K',S',L') H')
-    /\ extends S' S0 /\
+    /\
     exists S'',
       dom S'' << S.diff L' L /\ env_prop type S'' /\ extends (S & S'') S' /\
       well_subst K' K (S & S'').
@@ -2377,8 +2377,6 @@ Proof.
     rewrite* dom_kinds_open_vars.
     puts (fresh_sub _ _ Fr HL). clear Fr.
     unfold fvs in H4; disjoint_solve.
-  split.
-    apply (typ_subst_extend HU').
   exists (combine Xs Vs').
   intuition.
   apply* list_forall_env_prop.
@@ -2506,13 +2504,13 @@ Proof.
   inversions HU1; clear HU1.
   rewrite normalize_typinf.
   destruct (var_fresh (dom E0 \u trm_fv t1)) as [x Frx]; simpl proj1_sig.
+  set (HS1 := Hf' E0); clearbody HS1; clear Hf'.
   destruct (unify_type HU') as [HKK' [HTS' _]]; auto.
     simpl; intros.
     destruct H; try contradiction.
     inversions H.
     split; auto. apply* (typ_subst_type' S).
   destruct* (unify_kinds_ok HU') as [_ [_ WS2]].
-  poses Uk (Hf' E0).
   poses UT (unify_types HU').
   assert (OkE0': env_ok (E0 & x ~ Sch (typ_fvar x1) nil)).
     split; auto.
@@ -2540,28 +2538,19 @@ Proof.
       rewrite* <- (proj1 MGE).
     simpl in Hh.
     rewrite trm_depth_open. omega.
-  intros [K2 [S2 [L' [[[K'' S''] L'']
-           [TI [Hext2 [S3 [HS3 [TS3 [Hext3 WS3]]]]]]]]]].
-  instantiate (1:=subset_abs T HL (Hf' E0)) in TI.
+  intros [K2 [S2 [L' [[[HK2 [HS2 D2]] HL']
+             [TI [S3 [HS3 [TS3 [Hext3 WS3]]]]]]]]].
+  instantiate (1:=subset_abs T HL HS1) in TI.
   rewrite (ProofIrrelevance.proof_irrelevance _ HK' (proj1 HKK')).
-  rewrite TI.
+  rewrite TI; clear TI.
   esplit; esplit; esplit; esplit; split*.
-  split.
-    apply* extends_trans.
-    apply* typ_subst_extend.
   exists (combine Xs Us & S3).
   rewrite <- concat_assoc.
-  split.
-    rewrite dom_concat.
-    unfold Xs, Us; simpl.
-    destruct* (typinf_sound _ _ _ _ _ (lt_n_Sn _) TI).
-    unfold fvs in *; simpl. unfold sch_fv; simpl.
-    simpl in Uk.
-    puts (proj1 (proj44 H1)).
-    clear -HS3 Fr1 Fr2 H2. simpl in H2.
-    unfold sch_fv in H2. simpl in H2.
-    sets_solve; apply* S.diff_3.
   split*.
+  rewrite dom_concat.
+  unfold Xs, Us; simpl.
+  clear -Fr1 Fr2 HL' HS3.
+  sets_solve; apply* S.diff_3.
 Qed.
 
 Lemma sch_open_vars_type : forall M Xs,
@@ -3284,7 +3273,7 @@ Proof.
    eapply Lt.le_lt_trans. apply (Max.le_max_l (trm_depth t1) (trm_depth t2)).
    omega.
   instantiate (1:=subset_let1 HL).
-  intros [K' [S' [L' [[[HK1 [HS' D']] HL'] [HI [Hext' [S'' H'']]]]]]].
+  intros [K' [S' [L' [[[HK1 [HS' D']] HL'] [HI [S'' H'']]]]]].
   rewrite HI.
   destruct* (typinf_sound _ _ _ _ _ (lt_n_Sn _) HI)
     as [_ [HTS' [HK' [WS' [_ Typ']]]]]; clear HI.
@@ -3424,18 +3413,17 @@ Proof.
    clear -Hh.
    puts (Max.le_max_r (trm_depth t1) (trm_depth t2)). omega.
   instantiate (1 := Fvs04).
-  intros [K'' [S1' [L'' [[[HK2 [HS1' D'']] HL''] [HI' [Hext'' [S''' H''']]]]]]].
+  intros [K'' [S1' [L'' [[[HK2 [HS1' D'']] HL''] [HI' [S''' H''']]]]]].
   rewrite (ProofIrrelevance.proof_irrelevance _ HKG (proj41 Ok04)).
-  rewrite HI'.
+  rewrite HI'; clear HI'.
   esplit; esplit; esplit; esplit; split*.
-  destruct* (typinf_sound _ _ _ _ _ (lt_n_Sn _) HI'); clear HI'.
-  split*. apply* extends_trans.
   exists (x1~MXs & S'' & S''').
   repeat rewrite <- concat_assoc.
-  intuition.
-  repeat rewrite dom_concat; simpl.
-  sets_solve. rewrite <- (S.singleton_1 H18) in *. apply* S.diff_3.
-  apply* S.diff_3.
+  intuition trivial.
+    repeat rewrite dom_concat; simpl.
+    sets_solve. rewrite <- (S.singleton_1 H10) in *. apply* S.diff_3.
+    apply* S.diff_3.
+  auto.
 Qed.
 
 Lemma principal_app : forall h L S0 K0 E0 HS0 HK0 D0 S K E t1 t2 T HL,
@@ -3474,7 +3462,7 @@ Proof.
    clear -Hh. simpl in *.
    puts (Max.le_max_l (trm_depth t1) (trm_depth t2)). omega.
   instantiate (1:=subset_app1 HL).
-  intros [K' [S' [L' [[[HK1 [HS' D']] HL'] [HI [Hext' [S'' H'']]]]]]].
+  intros [K' [S' [L' [[[HK1 [HS' D']] HL'] [HI [S'' H'']]]]]].
   rewrite HI.
   destruct* (typinf_sound _ _ _ _ _ (lt_n_Sn _) HI)
     as [_ [HTS' [HK' [WS' [_ Typ']]]]]; clear HI.
@@ -3496,18 +3484,17 @@ Proof.
    clear -Hh; simpl in *.
    puts (Max.le_max_r (trm_depth t1) (trm_depth t2)). omega.
   instantiate (1 := subset_app2 HL').
-  intros [K'' [S1' [L'' [[[HK2 [HS1' D'']] HL''] [HI' [Hext'' [S''' H''']]]]]]].
+  intros [K'' [S1' [L'' [[[HK2 [HS1' D'']] HL''] [HI' [S''' H''']]]]]].
   rewrite (ProofIrrelevance.proof_irrelevance _ HK1 (proj1 HK')).
-  rewrite HI'.
+  rewrite HI'; clear HI'.
   esplit; esplit; esplit; esplit; split*.
-  destruct* (typinf_sound _ _ _ _ _ (lt_n_Sn _) HI'); clear HI'.
-  split*. apply* extends_trans.
   exists (x1 ~ S1 & S'' & S''').
   repeat rewrite <- concat_assoc.
-  intuition.
-  repeat rewrite dom_concat; simpl*.
-  sets_solve. apply* S.diff_3. apply* H12. apply S.union_3. apply* HL'.
-  apply* S.diff_3.
+  intuition trivial.
+    repeat rewrite dom_concat; simpl*.
+    clear -Fr1 HL' HL'' H H2.
+    sets_solve; apply* S.diff_3. apply* HL''. apply S.union_3. apply* HL'.
+  auto.
 Qed.
 
 Lemma principal_cst : forall h L S0 K0 E0 HS0 HK0 D0 S K E c T HL,
@@ -3576,10 +3563,8 @@ Proof.
   inversions HU1; clear HU1.
   esplit; esplit; esplit; esplit; split*.
   destruct* (unify_kinds_ok HU').
-  split.
-    apply (typ_subst_extend HU').
   exists (combine Xs Us).
-  intuition.
+  intuition trivial.
     clearbody Ok Fvs.
     rewrite* dom_combine.
   apply* list_forall_env_prop. apply (proj2 TUs).
@@ -3623,7 +3608,7 @@ Proof.
    simpl. destruct* (var_default == var_default).
   rewrite normalize_typinf.
   rewrite (ProofIrrelevance.proof_irrelevance _ (proj41 HK0) (ok_empty kind)).
-  intros [K' [S' [L' [[[HK1 [HS' D']] HL'] [HI [Hext' [S'' H'']]]]]]].
+  intros [K' [S' [L' [[[HK1 [HS' D']] HL'] [HI [S'' H'']]]]]].
   rewrite HI.
   esplit; esplit; split*.
   intuition.
