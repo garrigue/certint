@@ -1,5 +1,10 @@
 set -e
-makeit() { for i in "$@"; do echo coqc "$i".v ; coqc "$i".v ; done; }
+wait="$1"
+makeit() {
+ for i in "$@"; do
+   if test "$wait" = "$i"; then wait=""; fi
+   if test -z "$wait"; then echo coqc "$i".v ; coqc "$i".v ; fi
+ done; }
 makeit Lib_Tactic Lib_ListFacts Lib_ListFactsMore
 makeit Lib_MyFSetInterface Lib_FinSet Lib_FinSetImpl
 makeit Metatheory_Var Metatheory_Fresh Metatheory_Env

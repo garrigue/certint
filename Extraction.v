@@ -19,14 +19,14 @@ Import Infer2.
 
 Definition t :=
   trm_app
-    (trm_cst (Const.matches (NoDup_nodup (Variables.var_of_nat 5 :: nil))))
+    (trm_cst (Const.matches (NoDup_nodup (5 :: nil))))
     (trm_abs (trm_bvar O)).
 
 (* This doesn't seem to work inside Coq (some things don't get evaluated) *)
 (* Eval compute in typinf' t. *)
 
-(* Definition decidable (A : Set) (P : A -> Prop) :=
-  forall x, sumbool (P x) (~P x). *)
+Definition decidable (A : Set) (P : A -> Prop) :=
+  forall x, {P x} + {~P x}.
 
 Definition ok_dec : decidable (@ok sch).
   intro E; induction E.

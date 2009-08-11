@@ -691,9 +691,10 @@ Proof.
   destruct k as [kc kr]; destruct k' as [kc' kr'].
   split; simpl*.
   intros; simpl in *.
-  destruct (proj1 (in_map_iff _ _ _) H1) as [T' [e i]].
+  destruct T.
+  destruct (map_snd_inv _ _ _ _ H1) as [T' [e i]].
   rewrite <- e.
-  apply* (in_map (fun XT : var * typ => (fst XT, typ_subst S (snd XT)))).
+  apply* in_map_snd.
 Qed.
 Hint Resolve kind_subst_entails.
 

@@ -5,7 +5,7 @@
 
 Set Implicit Arguments.
 Require Import Lib_FinSet Metatheory List ListSet Arith.
-Require Import ML_SP_Inference_wf.
+Require Import ML_SP_Inference.
 
 Section ListSet.
   Variable A : Type.
@@ -26,9 +26,11 @@ Section ListSet.
 End ListSet.
 
 Module Cstr.
+  Definition attr := nat.
+  Definition eq_dec := eq_nat_dec.
   Record cstr_impl : Set := C {
-    cstr_low  : list var;
-    cstr_high : option (list var) }.
+    cstr_low  : list nat;
+    cstr_high : option (list nat) }.
   Definition cstr := cstr_impl.
   Definition valid c :=
     match cstr_high c with
@@ -63,14 +65,14 @@ Module Cstr.
     destruct* (cstr_high c1).
   Qed.
 
-  Definition unique c v := set_mem E.eq_dec v (cstr_low c).
+  Definition unique c v := set_mem eq_nat_dec v (cstr_low c).
 
   Definition lub c1 c2 :=
-    C (set_union eq_var_dec (cstr_low c1) (cstr_low c2))
+    C (set_union eq_nat_dec (cstr_low c1) (cstr_low c2))
     (match cstr_high c1, cstr_high c2 with
      | None, h => h
      | h, None => h
-     | Some s1, Some s2 => Some (set_inter eq_var_dec s1 s2)
+     | Some s1, Some s2 => Some (set_inter eq_nat_dec s1 s2)
      end).
 
   Hint Resolve incl_tran.
@@ -98,7 +100,7 @@ Module Cstr.
     intros.
     unfold valid.
     case_eq (cstr_high c); intros.
-      destruct* (set_incl eq_var_dec (cstr_low c) l).
+      destruct* (set_incl eq_nat_dec (cstr_low c) l).
     auto.
   Defined.
 
@@ -124,25 +126,25 @@ Module Cstr.
 End Cstr.
 
 Section NoDup.
-  Fixpoint nodup (l:list var) :=
+  Fixpoint nodup (l:list nat) :=
     match l with
     | nil => nil
     | v :: l' =>
-      if In_dec eq_var_dec v l' then nodup l' else v :: nodup l'
+      if In_dec eq_nat_dec v l' then nodup l' else v :: nodup l'
     end.
   Lemma nodup_elts : forall a l, In a l <-> In a (nodup l).
   Proof.
     induction l; split*; simpl; intro; destruct IHl.
       destruct H. subst.
-        destruct* (In_dec eq_var_dec a l).
-      destruct* (In_dec eq_var_dec a0 l).
-    destruct* (In_dec eq_var_dec a0 l).
+        destruct* (In_dec eq_nat_dec a l).
+      destruct* (In_dec eq_nat_dec a0 l).
+    destruct* (In_dec eq_nat_dec a0 l).
     simpl in H; destruct* H.
   Qed.
   Lemma NoDup_nodup : forall l, NoDup (nodup l).
   Proof.
     induction l; simpl. constructor.
-    destruct* (In_dec eq_var_dec a l).
+    destruct* (In_dec eq_nat_dec a l).
     constructor; auto.
     intro Ha. elim n. apply (proj2 (nodup_elts _ _) Ha).
   Qed.
@@ -150,8 +152,8 @@ End NoDup.
 
 Module Const.
   Inductive ops : Set :=
-    | tag     : var -> ops
-    | matches : forall (l:list var), NoDup l -> ops.
+    | tag     : Cstr.attr -> ops
+    | matches : forall (l:list Cstr.attr), NoDup l -> ops.
   Definition const := ops.
   Definition arity op :=
     match op with
@@ -220,7 +222,7 @@ Module Delta.
     | Const.matches l nd =>
       match nth (length l) tl trm_def with
       | trm_app (trm_cst (Const.tag t)) t1 =>
-        match index eq_var_dec 0 t l with
+        match index eq_nat_dec 0 t l with
         | Some i => trm_app (nth i tl trm_def) t1
         | None => trm_default
         end
@@ -253,12 +255,13 @@ Module Delta.
     case_eq (nth (length l0) tl trm_def); intros; auto.
     destruct* t.
     destruct* c.
-    case_eq (index eq_var_dec 0 v l0); intros; auto.
+    case_eq (index eq_nat_dec 0 a l0); intros; auto.
     apply term_app.
-      destruct (index_ok eq_var_dec var_default _ _ H1).
+      destruct (index_ok _ 0 _ _ H1).
       apply value_term.
       apply* (list_forall_out l).
-      apply* nth_In. omega.
+      apply* nth_In.
+      unfold Cstr.attr in *; omega.
     assert (term (nth (length l0) tl trm_def)).
       apply value_term.
       apply* (list_forall_out l).
@@ -470,15 +473,15 @@ Module SndHyp.
     
   Lemma in_matches_types : forall i l T1 T2 Us,
     i < length l ->
-    In (nth i l var_default, nth i Us typ_def)
-    (List.map
-      (fun XT : var * typ => (fst XT, typ_open (snd XT) (T1 :: T2 :: Us)))
+    In (nth i l 0, nth i Us typ_def)
+    (map_snd (fun T => typ_open T (T1 :: T2 :: Us))
       (combine l (map typ_bvar (seq 2 (length l))))).
   Proof.
     intros.
     remember (0 + i) as m.
     pattern i at 2.
     replace i with (0+i) by reflexivity. rewrite <- Heqm.
+    generalize 0 at 1. intro d.
     gen i; generalize 0; induction l; intros.
     simpl in H; elimtype False; omega.
     destruct i; simpl.
@@ -540,18 +543,18 @@ Module SndHyp.
     assert (Hvt: In (v,t) kr) by auto*. clear H6 H9.
     unfold Cstr.valid in kv; simpl in kv.
     assert (Hvl: In v l) by auto*.
-    case_eq (index eq_var_dec 0 v l); introv R2;
+    case_eq (index eq_nat_dec 0 v l); introv R2;
       try elim (index_none_notin _ _ _ _ R2 Hvl).
-    destruct (index_ok _ var_default _ _ R2).
+    destruct (index_ok _ 0 _ _ R2).
     assert (Hvn: In (v, nth n0 lb0 typ_def) kr).
       rewrite <- H9. apply H2. apply* in_matches_types.
     clear H9.
     forward~ (list_forall2_nth trm_def typ_def TypA (n:=n0)) as Typv.
-      omega.
+      unfold Cstr.attr in *; omega.
     forward~ (list_forall2_nth typ_def typ_def HA (n:=n0)) as Eqv.
       rewrite (list_forall2_length HA).
       rewrite <- (list_forall2_length TypA).
-      omega.
+      unfold Cstr.attr in *; omega.
     rewrite <- Eqv in Typv; clear Eqv.
     rewrite app_nth1 in Typv; [|rewrite map_length; rewrite* seq_length].
     rewrite (map_nth _ 0) in Typv; [|rewrite* seq_length].
@@ -571,7 +574,7 @@ Module SndHyp.
     | Const.matches l nd =>
       match nth (length l) cl clos_def with
       | clos_const (Const.tag t) (cl1 :: nil) =>
-        match index eq_var_dec 0 t l with
+        match index eq_nat_dec 0 t l with
         | Some i => (nth i cl clos_def, cl1 :: nil)
         | None => (clos_def, nil)
         end
@@ -599,8 +602,9 @@ Module SndHyp.
     destruct l0; simpl. destruct* c.
     destruct l0 using rev_ind; simpl.
       destruct* c.
-      case_eq (index eq_var_dec 0 v l); introv R2; simpl*.
-      destruct (index_ok _ var_default _ _ R2).
+      case_eq (index eq_nat_dec 0 a l); introv R2; simpl*.
+      destruct (index_ok _ 0 _ _ R2).
+      unfold Cstr.attr in *.
       rewrite (map_nth _ clos_def); try omega.
       intros.
       split. 
@@ -635,7 +639,7 @@ Module SndHyp.
       destruct l0.
         inversions* H.
       destruct l0.
-        destruct (index eq_var_dec 0 v l).
+        destruct (index eq_nat_dec 0 a l).
           puts (clos_ok_nth n0 H0).
           inversions* H.
         inversions* H.
@@ -655,7 +659,7 @@ Module SndHyp.
     destruct c.
       inversions H3. auto.
       inversions H5.
-        destruct (index eq_var_dec 0 v l).
+        destruct (index eq_nat_dec 0 a l).
           split*.
           apply* equiv_cl_nth.
         auto.

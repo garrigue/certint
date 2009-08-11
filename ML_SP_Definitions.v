@@ -11,10 +11,11 @@ Require Import Metatheory List Arith.
 (* Constraint domain specification *)
 
 Module Type CstrIntf.
-  Parameter cstr : Set.
+  Parameter cstr attr : Set.
   Parameter valid : cstr -> Prop.
   Parameter valid_dec : forall c, sumbool (valid c) (~valid c).
-  Parameter unique : cstr -> var -> bool.
+  Parameter eq_dec : forall x y:attr, {x=y}+{x<>y}.
+  Parameter unique : cstr -> attr -> bool.
   Parameter lub : cstr -> cstr -> cstr.
   Parameter entails : cstr -> cstr -> Prop.
   Parameter entails_refl : forall c, entails c c.
@@ -54,20 +55,20 @@ Definition typ_def := typ_bvar 0.
 
 (** Constraint domain *)
 
-Definition coherent kc (kr:list(var*typ)) := forall x T U,
+Definition coherent kc (kr:list(Cstr.attr*typ)) := forall x T U,
   Cstr.unique kc x = true -> In (x,T) kr -> In (x,U) kr -> T = U.
 
 Record ckind : Set := Kind {
   kind_cstr : Cstr.cstr;
   kind_valid : Cstr.valid kind_cstr;
-  kind_rel  : list (var*typ);
+  kind_rel  : list (Cstr.attr*typ);
   kind_coherent : coherent kind_cstr kind_rel }.
 
 Definition kind := option ckind.
 
 Definition entails K K' :=
   Cstr.entails (kind_cstr K) (kind_cstr K') /\
-  forall T:var*typ, In T (kind_rel K') -> In T (kind_rel K).
+  forall T:Cstr.attr*typ, In T (kind_rel K') -> In T (kind_rel K).
 
 (** Type schemes. *)
 
@@ -130,7 +131,7 @@ Definition types := list_for_n type.
 Definition kind_types (K:kind) :=
   match K with
   | None => nil
-  | Some k => List.map (fun (x:var*typ) => snd x) (kind_rel k)
+  | Some k => list_snd (kind_rel k)
   end.
 
 Definition All_kind_types (P:typ->Prop) K :=
@@ -138,20 +139,19 @@ Definition All_kind_types (P:typ->Prop) K :=
 
 Lemma map_coherent : forall f kc kr,
   coherent kc kr ->
-  coherent kc (List.map (fun XT:var*typ => (fst XT, f (snd XT))) kr).
+  coherent kc (map_snd f kr).
 Proof.
   intros. intro; intros.
-  use (H x); simpl in *.
-  destruct (proj1 (in_map_iff _ _ _) H1) as [[x' T'] [Heq Hin]].
-  simpl in Heq; inversions Heq.
-  destruct (proj1 (in_map_iff _ _ _) H2) as [[x' U'] [Heq' Hin']].
-  simpl in Heq'; inversions Heq'.
+  puts (H x).
+  destruct (map_snd_inv _ _ _ _ H1) as [T' [Heq Hin]].
+  destruct (map_snd_inv _ _ _ _ H2) as [U' [Heq' Hin']].
+  subst.
   rewrite* (H3 T' U').
 Qed.
 
 Definition ckind_map_spec (f:typ->typ) (k:ckind):
   {k' |  kind_cstr k = kind_cstr k' /\ 
-  kind_rel k' = List.map (fun XT:var*typ => (fst XT, f (snd XT))) (kind_rel k)}.
+  kind_rel k' = map_snd f (kind_rel k)}.
 Proof.
   intros.
   destruct k as [kc kv kr kh].

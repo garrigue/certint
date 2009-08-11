@@ -1,8 +1,8 @@
 #load"typinf.cmo";;
 open Typinf;;
 open Infer2;;
-open Infer.Rename.Unify.MyEval.Sound.Infra.Defs;;
-open Infer.Rename.Unify.MyEval;;
+open Infer.Unify.MyEval.Rename.Sound.Infra.Defs;;
+open Infer.Unify.MyEval;;
 open Const;;
 open Variables.VarSet;;
 
@@ -49,21 +49,21 @@ let abs a = Coq_trm_abs a
 let var n = Variables.var_of_nat (nat_of_int n)
 let bvar n = Coq_trm_bvar (nat_of_int n)
 let matches l =
-  Coq_trm_cst (Const.Coq_matches (coqlist_of_list l))
-let tag v =
-  Coq_trm_cst (Const.Coq_tag v);;
+  Coq_trm_cst (Const.Coq_matches (coqlist_of_list (List.map nat_of_int l)))
+let tag n =
+  Coq_trm_cst (Const.Coq_tag (nat_of_int n));;
 
 (* First example: (Coq_tag A) is a function constant, which takes any value
    and returns a polymorphic variant A with this value as argument *)
 (* This example is equivalent to the ocaml term [fun x -> `A0 x] *)
-typinf2 Nil (tag (var 0));;
+typinf2 Nil (tag 0);;
 
 (* Second example: (Coq_matches [A1; ..; An]) is a n+1-ary function constant
    which takes n functions and a polymorphic variant as argument, and
    (fi v) if the argument was (Ai v). *)
 (* This example is equivalent to [function `A20 x -> x | `A21 x -> x] *)
 let mtch f1 f2 =
-  app (app (matches [var 20; var 21]) f1) f2
+  app (app (matches [20; 21]) f1) f2
 let trm = mtch (abs (bvar 0)) (abs (bvar 0));;
 typinf2 Nil trm;;
 
@@ -73,7 +73,7 @@ let trm2 =
   abs (app (mtch (abs (bvar 0)) (abs (bvar 1))) (bvar 0)) ;;
 typinf2 Nil trm2;;
 
-let trm3 = app trm2 (app (tag (var 20)) (app (tag (var 21)) (abs (bvar 0)))) ;;
+let trm3 = app trm2 (app (tag 20) (app (tag 21) (abs (bvar 0)))) ;;
 typinf2 Nil trm3;;
 
 let r1 = eval1 Nil trm3 (nat_of_int 10);;

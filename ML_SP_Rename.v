@@ -397,7 +397,7 @@ Lemma kind_fv_open : forall Us k,
   kind_fv (kind_open k Us) << kind_fv k \u typ_fv_list Us.
 Proof.
   destruct k as [[kc kv kr kh]|]; unfold kind_fv; simpl*.
-  rewrite map_map. simpl.
+  rewrite list_snd_map_snd.
   clear; induction kr; simpl*.
   disjoint_solve.
   use (typ_fv_open _ _ H).

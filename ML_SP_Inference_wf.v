@@ -773,17 +773,18 @@ Proof.
   simpl in *.
   puts (list_forall_app H H0).
   clear H H0.
-  rewrite <- map_app in H1.
-  set (kr':=@nil (var*typ)).
+  unfold list_snd in H1; rewrite <- map_app in H1.
+  set (kr':=@nil (Cstr.attr*typ)).
   set (pairs':=@nil (typ*typ)).
-  assert (list_forall P (List.map (fun x : var * typ => snd x) kr')) by simpl*.
+  assert (list_forall P (List.map (fun x : Cstr.attr * typ => snd x) kr'))
+    by simpl*.
   assert (forall T1 T2, In (T1, T2) pairs' -> P T1 /\ P T2) by simpl*.
   gen kr' pairs'.
   induction (kind_rel k ++ kind_rel k0); simpl; intros. auto.
   destruct a.
   inversion_clear H1.
-  case_eq (Cstr.unique kc v); introv R.
-    case_eq (get v kr'); intros.
+  case_eq (Cstr.unique kc a); introv R.
+    case_eq (assoc Cstr.eq_dec a kr'); intros.
       apply* IHl.
       simpl; intros.
       destruct* H4.
@@ -792,7 +793,7 @@ Proof.
       clear -H H1.
       induction kr'; simpl in *. discriminate.
       inversion_clear H.
-      destruct a. destruct (v == v0).
+      destruct a0. destruct (Cstr.eq_dec a a0).
         inversions* H1.
       apply* IHkr'.
     apply* IHl.

@@ -99,7 +99,6 @@ Section Combine.
 
   Definition list_fst := List.map (@fst A B).
   Definition list_snd := List.map (@snd A B).
-
   Lemma combine_fst_snd : forall l,
     combine (list_fst l) (list_snd l) = l.
   Proof.
@@ -136,9 +135,76 @@ Section Combine.
     induction l1; destruct l1'; simpl; intros; try discriminate. auto.
     rewrite* IHl1.
   Qed.
+
+  Definition map_snd (f:B->B) :=
+    List.map (fun p:A*B => (fst p, f (snd p))).
+
+  Lemma map_snd_inv : forall f x y (l:list(A*B)),
+    In (x, y) (map_snd f l) ->
+    exists z, f z = y /\ In (x,z) l.
+  Proof.
+    intros.
+    destruct (proj1 (in_map_iff _ _ _) H) as [[x' T'] [Heq Hin]].
+    simpl in Heq. inversions Heq.
+    exists* T'.
+  Qed.
+
+  Lemma in_map_snd : forall f x y (l:list(A*B)),
+    In (x,y) l -> In (x, f y) (map_snd f l).
+  Proof.
+    introv.
+    refine (in_map _ _ _).
+  Qed.
+
+  Lemma list_fst_map_snd : forall f l,
+    list_fst (map_snd f l) = list_fst l.
+  Proof.
+    induction l; simpl; intros. auto. congruence.
+  Qed.
+
+  Lemma list_snd_map_snd : forall f l,
+    list_snd (map_snd f l) = List.map f (list_snd l).
+  Proof.
+    induction l; simpl; intros. auto. congruence.
+  Qed.
+
+  Variable eq_dec : forall x y:A, {x=y}+{x<>y}.
+
+  Fixpoint assoc x (l:list (A*B)) {struct l} : option B :=
+    match l with
+    | nil => None
+    | (y,z)::r => if eq_dec x y then Some z else assoc x r
+    end.
+
+  Lemma assoc_sound : forall x y l,
+    assoc x l = Some y -> In (x,y) l.
+  Proof.
+    induction l; simpl; intros. discriminate.
+    destruct a. destruct* (eq_dec x a). inversions* H.
+  Qed.
+
+  Lemma assoc_complete : forall x y l,
+    assoc x l = None -> ~In (x,y) l.
+  Proof.
+    induction l; simpl; intros; intro. tauto.
+    destruct a. 
+    destruct (eq_dec x a). discriminate.
+    destruct H0. inversions* H0.
+    elim (IHl H H0).
+  Qed.
+
+  Lemma assoc_map : forall f x y l,
+    assoc x l = y -> assoc x (map_snd f l) = option_map f y.
+  Proof.
+    induction l; simpl; intros. subst*.
+    destruct a.
+    simpl.
+    destruct* (eq_dec x a).
+    inversions* H.
+  Qed.
 End Combine.
 
-Hint Resolve split_length.
+Hint Resolve split_length in_map_snd.
 
 
 Section Map.
