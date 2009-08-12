@@ -77,10 +77,6 @@ Proof.
   unfold typ_open_vars.
   intros; split.
     induction 1; simpl*.
-    destruct (types_typ_fvars Xs).
-    apply* (list_forall_out H2).
-    apply* nth_In.
-    rewrite <- H1; rewrite* <- H.
   induction T; simpl; intros.
       destruct* (le_lt_dec n n0).
       rewrite H in l.

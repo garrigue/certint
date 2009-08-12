@@ -5,8 +5,8 @@
 
 Set Implicit Arguments.
 Require Import Lib_FinSet Metatheory List ListSet Arith.
-(* Require Import ML_SP_Inference_wf. *)
-Require Import ML_SP_Eval.
+Require Import ML_SP_Inference_wf.
+(* Require Import ML_SP_Eval. *)
 
 Section ListSet.
   Variable A : Type.
@@ -207,12 +207,12 @@ Module Const.
     end.
 End Const.
 
-(*
+
 Module Infer := MkInfer(Cstr)(Const).
 Import Infer.
-Import Unify.MyEval. *)
-Module MyEval := MkEval(Cstr)(Const).
-Import MyEval.
+Import Unify.MyEval.
+(* Module MyEval := MkEval(Cstr)(Const).
+Import MyEval. *)
 Import Rename.Sound.Infra.
 Import Defs.
 
@@ -290,8 +290,8 @@ Module Delta.
       Sch (typ_arrow (typ_bvar 1) (typ_bvar 0))
         (None :: Some (Kind (valid_tag f kprod) (@coherent_tag _ f)) :: nil)
     | Const.recf =>
-      let T := typ_arrow (typ_bvar 0) (typ_bvar 0) in
-      Sch (typ_arrow (typ_arrow T T) T) (None :: nil)
+      let T := typ_arrow (typ_bvar 0) (typ_bvar 1) in
+      Sch (typ_arrow (typ_arrow T T) T) (None :: None :: nil)
     end.
 
   Definition trm_default := trm_abs trm_def.
@@ -302,6 +302,28 @@ Module Delta.
     | trm_cst (Const.record l _) => (l, tl)
     | _ => (nil, nil)
     end.
+
+  Lemma record_args_ok : forall l nd tl tl',
+    record_args (const_app (@Const.record l nd) tl) tl' = (l, tl++tl').
+  Proof.
+    induction tl using rev_ind; simpl; intros. auto.
+    rewrite const_app_app, app_ass; simpl.
+    apply* IHtl.
+  Qed.
+
+  Definition is_record c :=
+    match c with
+    | Const.record _ _ => true
+    | _ => false
+    end.
+
+  Lemma record_args_other : forall c tl tl',
+    is_record c = false -> record_args (const_app c tl) tl' = (nil, nil).
+  Proof.
+    induction tl using rev_ind; simpl; intros. destruct* c. discriminate.
+    rewrite const_app_app. simpl.
+    apply* IHtl.
+  Qed.
 
   Definition reduce c tl (vl:list_for_n value (S(Const.arity c)) tl) :=
     match c with
@@ -511,10 +533,10 @@ Module Delta.
   Qed.
 End Delta.
 
-(* Module Infer2 := Infer.Mk2(Delta).
-Import Infer2.MyEval2. *)
-Module MyEval2 := Mk2(Delta).
-Import MyEval2.
+Module Infer2 := Infer.Mk2(Delta).
+Import Infer2.MyEval2.
+(* Module MyEval2 := Mk2(Delta).
+Import MyEval2. *)
 Import Rename2.Sound2.
 Import JudgInfra.
 Import Judge.
@@ -876,29 +898,13 @@ Module SndHyp.
     inversions H3; clear H3.
     clear H5.
     inversions H7; clear H7.
-    case_eq (Delta.record_args t nil); introv R1.
     destruct* (value_prod_is_record H6 H0) as [l' [nd [vl [HE HL]]]].
       destruct H5 as [[H _] _]. simpl in H. destruct* H.
       clear -H. destruct k'.
       elimtype False. simpl in H.
       destruct kind_valid0. elim (H0 H).
     subst.
-    assert (l' = l /\ l0 = vl).
-      clear -HL R1.
-      set (vl0 := @nil trm) in *.
-      assert (l' = l /\ l0 = vl ++ vl0).
-        assert (length vl + length vl0 = length l').
-          simpl. omega.
-        clear HL; clearbody vl0.
-        gen vl0; induction vl using rev_ind; simpl; intros.
-          inversions* R1.
-        rewrite const_app_app in R1.
-        rewrite app_length in *; simpl in *.
-        destruct (IHvl _ R1). simpl*.
-        subst.
-        rewrite app_ass. simpl*.
-      subst vl0. rewrite <- app_nil_end in H. auto.
-    destruct H. subst.
+    rewrite Delta.record_args_ok. rewrite <- app_nil_end.
     destruct (fold_app_inv _ _ H6) as [TL [Typ0 TypA]]; clear H6.
     inversions Typ0; clear Typ0; try discriminate.
     unfold sch_open in H3; simpl in H3.
@@ -911,14 +917,13 @@ Module SndHyp.
     inversions H12; clear H12.
     puts (binds_func H13 H0).
     inversions H; clear H H13.
-    clear R1.
     puts (proj33 (proj1 H15)).
     puts (proj32 (proj1 H5)).
     destruct k' as [[ks kl km] kv kr kh]. simpl in *.
     destruct* km.
     puts (proj2 kv). simpl in H11.
-    assert (In a l) by auto.
-    case_eq (index eq_nat_dec 0 a l); introv R1;
+    assert (In a l') by auto.
+    case_eq (index eq_nat_dec 0 a l'); introv R1;
       [|elim (index_none_notin _ _ _ _ R1 H12)].
     destruct (index_ok _ 0  _ _ R1).
     forward~ (list_forall2_nth Delta.trm_default typ_def TypA (n:=n)) as Typ.
@@ -950,11 +955,12 @@ Module SndHyp.
     inversions Typ0; try discriminate.
     eapply typing_app; rewrite* gc_lower_false.
     eapply typing_app; rewrite* gc_lower_false.
-    
+    eapply typing_app; rewrite* gc_lower_false.
+  Qed.
 
   Definition reduce_clos c (cl : list clos) :=
     match c with
-    | Const.tag _ => (clos_def, nil)
+    | Const.tag _ | Const.record _ _ => (clos_def, nil)
     | Const.matches l nd =>
       match nth (length l) cl clos_def with
       | clos_const (Const.tag t) (cl1 :: nil) =>
@@ -962,6 +968,20 @@ Module SndHyp.
         | Some i => (nth i cl clos_def, cl1 :: nil)
         | None => (clos_def, nil)
         end
+      | _ => (clos_def, nil)
+      end
+    | Const.sub f =>
+      match cl with
+      | clos_const (Const.record l nd) cls :: _ =>
+        match index eq_nat_dec 0 f l with
+        | Some i => (nth i cls clos_def, nil)
+        | None => (clos_def, nil)
+        end
+      | _ => (clos_def, nil)
+      end
+    | Const.recf =>
+      match cl with
+      | cl1 :: rem => (cl1, clos_const Const.recf (cl1::nil) :: rem)
       | _ => (clos_def, nil)
       end
     end.
@@ -977,7 +997,8 @@ Module SndHyp.
     intros.
     clear H. (* Simpler to prove it independently of typability *)
     unfold Delta.reduce.
-    destruct c. simpl*.
+    destruct c; try solve [simpl*].
+    (* matches *)
     poses Hlen (proj1 CLS). simpl in Hlen.
     rewrite (map_nth _ clos_def); try omega.
     unfold reduce_clos.
@@ -1007,27 +1028,64 @@ Module SndHyp.
     clear IHl0.
     rewrite map_app; rewrite fold_left_app; simpl.
     destruct l0; destruct c; simpl*.
+    (* sub *)
+    poses Hlen (proj1 CLS). simpl in Hlen.
+    do 2 (destruct cls; try discriminate).
+    simpl.
+    destruct c; simpl*.
+    assert (clos_ok (clos_const c l)).
+      destruct* CLS.
+    inversions H.
+    case_eq (Delta.is_record c); introv R1.
+      destruct c; try discriminate.
+      rewrite Delta.record_args_ok. rewrite <- app_nil_end.
+      case_eq (index eq_nat_dec 0 a l0); introv R2; simpl*.
+      destruct (le_lt_dec (length l) n0).
+        rewrite* nth_overflow.
+        rewrite* nth_overflow.
+        rewrite* map_length.
+      rewrite (map_nth _ clos_def); auto.
+    rewrite (Delta.record_args_other _ _ _ R1).
+    destruct c; try discriminate; simpl*.
+    (* recf *)
+    poses Hlen (proj1 CLS). simpl in Hlen.
+    do 3 (destruct cls; try discriminate).
+    simpl.
+    destruct CLS.
+    inversions* H0.
   Qed.
+
+  Ltac advance :=
+    match goal with H: (match ?t with end) = (_, _) |- _ => destruct t end.
+  
+  Ltac eq_pair :=
+    match goal with H: (_,_) = (_,_) |- _ => inversions H end.
 
   Lemma reduce_clos_regular : forall c cls cl' cls',
     reduce_clos c cls = (cl', cls') ->
     list_forall clos_ok cls ->
     list_forall clos_ok (cl' :: cls').
   Proof.
-    destruct c; simpl; intros.
-      inversions* H.
-    puts (clos_ok_nth (length l) H0).
-    destruct (nth (length l) cls clos_def); inversions H1.
-      inversions* H.
-    destruct c.
-      destruct l0.
-        inversions* H.
-      destruct l0.
-        destruct (index eq_nat_dec 0 a l).
-          puts (clos_ok_nth n0 H0).
-          inversions* H.
-        inversions* H.
-      inversions* H.
+    Hint Extern 1 (list_forall _ _) => eq_pair.
+    destruct c; simpl; intros; auto.
+    (* matches *)
+    puts (clos_ok_nth (length l) H0). intuition.
+    destruct (nth (length l) cls clos_def); inversions* H1.
+    destruct* c.
+    destruct* l0.
+    destruct* l0.
+    destruct* (index eq_nat_dec 0 a l).
+    (* sub *)
+    destruct* cls.
+    destruct* c.
+    destruct* c.
+    destruct~ (index eq_nat_dec 0 a l0).
+    inversions H0; clear H0.
+    inversions H4; clear H4.
+    use (clos_ok_nth n0 H2).
+    (* recf *)
+    destruct~ cls.
+    inversions H0.
     inversions* H.
   Qed.
 
@@ -1037,18 +1095,22 @@ Module SndHyp.
     let (cl',arg') := reduce_clos c args' in
     equiv_clos cl cl' /\ list_forall2 equiv_clos arg arg'.
   Proof.
-    destruct c; simpl; intros. split*.
+    Hint Resolve equiv_cl_nth.
+    destruct c; simpl; intros; auto*.
+    (* matches *)
     puts (equiv_cl_nth (length l) H).
     inversions* H0.
-    destruct c.
-      inversions H3. auto.
-      inversions H5.
-        destruct (index eq_nat_dec 0 a l).
-          split*.
-          apply* equiv_cl_nth.
-        auto.
-      auto.
-    auto.
+    destruct* c.
+    inversions* H3.
+    inversions* H5.
+    destruct* (index eq_nat_dec 0 a l).
+    (* sub *)
+    inversions* H.
+    inversions* H0.
+    destruct* c.
+    destruct* (index eq_nat_dec 0 a l).
+    (* recf *)
+    inversions* H.
   Qed.
 End SndHyp.
 

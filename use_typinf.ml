@@ -45,37 +45,79 @@ open Typinf.Cstr;;
 let rec nat_of_int n = if n <= 0 then O else S (nat_of_int (n-1));;
 
 let app a b = Coq_trm_app (a,b)
+let apps a l = List.fold_left app a l
 let abs a = Coq_trm_abs a
 let var n = Variables.var_of_nat (nat_of_int n)
 let bvar n = Coq_trm_bvar (nat_of_int n)
-let matches l =
-  Coq_trm_cst (Const.Coq_matches (coqlist_of_list (List.map nat_of_int l)))
+let matches l = apps
+    (Coq_trm_cst (Const.Coq_matches (coqlist_of_list (List.map nat_of_int l))))
 let tag n =
-  Coq_trm_cst (Const.Coq_tag (nat_of_int n));;
+  app (Coq_trm_cst (Const.Coq_tag (nat_of_int n)))
+let record l = apps
+    (Coq_trm_cst (Const.Coq_record (coqlist_of_list (List.map nat_of_int l))))
+let sub n =
+  app (Coq_trm_cst (Const.Coq_sub (nat_of_int n)))
+let recf = app (Coq_trm_cst Const.Coq_recf);;
+
 
 (* First example: (Coq_tag A) is a function constant, which takes any value
    and returns a polymorphic variant A with this value as argument *)
 (* This example is equivalent to the ocaml term [fun x -> `A0 x] *)
-typinf2 Nil (tag 0);;
+typinf2 Nil (abs (tag 0 (bvar 0)));;
 
 (* Second example: (Coq_matches [A1; ..; An]) is a n+1-ary function constant
    which takes n functions and a polymorphic variant as argument, and
    (fi v) if the argument was (Ai v). *)
 (* This example is equivalent to [function `A20 x -> x | `A21 x -> x] *)
-let mtch f1 f2 =
-  app (app (matches [20; 21]) f1) f2
-let trm = mtch (abs (bvar 0)) (abs (bvar 0));;
+let trm = matches [20; 21] [abs (bvar 0); abs (bvar 0)];;
 typinf2 Nil trm;;
 
 (* Another example, producing a recursive type *)
-(* OCaml equivalent: [fun x -> match x with `A20 y -> y | `A21 y -> x] *)
+(* OCaml equivalent: [fun x -> match x with `A20 y -> y | `A21 y -> y] *)
 let trm2 =
-  abs (app (mtch (abs (bvar 0)) (abs (bvar 1))) (bvar 0)) ;;
+  abs (matches [20; 21] [abs (bvar 0); abs (bvar 0); bvar 0]) ;;
 typinf2 Nil trm2;;
 
-let trm3 = app trm2 (app (tag 20) (app (tag 21) (abs (bvar 0)))) ;;
+let trm3 = app trm2 (tag 20 (tag 21 (abs (bvar 0)))) ;;
 typinf2 Nil trm3;;
 
 let r1 = eval1 Nil trm3 (nat_of_int 10);;
 let r2 = eval1 Nil trm3 (nat_of_int 20);;
 let r3 = eval1 Nil trm3 omega;;
+
+(* More advanced example: the reverse function *)
+
+let cons x y = tag 1 (record [0;1] [x;y])
+let nil = tag 0 (record [] []);;
+typinf2 Nil nil;;
+typinf2 Nil (cons nil nil);;
+
+let call f r l =
+  apps f [sub 1 r; cons (sub 0 r) l];;
+typinf2 Nil (abs (abs (abs (call (bvar 2) (bvar 1) (bvar 0)))));;
+
+let repeat = recf (abs (abs (cons (bvar 0) (app (bvar 1) (bvar 0)))));;
+typinf2 Nil repeat;;
+
+let rev_append = recf
+    (abs
+       (abs
+	  (abs
+	     (matches [0;1]
+		[abs (bvar 1);
+		 abs (apps (bvar 3)
+			[sub 1 (bvar 0); cons (sub 0 (bvar 0)) (bvar 1)]);
+		 bvar 1])))) ;;
+typinf2 Nil rev_append;;
+
+let rec repeat n x = if n <= 0 then [] else x :: repeat (n-1) x
+
+let mylist =
+  app (abs (cons (tag 3 (bvar 0))
+	      (cons (tag 4 (bvar 0)) (cons (tag 5 (bvar 0)) nil))))
+    (record [] []);;
+typinf2 Nil mylist;;
+
+let rlist = apps rev_append [mylist; nil];;
+let t = typinf2 Nil rlist;;
+let r = eval1 Nil rlist omega;;
