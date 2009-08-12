@@ -582,15 +582,19 @@ Module SndHyp.
 
   Hint Rewrite combine_length combine_nth : list.
 
-  Lemma tag_is_const : forall v vl K E gc T TL,
-    S (Const.arity (Const.tag v)) = length vl ->
-    K; E |(false,gc)|= trm_cst (Const.tag v) ~:
-      fold_right typ_arrow T TL ->
-    list_forall2 (typing (false,gc) K E) vl TL -> False.
+  Definition delta_typed_cst c :=
+    forall tl vl K E gc T TL,
+    K; E | (false, gc) |= trm_cst c ~: fold_right typ_arrow T TL ->
+    list_forall2 (typing (false, gc) K E) tl TL ->
+    K ; E |(false,gc)|= @Delta.reduce c tl vl ~: T.
+
+  Lemma delta_typed_tag : forall v, delta_typed_cst (Const.tag v).
   Proof.
-    introv Hv TypC TypA.
+    intros; intro; introv TypC TypA.
+    elimtype False.
+    destruct vl as [Hv _].
     inversions TypC; try discriminate. clear TypC H4.
-    destruct* vl; try destruct* vl; try destruct* vl; try discriminate.
+    destruct* tl; try destruct* tl; try destruct* tl; try discriminate.
     inversions TypA; clear TypA.
     inversions H6; clear H6.
     inversions H8; clear H8.
@@ -741,16 +745,9 @@ Module SndHyp.
     omega.
   Qed.
 
-  Lemma delta_typed : forall c tl vl K E gc T,
-    K ; E |(false,gc)|= const_app c tl ~: T ->
-    K ; E |(false,gc)|= @Delta.reduce c tl vl ~: T.
+  Lemma delta_typed_matches : forall l n, delta_typed_cst (@Const.matches l n).
   Proof.
-    intros.
-    destruct (fold_app_inv _ _ H) as [TL [Typ0 TypA]]; clear H.
-    destruct c.
-    (* tag *)
-    elim (tag_is_const _ (proj1 vl) Typ0 TypA).
-    (* matches *)
+    intros; intro; introv Typ0 TypA.
     inversions Typ0; try discriminate. clear Typ0.
     unfold sch_open in H0. simpl in H0.
     rewrite fold_right_app_end in H0.
@@ -829,7 +826,11 @@ Module SndHyp.
       apply set_mem_correct2. simpl. unfold set_In. auto*.
     rewrite H13 in Typv.
     apply* typing_app; rewrite gc_lower_false; auto*.
-    (* record *)
+  Qed.
+
+  Lemma delta_typed_record : forall l n, delta_typed_cst (@Const.record l n).
+  Proof.
+    intros; intro; introv Typ0 TypA.
     elimtype False.
     inversions Typ0; try discriminate.
     puts (proj1 vl).
@@ -844,7 +845,11 @@ Module SndHyp.
     destruct H5.
     simpl in H7. inversions H7; clear H7.
     inversions H10; clear H10. discriminate.
-    (* sub *)
+  Qed.
+
+  Lemma delta_typed_sub : forall a, delta_typed_cst (Const.sub a).
+  Proof.
+    intros; intro; introv Typ0 TypA.
     inversions Typ0; clear Typ0; try discriminate.
     puts (proj1 vl). simpl in H.
     do 2 (destruct tl; try discriminate).
@@ -911,6 +916,19 @@ Module SndHyp.
     rewrite (map_nth _ 0).
       rewrite* seq_nth.
     rewrite* seq_length.
+  Qed.
+
+  Lemma delta_typed : forall c tl vl K E gc T,
+    K ; E |(false,gc)|= const_app c tl ~: T ->
+    K ; E |(false,gc)|= @Delta.reduce c tl vl ~: T.
+  Proof.
+    intros.
+    destruct (fold_app_inv _ _ H) as [TL [Typ0 TypA]]; clear H.
+    destruct c.
+    apply* delta_typed_tag.
+    apply* delta_typed_matches.
+    apply* delta_typed_record.
+    apply* delta_typed_sub.
     (* recf *)
     puts (proj1 vl).
     inversions TypA; clear TypA; try discriminate.
@@ -1079,5 +1097,5 @@ Module SndHyp.
   Qed.
 End SndHyp.
 
-Module Sound3 := Infer2.MyEval2.Mk3(SndHyp).
-(* Module Sound3 := MyEval2.Mk3(SndHyp). *)
+(* Module Sound3 := Infer2.MyEval2.Mk3(SndHyp). *)
+Module Sound3 := MyEval2.Mk3(SndHyp).
