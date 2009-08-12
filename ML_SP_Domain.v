@@ -5,7 +5,8 @@
 
 Set Implicit Arguments.
 Require Import Lib_FinSet Metatheory List ListSet Arith.
-Require Import ML_SP_Inference_wf.
+(* Require Import ML_SP_Inference_wf. *)
+Require Import ML_SP_Eval.
 
 Section ListSet.
   Variable A : Type.
@@ -206,11 +207,12 @@ Module Const.
     end.
 End Const.
 
+(*
 Module Infer := MkInfer(Cstr)(Const).
 Import Infer.
-Import Unify.MyEval.
-(* Module MyEval := MkEval(Cstr)(Const).
-Import MyEval. *)
+Import Unify.MyEval. *)
+Module MyEval := MkEval(Cstr)(Const).
+Import MyEval.
 Import Rename.Sound.Infra.
 Import Defs.
 
@@ -288,9 +290,8 @@ Module Delta.
       Sch (typ_arrow (typ_bvar 1) (typ_bvar 0))
         (None :: Some (Kind (valid_tag f kprod) (@coherent_tag _ f)) :: nil)
     | Const.recf =>
-      Sch (typ_arrow (typ_arrow (typ_bvar 0) (typ_bvar 0))
-                     (typ_arrow (typ_bvar 0) (typ_bvar 0)))
-          (None :: nil)
+      let T := typ_arrow (typ_bvar 0) (typ_bvar 0) in
+      Sch (typ_arrow (typ_arrow T T) T) (None :: nil)
     end.
 
   Definition trm_default := trm_abs trm_def.
@@ -510,10 +511,10 @@ Module Delta.
   Qed.
 End Delta.
 
-Module Infer2 := Infer.Mk2(Delta).
-Import Infer2.MyEval2.
-(* Module MyEval2 := Mk2(Delta).
-Import MyEval2. *)
+(* Module Infer2 := Infer.Mk2(Delta).
+Import Infer2.MyEval2. *)
+Module MyEval2 := Mk2(Delta).
+Import MyEval2.
 Import Rename2.Sound2.
 Import JudgInfra.
 Import Judge.
@@ -581,136 +582,8 @@ Module SndHyp.
     discriminate.
   Qed.
 
-  Lemma matches_not_value : forall K E gc i x TL t k,
-    K;E |(false,gc)|= t ~: fold_right typ_arrow (typ_fvar x) TL ->
-    binds x (Some k) K ->
-    Cstr.cstr_sort (kind_cstr k) = Cstr.Ksum ->
-    valu (length TL + i) t ->
-    length TL <= 1.
-  Proof.
-    introv Typ B HS HV.
-    gen_eq (length TL + i) as j.
-    gen TL; induction HV; intros; subst; try discriminate.
-        omega.
-      destruct c; simpl in *; try omega.
-        inversions Typ; clear Typ; try discriminate.
-        unfold sch_open in H1; simpl in *.
-        rewrite H in H1.
-        simpl in H1.
-        clear -H1.
-        elimtype False.
-        revert H1; generalize 2; induction TL; simpl; intros.
-          destruct i; discriminate.
-        inversions* H1.
-      inversions Typ; clear Typ; try discriminate.
-      unfold sch_open in H1; simpl in *.
-      destruct H6. clear H0.
-      inversions H3; clear H3. clear H8.
-      clear -B HS H H6 H1.
-      assert (length (map typ_bvar (seq 1 (length l))) = length TL + i).
-        rewrite map_length, seq_length. auto.
-      clear H.
-      elimtype False.
-      gen TL; induction (map typ_bvar (seq 1 (length l))); simpl; intros.
-        inversions H6; clear H6.
-        destruct TL; try discriminate. inversions H5; clear H5.
-        puts (binds_func H2 B). inversions H; clear H H2.
-        destruct H4. clear -H HS.
-        simpl in H.
-        destruct H. destruct H; rewrite H in HS; discriminate.
-      destruct TL; try discriminate.
-      apply* (IHl0 TL).
-      inversions* H1.
-    inversions Typ; clear Typ; try discriminate.
-    rewrite gc_lower_false in *.
-    forward~ (IHHV1 (S::TL)) as IH.
-    simpl in IH. omega.
-  Qed.
-
-  Lemma value_fvar_is_const : forall K E gc t x k,
-    K; E |(false,gc)|= t ~: typ_fvar x ->
-    binds x (Some k) K ->
-    Cstr.cstr_sort (kind_cstr k) = Cstr.Ksum ->
-    value t ->
-    exists v, exists t2, t = trm_app (trm_cst (Const.tag v)) t2.
-  Proof.
-    introv Typ B HS HV.
-    destruct HV as [i vi].
-    inversions vi; clear vi.
-        inversion Typ; discriminate.
-      destruct c; inversions Typ; try discriminate;
-        unfold sch_open in *; simpl in *.
-        destruct (length l); discriminate.
-      destruct l; try discriminate.
-      destruct H5.
-      inversions H2; clear H2.
-      simpl in H0. subst.
-      inversions H6; clear H6.
-      puts (binds_func H5 B). inversions H0; clear H0 H5.
-      destruct H7.
-      destruct H0. clear -H0 HS.
-      simpl in H0.
-      destruct H0; rewrite H in HS; discriminate.
-    inversions Typ; clear Typ; try discriminate.
-    rewrite gc_lower_false in *.
-    inversions H; clear H.
-      destruct c; inversions H5; clear H5; try discriminate.
-        esplit; esplit; reflexivity.
-       simpl in H2.
-       unfold sch_open in *; simpl in *.
-       rewrite H2 in H1. simpl in H1.
-       inversions H1.
-       destruct i; discriminate.
-      simpl in H2.
-      unfold sch_open in *; simpl in *.
-      rewrite H2 in H1. simpl in H1.
-      inversions H1; clear H1.
-      destruct i; try discriminate.
-      simpl in *.
-      destruct Us; try discriminate.
-      destruct H9 as [_].
-      inversions H; clear H.
-      simpl in H5. subst.
-      inversions H9; clear H9.
-      puts (binds_func H5 B). inversions H; clear H H5.
-      destruct H6.
-      destruct H. clear -H HS.
-      simpl in H.
-      destruct H; rewrite H in HS; discriminate.
-    inversions H5; clear H5; try discriminate. rewrite gc_lower_false in *.
-    puts (matches_not_value i (S0 :: S :: nil) H8 B HS H1).
-    elimtype False. simpl in H. omega.
-  Qed.
-
-  Lemma fold_right_app_end : forall T1 T2 TL,
-    fold_right typ_arrow (typ_arrow T1 T2) TL =
-    fold_right typ_arrow T2 (TL ++ T1 :: nil).
-  Proof.
-    intros; rewrite* fold_right_app.
-  Qed.
-    
-  Lemma in_matches_types : forall i l T1 T2 Us,
-    i < length l ->
-    In (nth i l 0, nth i Us typ_def)
-    (map_snd (fun T => typ_open T (T1 :: T2 :: Us))
-      (combine l (map typ_bvar (seq 2 (length l))))).
-  Proof.
-    intros.
-    remember (0 + i) as m.
-    pattern i at 2.
-    replace i with (0+i) by reflexivity. rewrite <- Heqm.
-    generalize 0 at 1. intro d.
-    gen i; generalize 0; induction l; intros.
-    simpl in H; elimtype False; omega.
-    destruct i; simpl.
-      replace m with n; auto. omega.
-    right.
-    apply (IHl (S n) i). simpl in H. omega.
-    omega.
-  Qed.
-
-  Lemma typing_value_inv : forall K E t T n,
-    K;E |Gc|= t ~: T -> valu n t ->
+  Lemma typing_value_inv : forall gc K E t T n,
+    K;E |(false,gc)|= t ~: T -> valu n t ->
     (exists t1, t = trm_abs t1) \/
     (exists c, exists vl, t = const_app c vl /\
       n <= Const.arity c /\ list_for_n value (Const.arity c - n) vl).
@@ -723,17 +596,168 @@ Module SndHyp.
       rewrite <- minus_n_n. split*. split*.
     clear IHvalu2.
     inversions H; clear H; try discriminate.
-    simpl in H4, H6.
+    rewrite gc_lower_false in *.
     destruct (IHvalu1 _ _ _ H4); clear IHvalu1.
       destruct H. subst. inversion H0_.
     destruct H as [c [vl [HE [HC HV]]]].
     subst.
     right; exists c; exists (vl ++ t2 :: nil).
-    unfold const_app; rewrite fold_left_app. split*.
+    rewrite const_app_app. split*.
     split. omega.
     destruct HV. split*.
     assert (value t2) by exists* n2.
     apply* list_forall_app.
+  Qed.
+
+  Lemma value_fvar_is_const : forall K E gc t x k,
+    K; E |(false,gc)|= t ~: typ_fvar x ->
+    binds x (Some k) K ->
+    Cstr.cstr_sort (kind_cstr k) = Cstr.Ksum ->
+    value t ->
+    exists v, exists t2, t = trm_app (trm_cst (Const.tag v)) t2.
+  Proof.
+    introv Typ B HS HV.
+    destruct HV as [i vi].
+    destruct (typing_value_inv Typ vi).
+      destruct H. subst. inversions Typ. discriminate.
+    destruct H as [c [vl [HE [HA Hvl]]]].
+    subst.
+    destruct (fold_app_inv _ _ Typ) as [TL [Typ0 TypA]]; clear Typ.
+    inversions Typ0; clear Typ0; try discriminate.
+    unfold sch_open in H0. destruct H5. clear H.
+    destruct c; simpl in *.
+        destruct  Hvl.
+        destruct i.
+        inversions TypA; clear TypA; try discriminate.
+        inversions H6; clear H6; try discriminate.
+        esplit; esplit; reflexivity.
+        inversions TypA; try discriminate.
+       case_eq (cut (length TL) (map Delta.matches_arg (seq 2 (length l))));
+         introv R1.
+       assert (length TL <= length (map Delta.matches_arg (seq 2 (length l)))).
+         rewrite map_length, seq_length.
+         rewrite <- (list_forall2_length TypA). rewrite <- (proj1 Hvl).
+         omega.
+       destruct (cut_ok _ H R1). clear H. rewrite H5 in H0.
+       rewrite fold_right_app in H0.
+       destruct* (fold_arrow_eq _ _ _ _ _ H0).
+       destruct l1; discriminate.
+      case_eq (cut (length TL) (map typ_bvar (seq 1 (length l))));
+        introv R1.
+      assert (length TL <= length (map typ_bvar (seq 1 (length l)))).
+        rewrite map_length, seq_length.
+        rewrite <- (list_forall2_length TypA). rewrite <- (proj1 Hvl).
+        omega.
+      destruct (cut_ok _ H R1). clear H. rewrite H5 in H0.
+      rewrite fold_right_app in H0.
+      destruct* (fold_arrow_eq _ _ _ _ _ H0).
+      destruct l1; try discriminate.
+      simpl in H.
+      inversions H2; clear H2. simpl in H; subst.
+      inversions H9; clear H9.
+      puts (binds_func H8 B). inversions H; clear H H8.
+      destruct H10. clear -H HS.
+      simpl in H.
+      destruct H. destruct H; rewrite H in HS; discriminate.
+     destruct Hvl.
+     inversions TypA; try discriminate.
+    destruct Hvl.
+    inversions TypA; clear TypA; try discriminate.
+    inversions H0; clear H0.
+    inversions H6; clear H6; try discriminate.
+    destruct i; discriminate.
+  Qed.
+
+  Lemma value_prod_is_record : forall K E gc t x k,
+    K; E |(false,gc)|= t ~: typ_fvar x ->
+    binds x (Some k) K ->
+    Cstr.cstr_sort (kind_cstr k) = Cstr.Kprod ->
+    value t ->
+    exists l, exists nd:NoDup l, exists tl,
+      t = const_app (Const.record nd) tl /\ length tl = length l.
+  Proof.
+    introv Typ B HS HV.
+    destruct HV as [i vi].
+    destruct (typing_value_inv Typ vi).
+      destruct H. subst. inversions Typ. discriminate.
+    destruct H as [c [vl [HE [HA Hvl]]]].
+    subst.
+    destruct (fold_app_inv _ _ Typ) as [TL [Typ0 TypA]]; clear Typ.
+    inversions Typ0; clear Typ0; try discriminate.
+    unfold sch_open in H0. destruct H5. clear H.
+    destruct c; simpl in *.
+        destruct TL; try discriminate.
+        inversions H0; clear H0.
+        inversions H2; clear H2.
+        inversions H7; clear H7.
+        simpl in H5.
+        inversions H2; clear H2.
+        destruct TL; try discriminate.
+        inversions H9; clear H9.
+        puts (binds_func H0 B). inversions H; clear H H0.
+        destruct H7. clear -H HS.
+        simpl in H.
+        destruct H. destruct H; rewrite H in HS; discriminate.
+       case_eq (cut (length TL) (map Delta.matches_arg (seq 2 (length l))));
+         introv R1.
+       assert (length TL <= length (map Delta.matches_arg (seq 2 (length l)))).
+         rewrite map_length, seq_length.
+         rewrite <- (list_forall2_length TypA). rewrite <- (proj1 Hvl).
+         omega.
+       destruct (cut_ok _ H R1). clear H. rewrite H5 in H0.
+       rewrite fold_right_app in H0.
+       destruct* (fold_arrow_eq _ _ _ _ _ H0).
+       destruct l1; discriminate.
+      case_eq (cut (length TL) (map typ_bvar (seq 1 (length l))));
+        introv R1.
+      assert (length TL <= length (map typ_bvar (seq 1 (length l)))).
+        rewrite map_length, seq_length.
+        rewrite <- (list_forall2_length TypA). rewrite <- (proj1 Hvl).
+        omega.
+      destruct (cut_ok _ H R1). clear H. rewrite H5 in H0.
+      rewrite fold_right_app in H0.
+      destruct* (fold_arrow_eq _ _ _ _ _ H0).
+      destruct l1; try discriminate.
+      simpl in H. rewrite <- app_nil_end in H5.
+      exists l. exists n. exists vl.
+      split*. subst. length_hyps. rewrite seq_length in *. omega.
+     destruct Hvl.
+     inversions TypA; try discriminate.
+    destruct Hvl.
+    inversions TypA; clear TypA; try discriminate.
+    inversions H0; clear H0.
+    inversions H6; clear H6; try discriminate.
+    destruct i; discriminate.
+  Qed.
+
+  Lemma fold_right_app_end : forall T1 T2 TL,
+    fold_right typ_arrow (typ_arrow T1 T2) TL =
+    fold_right typ_arrow T2 (TL ++ T1 :: nil).
+  Proof.
+    intros; rewrite* fold_right_app.
+  Qed.
+    
+  Lemma in_matches_types : forall i l TL Us,
+    i < length l ->
+    In (nth i l 0, nth i Us typ_def)
+    (map_snd (fun T => typ_open T (TL ++ Us))
+      (combine l (map typ_bvar (seq (length TL) (length l))))).
+  Proof.
+    intros.
+    remember (0 + i) as m.
+    pattern i at 2.
+    replace i with (0+i) by reflexivity. rewrite <- Heqm.
+    generalize 0 at 1. intro d.
+    replace (length TL) with (0 + length TL) by auto.
+    gen i; generalize 0; induction l; intros.
+    simpl in H; elimtype False; omega.
+    destruct i; simpl.
+      replace m with n; auto. rewrite app_nth2.
+      replace (n + length TL - length TL) with n by omega.
+      auto.  omega. omega.
+    right.
+    apply (IHl (S n) i). simpl in H. omega.
+    omega.
   Qed.
 
   Lemma delta_typed : forall c tl vl K E gc T,
@@ -741,9 +765,6 @@ Module SndHyp.
     K ; E |(false,gc)|= @Delta.reduce c tl vl ~: T.
   Proof.
     intros.
-    poses Hlen (proj1 vl).
-    destruct tl using rev_ind. discriminate.
-    rewrite const_app_app in H.
     destruct (fold_app_inv _ _ H) as [TL [Typ0 TypA]]; clear H.
     destruct c.
     (* tag *)
@@ -802,7 +823,11 @@ Module SndHyp.
       try elim (index_none_notin _ _ _ _ R2 Hvl).
     destruct (index_ok _ 0 _ _ R2).
     assert (Hvn: In (v, nth n0 lb0 typ_def) kr).
-      rewrite <- H12. apply H2. apply* in_matches_types.
+      rewrite <- H12. apply H2.
+      pose (TL1 := typ_fvar x :: b0 :: nil).
+      replace (typ_fvar x :: b0 :: lb0) with (TL1 ++ lb0) by auto.
+      replace 2 with (length TL1) by auto.
+      apply* in_matches_types.
     forward~ (list_forall2_nth trm_def typ_def TypA (n:=n0)) as Typv.
       unfold Cstr.attr in *; omega.
     forward~ (list_forall2_nth typ_def typ_def HA (n:=n0)) as Eqv.
@@ -852,6 +877,80 @@ Module SndHyp.
     clear H5.
     inversions H7; clear H7.
     case_eq (Delta.record_args t nil); introv R1.
+    destruct* (value_prod_is_record H6 H0) as [l' [nd [vl [HE HL]]]].
+      destruct H5 as [[H _] _]. simpl in H. destruct* H.
+      clear -H. destruct k'.
+      elimtype False. simpl in H.
+      destruct kind_valid0. elim (H0 H).
+    subst.
+    assert (l' = l /\ l0 = vl).
+      clear -HL R1.
+      set (vl0 := @nil trm) in *.
+      assert (l' = l /\ l0 = vl ++ vl0).
+        assert (length vl + length vl0 = length l').
+          simpl. omega.
+        clear HL; clearbody vl0.
+        gen vl0; induction vl using rev_ind; simpl; intros.
+          inversions* R1.
+        rewrite const_app_app in R1.
+        rewrite app_length in *; simpl in *.
+        destruct (IHvl _ R1). simpl*.
+        subst.
+        rewrite app_ass. simpl*.
+      subst vl0. rewrite <- app_nil_end in H. auto.
+    destruct H. subst.
+    destruct (fold_app_inv _ _ H6) as [TL [Typ0 TypA]]; clear H6.
+    inversions Typ0; clear Typ0; try discriminate.
+    unfold sch_open in H3; simpl in H3.
+    destruct (fold_arrow_eq _ _ _ _ _ H3).
+      rewrite map_length, seq_length. auto.
+    destruct H11 as [_ WS].
+    simpl in WS.
+    inversions WS; clear WS.
+    simpl in H; subst.
+    inversions H12; clear H12.
+    puts (binds_func H13 H0).
+    inversions H; clear H H13.
+    clear R1.
+    puts (proj33 (proj1 H15)).
+    puts (proj32 (proj1 H5)).
+    destruct k' as [[ks kl km] kv kr kh]. simpl in *.
+    destruct* km.
+    puts (proj2 kv). simpl in H11.
+    assert (In a l) by auto.
+    case_eq (index eq_nat_dec 0 a l); introv R1;
+      [|elim (index_none_notin _ _ _ _ R1 H12)].
+    destruct (index_ok _ 0  _ _ R1).
+    forward~ (list_forall2_nth Delta.trm_default typ_def TypA (n:=n)) as Typ.
+      rewrite* HL.
+    rewrite (kh a T (nth n TL typ_def)). auto.
+        unfold Cstr.unique. simpl. apply* set_mem_correct2. apply* H9.
+      apply (proj2 H5).
+      simpl*.
+    assert (Hvn: In (a, nth n lb typ_def) kr).
+      apply (proj2 H15).
+      simpl.
+      pose (TL1 := typ_fvar x :: nil).
+      replace (typ_fvar x :: lb) with (TL1 ++ lb) by auto.
+      replace 1 with (length TL1) by auto.
+      rewrite <- H16.
+      apply* in_matches_types.
+    forward~ (list_forall2_nth typ_def typ_def H7 (n:=n)) as Eqv.
+      rewrite map_length, seq_length; auto.
+    rewrite <- Eqv.
+    rewrite (map_nth _ 0).
+      rewrite* seq_nth.
+    rewrite* seq_length.
+    (* recf *)
+    puts (proj1 vl).
+    inversions TypA; clear TypA; try discriminate.
+    inversions H1; clear H1; try discriminate.
+    inversions H3; clear H3; try discriminate.
+    simpl in *.
+    inversions Typ0; try discriminate.
+    eapply typing_app; rewrite* gc_lower_false.
+    eapply typing_app; rewrite* gc_lower_false.
+    
 
   Definition reduce_clos c (cl : list clos) :=
     match c with
