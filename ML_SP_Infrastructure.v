@@ -780,6 +780,12 @@ Proof.
   rewrite IHt1; rewrite* IHt2.
 Qed.
 
+Lemma const_app_app : forall c l l',
+  const_app c (l++l') = fold_left trm_app l' (const_app c l).
+Proof.
+  intros. unfold const_app. apply fold_left_app.
+Qed.
+
 Lemma trm_inst_app : forall c tl pl,
   trm_inst_rec 0 tl (const_app c pl) =
   const_app c (List.map (trm_inst_rec 0 tl) pl).
@@ -787,11 +793,10 @@ Proof.
   introv.
   rewrite <- (rev_involutive pl).
   induction (rev pl). simpl. auto.
-  unfold const_app in *. simpl in *.
+  simpl in *.
   rewrite map_app.
-  rewrite fold_left_app.
-  rewrite fold_left_app.
-  simpl. unfold trm_inst. simpl. rewrite <- IHl. auto.
+  repeat rewrite const_app_app.
+  simpl. congruence.
 Qed.
 
 Lemma const_app_inv : forall c pl,
@@ -802,10 +807,9 @@ Proof.
   destruct* pl.
   right.
   destruct* (exists_last (l:=t::pl)). intro; discriminate.
-  destruct s. rewrite e. unfold const_app.
-  rewrite fold_left_app. simpl.
-  exists (fold_left trm_app x (trm_cst c)).
-  exists* x0.
+  destruct s. rewrite e.
+  rewrite const_app_app. simpl.
+  esplit; esplit; reflexivity.
 Qed.
   
 Lemma trm_inst_app_inv : forall c pl tl,
@@ -826,17 +830,17 @@ Lemma const_app_eq : forall c1 vl1 c2 vl2,
   const_app c1 vl1 = const_app c2 vl2 -> c1 = c2 /\ vl1 = vl2.
 Proof.
   intros.
-  rewrite <- (rev_involutive vl1) in *.
-  rewrite <- (rev_involutive vl2) in *.
-  generalize (rev vl2) H. clear vl2 H.
-  induction (rev vl1). intros; destruct l.
-    inversion H. auto.
-    unfold const_app in H. simpl in H; rewrite fold_left_app in H. discriminate.
-  intros; destruct l0;
-    unfold const_app in H; simpl in H; rewrite fold_left_app in H.
-      discriminate.
-  destruct (IHl l0); rewrite fold_left_app in H; simpl in H; inversion* H.
-  simpl. subst c1; rewrite* H1.
+  gen vl2.
+  induction vl1 using rev_ind; intros.
+    unfold const_app in H.
+    destruct vl2 using rev_ind; simpl in H.
+      inversions* H.
+    rewrite fold_left_app in H. simpl in H. discriminate.
+  destruct vl2 using rev_ind; repeat rewrite const_app_app in H.
+    discriminate.
+  inversions H; clear H.
+  destruct (IHvl1 _ H1).
+  subst*.
 Qed.
 
 

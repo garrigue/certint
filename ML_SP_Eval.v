@@ -867,12 +867,6 @@ Proof.
 Qed.
 Hint Immediate closed_n_inst.
 
-Lemma const_app_app : forall c l l',
-  const_app c (l++l') = fold_left trm_app l' (const_app c l).
-Proof.
-  intros. unfold const_app. apply fold_left_app.
-Qed.
-
 Hint Resolve list_forall_app.
 
 Hint Rewrite map_app fold_left_app : list.
