@@ -86,19 +86,13 @@ let r2 = eval1 Nil trm3 (nat_of_int 20);;
 let r3 = eval1 Nil trm3 omega;;
 
 (* More advanced example: the reverse function *)
-
+(* First define cons and nil. Since there is no unit we use a record *)
 let cons x y = tag 1 (record [0;1] [x;y])
 let nil = tag 0 (record [] []);;
 typinf2 Nil nil;;
 typinf2 Nil (cons nil nil);;
 
-let call f r l =
-  apps f [sub 1 r; cons (sub 0 r) l];;
-typinf2 Nil (abs (abs (abs (call (bvar 2) (bvar 1) (bvar 0)))));;
-
-let repeat = recf (abs (abs (cons (bvar 0) (app (bvar 1) (bvar 0)))));;
-typinf2 Nil repeat;;
-
+(* The rev_append function. DeBruijn indices can be tricky... *)
 let rev_append = recf
     (abs
        (abs
@@ -110,14 +104,14 @@ let rev_append = recf
 		 bvar 1])))) ;;
 typinf2 Nil rev_append;;
 
-let rec repeat n x = if n <= 0 then [] else x :: repeat (n-1) x
-
+(* A list of tagged units *)
 let mylist =
   app (abs (cons (tag 3 (bvar 0))
 	      (cons (tag 4 (bvar 0)) (cons (tag 5 (bvar 0)) nil))))
     (record [] []);;
 typinf2 Nil mylist;;
 
+(* Infer types and run! *)
 let rlist = apps rev_append [mylist; nil];;
 let t = typinf2 Nil rlist;;
-let r = eval1 Nil rlist omega;;
+let r = eval1 Nil rlist (nat_of_int 134);;
