@@ -5,8 +5,8 @@
 
 Set Implicit Arguments.
 Require Import Lib_FinSet Metatheory List ListSet Arith.
-Require Import ML_SP_Inference_wf.
-(* Require Import ML_SP_Eval. *)
+(* Require Import ML_SP_Inference_wf. *)
+Require Import ML_SP_Eval.
 
 Section ListSet.
   Variable A : Type.
@@ -208,11 +208,11 @@ Module Const.
 End Const.
 
 
-Module Infer := MkInfer(Cstr)(Const).
+(* Module Infer := MkInfer(Cstr)(Const).
 Import Infer.
-Import Unify.MyEval.
-(* Module MyEval := MkEval(Cstr)(Const).
-Import MyEval. *)
+Import Unify.MyEval. *)
+Module MyEval := MkEval(Cstr)(Const).
+Import MyEval.
 Import Rename.Sound.Infra.
 Import Defs.
 
@@ -533,10 +533,10 @@ Module Delta.
   Qed.
 End Delta.
 
-Module Infer2 := Infer.Mk2(Delta).
-Import Infer2.MyEval2.
-(* Module MyEval2 := Mk2(Delta).
-Import MyEval2. *)
+(* Module Infer2 := Infer.Mk2(Delta).
+Import Infer2.MyEval2. *)
+Module MyEval2 := Mk2(Delta).
+Import MyEval2.
 Import Rename2.Sound2.
 Import JudgInfra.
 Import Judge.
@@ -634,11 +634,17 @@ Module SndHyp.
   Lemma value_fvar_is_const : forall K E gc t x k,
     K; E |(false,gc)|= t ~: typ_fvar x ->
     binds x (Some k) K ->
-    Cstr.cstr_sort (kind_cstr k) = Cstr.Ksum ->
     value t ->
-    exists v, exists t2, t = trm_app (trm_cst (Const.tag v)) t2.
+    match Cstr.cstr_sort (kind_cstr k) with
+    | Cstr.Ksum =>
+      exists v, exists t2, t = trm_app (trm_cst (Const.tag v)) t2
+    | Cstr.Kprod =>
+      exists l, exists nd, exists tl,
+      t = const_app (@Const.record l nd) tl /\ length tl = length l
+    | Cstr.Kbot => True
+    end.
   Proof.
-    introv Typ B HS HV.
+    introv Typ B HV.
     destruct HV as [i vi].
     destruct (typing_value_inv Typ vi).
       destruct H. subst. inversions Typ. discriminate.
@@ -648,103 +654,56 @@ Module SndHyp.
     inversions Typ0; clear Typ0; try discriminate.
     unfold sch_open in H0. destruct H5. clear H.
     destruct c; simpl in *.
-        destruct  Hvl.
-        destruct i.
-        inversions TypA; clear TypA; try discriminate.
-        inversions H6; clear H6; try discriminate.
-        esplit; esplit; reflexivity.
-        inversions TypA; try discriminate.
-       case_eq (cut (length TL) (map Delta.matches_arg (seq 2 (length l))));
-         introv R1.
-       assert (length TL <= length (map Delta.matches_arg (seq 2 (length l)))).
-         rewrite map_length, seq_length.
-         rewrite <- (list_forall2_length TypA). rewrite <- (proj1 Hvl).
-         omega.
-       destruct (cut_ok _ H R1). clear H. rewrite H5 in H0.
-       rewrite fold_right_app in H0.
-       destruct* (fold_arrow_eq _ _ _ _ _ H0).
-       destruct l1; discriminate.
-      case_eq (cut (length TL) (map typ_bvar (seq 1 (length l))));
-        introv R1.
-      assert (length TL <= length (map typ_bvar (seq 1 (length l)))).
-        rewrite map_length, seq_length.
-        rewrite <- (list_forall2_length TypA). rewrite <- (proj1 Hvl).
-        omega.
-      destruct (cut_ok _ H R1). clear H. rewrite H5 in H0.
-      rewrite fold_right_app in H0.
-      destruct* (fold_arrow_eq _ _ _ _ _ H0).
-      destruct l1; try discriminate.
-      simpl in H.
-      inversions H2; clear H2. simpl in H; subst.
-      inversions H9; clear H9.
-      puts (binds_func H8 B). inversions H; clear H H8.
-      destruct H10. clear -H HS.
-      simpl in H.
-      destruct H. destruct H; rewrite H in HS; discriminate.
-     destruct Hvl.
-     inversions TypA; try discriminate.
-    destruct Hvl.
-    inversions TypA; clear TypA; try discriminate.
+    (* tag *)
+    destruct TL; try discriminate.
     inversions H0; clear H0.
-    inversions H6; clear H6; try discriminate.
-    destruct i; discriminate.
-  Qed.
-
-  Lemma value_prod_is_record : forall K E gc t x k,
-    K; E |(false,gc)|= t ~: typ_fvar x ->
-    binds x (Some k) K ->
-    Cstr.cstr_sort (kind_cstr k) = Cstr.Kprod ->
-    value t ->
-    exists l, exists nd:NoDup l, exists tl,
-      t = const_app (Const.record nd) tl /\ length tl = length l.
-  Proof.
-    introv Typ B HS HV.
-    destruct HV as [i vi].
-    destruct (typing_value_inv Typ vi).
-      destruct H. subst. inversions Typ. discriminate.
-    destruct H as [c [vl [HE [HA Hvl]]]].
-    subst.
-    destruct (fold_app_inv _ _ Typ) as [TL [Typ0 TypA]]; clear Typ.
-    inversions Typ0; clear Typ0; try discriminate.
-    unfold sch_open in H0. destruct H5. clear H.
-    destruct c; simpl in *.
-        destruct TL; try discriminate.
-        inversions H0; clear H0.
-        inversions H2; clear H2.
-        inversions H7; clear H7.
-        simpl in H5.
-        inversions H2; clear H2.
-        destruct TL; try discriminate.
-        inversions H9; clear H9.
-        puts (binds_func H0 B). inversions H; clear H H0.
-        destruct H7. clear -H HS.
-        simpl in H.
-        destruct H. destruct H; rewrite H in HS; discriminate.
-       case_eq (cut (length TL) (map Delta.matches_arg (seq 2 (length l))));
-         introv R1.
-       assert (length TL <= length (map Delta.matches_arg (seq 2 (length l)))).
-         rewrite map_length, seq_length.
-         rewrite <- (list_forall2_length TypA). rewrite <- (proj1 Hvl).
-         omega.
-       destruct (cut_ok _ H R1). clear H. rewrite H5 in H0.
-       rewrite fold_right_app in H0.
-       destruct* (fold_arrow_eq _ _ _ _ _ H0).
-       destruct l1; discriminate.
-      case_eq (cut (length TL) (map typ_bvar (seq 1 (length l))));
-        introv R1.
-      assert (length TL <= length (map typ_bvar (seq 1 (length l)))).
-        rewrite map_length, seq_length.
-        rewrite <- (list_forall2_length TypA). rewrite <- (proj1 Hvl).
-        omega.
-      destruct (cut_ok _ H R1). clear H. rewrite H5 in H0.
-      rewrite fold_right_app in H0.
-      destruct* (fold_arrow_eq _ _ _ _ _ H0).
-      destruct l1; try discriminate.
-      simpl in H. rewrite <- app_nil_end in H5.
-      exists l. exists n. exists vl.
-      split*. subst. length_hyps. rewrite seq_length in *. omega.
-     destruct Hvl.
-     inversions TypA; try discriminate.
+    inversions H2; clear H2.
+    inversions H7; clear H7.
+    simpl in H5.
+    inversions H2; clear H2.
+    destruct TL; try discriminate.
+    inversions H9; clear H9.
+    puts (binds_func H0 B). inversions H; clear H H0.
+    puts (proj1 (proj1 H7)). simpl in H.
+    destruct H; rewrite* H.
+    (* Ksum *)
+    inversions TypA; clear TypA; try discriminate.
+    inversions H9; clear H9; try discriminate.
+    esplit; esplit; reflexivity.
+    (* matches *)
+    case_eq (cut (length TL) (map Delta.matches_arg (seq 2 (length l))));
+      introv R1.
+    assert (length TL <= length (map Delta.matches_arg (seq 2 (length l)))).
+      rewrite map_length, seq_length.
+      rewrite <- (list_forall2_length TypA). rewrite <- (proj1 Hvl).
+      omega.
+    destruct (cut_ok _ H R1). clear H. rewrite H5 in H0.
+    rewrite fold_right_app in H0.
+    destruct* (fold_arrow_eq _ _ _ _ _ H0).
+    destruct l1; discriminate.
+    (* record *)
+    case_eq (cut (length TL) (map typ_bvar (seq 1 (length l)))); introv R1.
+    assert (length TL <= length (map typ_bvar (seq 1 (length l)))).
+      rewrite map_length, seq_length.
+      rewrite <- (list_forall2_length TypA). rewrite <- (proj1 Hvl).
+      omega.
+    destruct (cut_ok _ H R1). clear H. rewrite H5 in H0.
+    rewrite fold_right_app in H0.
+    destruct* (fold_arrow_eq _ _ _ _ _ H0).
+    destruct l1; try discriminate. 
+    inversions H2; clear H2. simpl in H; subst.
+    inversions H9; clear H9.
+    puts (binds_func H8 B). inversions H; clear H H8.
+    puts (proj1 (proj1 H10)). simpl in H.
+    destruct H; rewrite~ H.
+    (* Kprod *)
+    rewrite <- app_nil_end in H5.
+    exists l. exists n. exists vl.
+    split*. subst. length_hyps. rewrite seq_length in *. omega.
+    (* sub *)
+    destruct Hvl.
+    inversions TypA; try discriminate.
+    (* recf *)
     destruct Hvl.
     inversions TypA; clear TypA; try discriminate.
     inversions H0; clear H0.
@@ -813,11 +772,14 @@ Module SndHyp.
     simpl in Eqn.
     inversions H2; clear H2.
     rewrite <- H8 in *; clear H8.
-    destruct (value_fvar_is_const Typn H0) as [v [t2 Hv]].
-        destruct H6 as [[H _] _]. simpl in H. destruct* H.
-        clear -H. destruct k'.
-        elimtype False. simpl in H.
-        destruct kind_valid0. elim (H0 H).
+    puts (value_fvar_is_const Typn H0).
+    assert (Cstr.cstr_sort (kind_cstr k') = Cstr.Ksum).
+      destruct H6 as [[HE _] _]. simpl in HE. destruct* HE.
+      clear -H2. destruct k'.
+      elimtype False. simpl in H2.
+      destruct kind_valid0. elim (H H2).
+    rewrite H2 in H; clear H2.
+    destruct H as [v [t2 Hv]].
       apply* (list_forall_out (proj2 vl)). apply* nth_In. omega.
     simpl.
     rewrite Hv in *; clear Hv.
@@ -898,11 +860,14 @@ Module SndHyp.
     inversions H3; clear H3.
     clear H5.
     inversions H7; clear H7.
-    destruct* (value_prod_is_record H6 H0) as [l' [nd [vl [HE HL]]]].
-      destruct H5 as [[H _] _]. simpl in H. destruct* H.
-      clear -H. destruct k'.
-      elimtype False. simpl in H.
-      destruct kind_valid0. elim (H0 H).
+    puts (value_fvar_is_const H6 H0).
+    assert (Cstr.cstr_sort (kind_cstr k') = Cstr.Kprod).
+      destruct H5 as [[HE _] _]. simpl in HE. destruct* HE.
+      clear -H3. destruct k'.
+      elimtype False. simpl in H3.
+      destruct kind_valid0. elim (H H3).
+    rewrite H3 in H; clear H3.
+    destruct* H as [l' [nd [vl [HE HL]]]].
     subst.
     rewrite Delta.record_args_ok. rewrite <- app_nil_end.
     destruct (fold_app_inv _ _ H6) as [TL [Typ0 TypA]]; clear H6.
