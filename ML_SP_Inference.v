@@ -456,9 +456,8 @@ Lemma kenv_ok_subst : forall K' K Ks Ys S,
   kenv_ok (K' & map (kind_subst S) (kinds_open_vars Ks Ys)).
 Proof.
   introv TS HK HK' Fr.
-  destruct (kenv_ok_concat_inv _ _ HK).
-  puts (kenv_ok_map H0 TS).
-  split*.
+  apply* kenv_ok_concat.
+  apply* kenv_ok_map.
 Qed.
 
 Lemma env_ok_map : forall E S,
@@ -2855,9 +2854,7 @@ Proof.
      constructor; auto.
     apply list_forall_app.
       puts (split_combine _ R3).
-      refine (env_prop_list_forall l _ _ _ _); auto*.
-        fold kind; rewrite H6. destruct* (kenv_ok_concat_inv _ _ Oke2).
-      fold kind; rewrite* H6. destruct* Oke2.
+      refine (env_prop_list_forall l _ _ _ _); auto*; fold kind; rewrite* H6.
     unfold l0'; clearbody Bs; clear. induction Bs; simpl*.
    rewrite kinds_subst_open.
      clearbody M0; clear -H5. unfold sch_subst in H5; simpl in H5.
@@ -2947,8 +2944,8 @@ Proof.
         exists x2.
         split*.
         destruct H1. destruct H1.
-        split*.
-        apply* list_forall2_imp.
+        split. auto.
+        refine (list_forall2_imp _ H3 _).
         intros. apply* well_kinded_weaken.
         rewrite <- dom_concat in H0.
         apply* ok_kinds_open_vars.
@@ -2980,25 +2977,21 @@ Proof.
   set (M0 := sch_generalize (l++Bs) T1 (l0++l0')).
   destruct* (typinf_sound _ (lt_n_Sn _) HI). simpl*.
   rewrite normalize_typinf.
-  assert (OkK1: ok K1) by (unfold K1; auto* ).
+  assert (OkK1: kenv_ok K1) by apply* kenv_ok_map.
   destruct* (split_env_ok _ H).
-  assert (Oke: kenv_ok (e0 & e)).
-    split*. intro; intuition.
-    use (proj2 (kenv_ok_map H13 H10)).
-  clear H6.
+  assert (Oke: kenv_ok (e0 & e)). kenv_ok_solve; intro; intros; apply* H13.
   assert (Oke1: kenv_ok (e2 & e1)).
-    destruct (kenv_ok_concat_inv _ _ Oke).
     destruct* (split_env_ok _ H0).
-    split*. intro; intuition. apply* (proj2 Oke).
+    kenv_ok_solve; intro; intros; apply* H22.
+  clear H6.
   assert (HM0: scheme M0).
     unfold M0; apply* scheme_generalize.
         do 2 rewrite app_length. unfold l0'; rewrite map_length.
         rewrite* (split_length _ H1).
       unfold T1; auto*.
     apply list_forall_app.
-      destruct (kenv_ok_concat_inv _ _ Oke1).
-      rewrite <- (split_combine _ H1) in H6.
-      apply* env_prop_list_forall.
+      rewrite <- (split_combine _ H1) in Oke1.
+      apply (env_prop_list_forall l); auto*.
     unfold l0'; clear. induction Bs; simpl*.
   assert (Hsub': forall S t, typ_fv t << L \u {{x1}} ->
                   typ_subst (S & S'') t = typ_subst S t).
@@ -3010,13 +3003,10 @@ Proof.
     destruct (split_env_ok _ H2). destruct* Oke.
     apply in_or_concat. left; apply* (proj44 H10).
   assert (Ok04: kenv_ok (e0 & e4)).
-    destruct (kenv_ok_concat_inv _ _ Oke).
     destruct* (split_env_ok _ H2).
-    apply* kenv_ok_concat. split. auto*.
-      intro; intros.
-      apply (proj2 H8 x0). apply* (proj44 H10).
-    puts (incl_subset_dom (proj44 H10)).
-    clear -Oke H11. auto.
+    kenv_ok_solve.
+      use (incl_subset_dom (proj44 H8)).
+    intro; intros; apply* H24.
   assert (Dis04: disjoint (dom S') (dom (e0 & e4))).
     puts (proj41 (proj44 H4)).
     puts (incl_subset_dom Inc04).
@@ -3038,13 +3028,13 @@ Proof.
     sets_solve.
       rewrite <- (fv_in_kind_fv_list _ _ (split_length _ H1)) in H24.
       rewrite (split_combine _ H1) in H24.
-      destruct* (split_env_ok _ H0). destruct* (kenv_ok_concat_inv _ _ Oke).
+      destruct* (split_env_ok _ H0).
       puts (incl_fv_in_subset kind_fv (proj44 H25)).
       puts (incl_fv_in_subset kind_fv H20).
       unfold K1 in H27; auto.
     unfold l0' in H24; clearbody Bs; clear -H24.
     induction Bs; simpl in *; auto*. sets_solve. elim (in_empty H). auto.
-  assert (OkE0': env_ok (E0 & x ~ M0)). split*.
+  assert (OkE0': env_ok (E0 & x ~ M0)) by auto.
   assert (HT: type T) by apply* (typ_subst_type' S).
   destruct* (IHh L' S' (e0&e4) (E0&x~M0) (S& x1~MXs &S'') K (E&x~M) (t2 ^ x) T)
     as [K'' [S1' [L'' [HI' [S1'' H1'']]]]].
@@ -3091,7 +3081,7 @@ Proof.
            auto.
          intros; unfold fvs in HL; rewrite* Hsub'.
        elim (fresh_disjoint _ _ Fr H12); auto.
-     destruct* (split_env_ok _ H2). destruct* Oke.
+     destruct* (split_env_ok _ H2).
      puts ((proj42 H9) _ (binds_dom B0)).
      destruct (vars_subst_inv _ _ H10) as [y [Hy By]].
      destruct (binds_kdom_inv (proj1 HK0) Hy).
