@@ -1075,7 +1075,7 @@ Ltac env_prop_solve :=
   | |- env_prop ?P _ => env_prop_hyps P; env_prop_solve_rec
   end.
 
-Hint Extern 2 (env_prop _ _) => solve [env_prop_solve].
+Hint Extern 2 (env_prop _ _) => env_prop_solve.
 
 Lemma env_prop_solve_test : forall P (E F G : env nat) (a b : var),
   env_prop P (E & a ~ 0 & G) -> env_prop P (G & b ~ 0 & E).

@@ -862,7 +862,6 @@ Proof.
         unfold get_kind. case_eq (get v0 K); introv Bv0; auto.
         apply (proj2 H6 _ _ (binds_in Bv0)).
       apply* H4; clear H4.
-          apply* env_prop_type_compose. env_prop_solve; auto.
         apply* kenv_ok_concat.
       intros. destruct* (in_app_or _ _ _ H4).
     apply* H2; clear H2.
@@ -1884,7 +1883,6 @@ Proof.
   destruct* (IH _ _ _ _ _ _ _ _ _ _ _ _ _ _ Ht' R2); clear IH R2.
     split*. apply* extends_trans.
   intuition.
-
       apply* well_subst_let_inf.
     clear -HL'' HL0'.
     unfold fvs in *; simpl in HL''. auto.
@@ -3110,7 +3108,7 @@ Proof.
     Oke0 Oke2 Ok' WS Typ Hsub Hsub'.
   intro; intros.
   assert (type T1) by (unfold T1; auto).
-  assert (env_prop type (S & x1 ~ MXs)) by (env_prop_solve; auto).
+  assert (env_prop type (S & x1 ~ MXs)) by auto.
   assert (env_prop type (S & x1 ~ MXs & S'')) by auto.
   set (S1 := S & x1 ~ MXs & S'') in *.
   pose (XYs := combine Xs (typ_fvars Ys)).
@@ -3261,7 +3259,6 @@ Proof.
         rewrite <- dom_concat in H0.
         apply* ok_kinds_open_vars.
        intros. apply Hsub. unfold fvs in HL; auto.
-      env_prop_solve; auto.
      rewrite Hcb.
      apply* (@well_subst_concat E0).
      apply* well_subst_extends.
@@ -3352,7 +3349,7 @@ Proof.
         unfold M0, l0', Bs, ftve, K1, T1, E1, MXs; apply* moregen_let.
         rewrite <- union_assoc.
         intro; intros. destruct (S.union_1 H1). auto. apply (HL _ H2).
-       env_prop_solve; auto*.
+       auto*.
       repeat rewrite dom_concat in *. intuition.
       auto*.
      intro; intros.
@@ -3418,7 +3415,7 @@ Proof.
     repeat rewrite dom_concat; simpl.
     sets_solve. rewrite <- (S.singleton_1 H10) in *. apply* S.diff_3.
     apply* S.diff_3.
-  env_prop_solve; auto.
+  auto.
 Qed.
 
 Lemma principal_app : forall h L S0 K0 E0 HS0 HK0 D0 S K E t1 t2 T HL,
@@ -3452,7 +3449,6 @@ Proof.
        exists M2. split*.
        unfold fvs in HL.
        rewrite* (env_subst_ext_fv (S & x1 ~ S1) S).
-      env_prop_solve; auto.
      rewrite Hcb; apply* (@well_subst_concat E0). 
     simpl. destruct* (x1 == x1). env_fix. rewrite* Hsub.
    clear -Hh. simpl in *.
@@ -3475,7 +3471,6 @@ Proof.
       exists M2. split*.
       rewrite* (env_subst_ext_fv (S & x1 ~ S1 & S'') S).
       intros; unfold fvs in HL; rewrite* Hsub'.
-     env_prop_solve; auto.
      disjoint_solve. apply* HL'.
     rewrite* Hsub'. simpl. destruct* (x1 == x1). simpl*.
    clear -Hh; simpl in *.
@@ -3491,7 +3486,7 @@ Proof.
     repeat rewrite dom_concat; simpl*.
     clear -Fr1 HL' HL'' H H2.
     sets_solve; apply* S.diff_3. apply* HL''. apply S.union_3. apply* HL'.
-  env_prop_solve; auto.
+  auto.
 Qed.
 
 Lemma principal_cst : forall h L S0 K0 E0 HS0 HK0 D0 S K E c T HL,
@@ -3598,7 +3593,6 @@ Proof.
     try solve [try split*; intro; auto; intros; elim H].
        simpl. rewrite map_sch_subst_fresh. apply moregen_env_refl.
        rewrite HE; intro; auto.
-      env_prop_solve; auto.
      intro; intros. replace (@empty typ) with id by reflexivity.
      rewrite* typ_subst_id.
     intro; intros. elim (binds_empty H).
