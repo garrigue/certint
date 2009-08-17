@@ -68,51 +68,47 @@ Proof.
   assert (env_ok (E & y ~ M & E')) by apply* ok_rename.
   destruct (x0 == x).
     subst.
-    use (binds_mid _ _ _ _ (proj1 H0)).
-    use (binds_func H1 H5).
+    puts (binds_mid _ _ _ _ (proj1 H0)).
+    puts (binds_func H1 H5).
     subst; clear H5.
     apply* typing_var.
   apply* typing_var.
-  binds_cases H1.
-    apply* binds_concat_fresh.
-  apply* binds_prepend.
+  binds_cases H1; auto.
   (* Abs *)
   clear H0.
   apply* (@typing_abs gc (L \u {{y}} \u {{x}})).
   intros.
   assert (x0 \notin L) by auto.
-  use (H1 x0 H2 (E' & x0 ~ Sch U nil)).
+  puts (H1 x0 H2 (E' & x0 ~ Sch U nil)); clear H1.
   repeat rewrite <- concat_assoc in H4.
-  rewrite trm_subst_open in H4; auto.
+  rewrite trm_subst_open in H4 by auto.
   simpl trm_subst in H4.
   destruct (x0 == x).
-    subst. elim H0; auto with sets.
-  apply* H4.
-  simpl. simpl in H3.
-  assert (y \notin {{x0}}) by auto.
-  assert (y \notin trm_fv (t1 ^ x0)).
-    eapply notin_subset. unfold trm_open; apply* trm_fv_open. simpl; auto.
-  auto.
+    subst. elim H0; auto.
+  apply H4. auto.
+  simpl in *.
+  clear H2 H4; disjoint_solve.
+  puts (trm_fv_open _ _ _ H1); clear H1 .
+  simpl in H2; auto.
   (* Let *)
   clear H H1.
   apply* (@typing_let gc M0 L1 (L2 \u {{y}} \u {{x}})).
     clear H2; intros.
     apply* H0.
-    simpl in H4. auto.
+    simpl in H4; auto.
   clear H0; intros.
   assert (x0 \notin L2) by auto.
-  use (H2 x0 H0 (E' & x0 ~ M0)). clear H0 H2.
+  puts (H2 x0 H0 (E' & x0 ~ M0)); clear H0 H2.
   repeat rewrite <- concat_assoc in H1.
   rewrite trm_subst_open in H1; auto.
   simpl trm_subst in H1.
   destruct (x0 == x).
-    subst. elim H; auto with sets.
-  apply* H1.
-  simpl. simpl in H4.
-  assert (y \notin {{x0}}) by auto.
-  assert (y \notin trm_fv (t2 ^ x0)).
-    eapply notin_subset. unfold trm_open; apply* trm_fv_open. simpl; auto.
-  auto.
+    subst. elim H; auto.
+  apply* H1; clear H1.
+  simpl in *.
+  disjoint_solve.
+  puts (trm_fv_open _ _ _ H0).
+  simpl in H1; auto.
   (* App *)
   simpl in H0.
   apply* (@typing_app gc K (E & y ~ M & E') S).
@@ -130,14 +126,12 @@ Lemma typing_abs_rename : forall x1 gc K E x2 M t T,
 Proof.
   intros. replace (E & x2 ~ M) with (E & x2 ~ M & empty) by simpl*.
   replace (t ^ x2) with ([x1~>trm_fvar x2]t^x1).
-  apply typing_rename. simpl*.
-    assert (x2 \notin trm_fv (t ^ x1)).
-      unfold trm_open.
-      use (trm_fv_open (trm_fvar x1) t 0). apply (notin_subset H2).
-      simpl*.
-    simpl*.
-  rewrite* trm_subst_open.
-  rewrite* trm_subst_fresh.
+    apply typing_rename. simpl*.
+    disjoint_solve.
+    puts (trm_fv_open _ _ _ H2).
+    simpl in H3; auto.
+  rewrite trm_subst_open by auto.
+  rewrite trm_subst_fresh  by auto.
   simpl. destruct* (x1 == x1).
 Qed.
 
@@ -219,7 +213,7 @@ Proof.
           rewrite* DS.
         instantiate (1 := kinds_open_vars (sch_kinds M) Xs).
         intro; intros.
-        destruct k as [[kc kv kr kh]|]; auto.
+        destruct k as [[kc kv kr kh]|]; [|auto].
         binds_cases H2.
             rewrite typ_subst_fresh.
               rewrite* kind_subst_fresh.
@@ -228,8 +222,7 @@ Proof.
             rewrite DS; simpl*.
           unfold kinds_open_vars in B1.
           assert (length (kinds_open (sch_kinds M) (typ_fvars Xs)) = length Xs).
-            unfold kinds_open; rewrite map_length.
-            apply* fresh_length.
+            unfold kinds_open; auto.
           destruct (binds_rename _ _ _ _ H2 H0 B1) as [Z' [HT HG]].
           unfold S at 3. rewrite HT.
           simpl; apply* wk_kind.
