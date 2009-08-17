@@ -19,13 +19,6 @@ Import Defs.
 
 (* These tactics needs definitions *)
 
-Ltac instantiate_fail :=
-  instantiate;
-  try ((instantiate (1 := nil) || instantiate (1:={})) ; fail 1);
-  try (match goal with H: _ |- _ =>
-   (instantiate (1:=nil) in H || instantiate (1:={}) in H) end;
-   fail 1).
-
 Ltac length_hyps :=
   instantiate_fail;
   repeat match goal with
@@ -95,6 +88,24 @@ Proof.
   split*.
 Qed.
 
+Ltac env_ok_hyps :=
+  repeat match goal with
+  | H: env_ok _ |- _ => destruct H
+  end.
+
+Ltac kenv_ok_hyps :=
+  repeat match goal with
+  | H: kenv_ok _ |- _ => destruct H
+  end.
+
+Ltac env_ok_solve :=
+  env_ok_hyps; split; [ok_solve | env_prop_solve].
+
+Ltac kenv_ok_solve :=
+  kenv_ok_hyps; split; [ok_solve | env_prop_solve].
+
+Hint Extern 2 (env_ok _) => solve [env_ok_solve].
+Hint Extern 2 (kenv_ok _) => solve [kenv_ok_solve].
 
 (* ====================================================================== *)
 (** * Additional Definitions used in the Proofs *)
@@ -732,8 +743,6 @@ Lemma well_kinded_weaken : forall K K' K'',
   well_kinded (K & K' & K'') x T.
 Proof.
   intros. apply* well_kinded_comm.
-  apply* well_kinded_extend.
-  destruct* (ok_concat_inv _ _ H).
 Qed.
 Hint Resolve well_kinded_weaken.
 
@@ -887,17 +896,6 @@ Proof.
   simpl in *. inversions* H.
 Qed.
 
-Lemma disjoint_ok : forall (A:Set) (E F:Env.env A),
-  ok E -> ok F -> disjoint (dom E) (dom F) -> ok (E & F).
-Proof.
-  induction F; simpl; intros. auto.
-  destruct a; unfold concat.
-  apply ok_cons.
-    apply* IHF. inversion* H0.
-  fold (E&F).
-  inversions* H0.
-Qed.
-
 Lemma incr_subst_fresh : forall a t S Xs,
   fresh {{a}} (length Xs) Xs ->
   List.map (typ_subst ((a, t) :: S)) (typ_fvars Xs) =
@@ -1030,28 +1028,24 @@ Qed.
 
 Hint Resolve sch_open_types.
 
-Lemma env_ok_concat_inv : forall E1 E2,
-  env_ok (E1 & E2) -> env_ok E1 /\ env_ok E2.
-Proof.
-  intros.
-  split; split; destruct H; destruct* (ok_concat_inv _ _ H);
-    intro; intros; apply* (H0 x a).
-Qed.
-
-Lemma kenv_ok_concat_inv : forall K1 K2,
-  kenv_ok (K1 & K2) -> kenv_ok K1 /\ kenv_ok K2.
-Proof.
-  intros.
-  split; split; destruct H; destruct* (ok_concat_inv _ _ H);
-    intro; intros; apply* (H0 x a).
-Qed.
-
 Definition kenv_ok_is_ok K (H:kenv_ok K) := proj1 H.
 Definition env_ok_is_ok E (H:env_ok E) := proj1 H.
 Definition kenv_ok_env_prop K (H:kenv_ok K) := proj2 H.
 Definition env_ok_env_prop E (H:env_ok E) := proj2 H.
 
-Hint Resolve kenv_ok_is_ok env_ok_is_ok kenv_ok_env_prop env_ok_env_prop.
+Hint Immediate kenv_ok_is_ok env_ok_is_ok kenv_ok_env_prop env_ok_env_prop.
+
+Ltac env_hyps T :=
+  match T with
+  | sch => env_ok_hyps
+  | kind => kenv_ok_hyps
+  end.
+
+Hint Extern 2 (@env_prop ?T _ ?E) =>
+  progress env_hyps T; solve [env_prop_solve].
+
+Hint Extern 2 (@ok ?T ?E) =>
+  progress env_hyps T; solve [ok_solve].
 
 Lemma env_prop_binds : forall (A:Set) (P:A->Prop) x (a:A) E,
   binds x a E -> env_prop P E -> P a.
@@ -1075,16 +1069,13 @@ Hint Constructors typing valu red.
 Lemma typing_regular : forall gc K E e T,
   typing gc K E e T -> kenv_ok K /\ env_ok E /\ term e /\ type T.
 Proof.
-  split4; induction* H.
+  split4; induction* H; auto.
   (* ok *)
   pick_fresh y. apply* (H1 y).
   pick_fresh y. apply* (H2 y).
   pick_freshes (length Ks) Xs. forward~ (H1 Xs) as G.
-    destruct * (kenv_ok_concat_inv _ _ G).
   pick_fresh y. forward~ (H1 y) as G.
-    destruct * (env_ok_concat_inv _ _ G).
   pick_fresh y. forward~ (H2 y) as G.
-    destruct * (env_ok_concat_inv _ _ G).
   pick_freshes (length Ks) Xs. forward~ (H1 Xs).
   (* term *) 
   apply_fresh* term_let as y.
@@ -1132,14 +1123,16 @@ Qed.
 
 (** Automation for reasoning on well-formedness. *)
 
-Hint Extern 1 (kenv_ok ?K) =>
-  match goal with
-  | H: typing _ K _ _ _ |- _ => apply (proj41 (typing_regular H))
+Ltac kenv_ok_hyps ::=
+  repeat match goal with
+  | H: typing _ ?K _ _ _ |- _ => destruct (proj41 (typing_regular H)); clear H
+  | H: kenv_ok ?K |- _ => destruct H
   end.
 
-Hint Extern 1 (env_ok ?E) =>
-  match goal with
-  | H: typing _ _ E _ _ |- _ => apply (proj42 (typing_regular H))
+Ltac env_ok_hyps ::=
+  repeat match goal with
+  | H: typing _ _ ?E _ _ |- _ => destruct (proj42 (typing_regular H)); clear H
+  | H: env_ok ?E |- _ => destruct H
   end.
 
 Hint Extern 1 (term ?t) =>

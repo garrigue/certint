@@ -4,7 +4,7 @@
 ***************************************************************************)
 
 Set Implicit Arguments.
-Require Import Lib_FinSet Metatheory List ListSet Arith.
+Require Import Lib_FinSet Lib_FinSetImpl Metatheory List ListSet Arith.
 Require Import ML_SP_Inference_wf.
 Require Import ML_SP_Eval.
 

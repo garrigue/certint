@@ -338,9 +338,9 @@ End OkProperties.
 
 Hint Resolve fresh_mid ok_map.
 
-Hint Extern 1 (ok (?E & ?G)) =>
+(* Hint Extern 1 (ok (?E & ?G)) =>
   match goal with H: context [E & ?F & G] |- _ =>
-    apply (@ok_remove _ F) end.
+    apply (@ok_remove _ F) end. *)
 
 
 (* ********************************************************************** *)

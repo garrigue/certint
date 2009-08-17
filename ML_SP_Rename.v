@@ -26,21 +26,6 @@ Import Judge.
 (* ********************************************************************** *)
 (** Renaming lemmas *)
 
-Lemma ok_rename : forall E x y M E',
-  env_ok (E & x ~ M & E') ->
-  y \notin dom E \u dom E' ->
-  env_ok (E & y ~ M & E').
-Proof.
-  intros.
-  destruct (env_ok_concat_inv _ _ H).
-  apply* env_ok_concat.
-    destruct (env_ok_concat_inv _ _ H1).
-    split. apply* ok_push.
-    destruct H3; destruct H4. apply* env_prop_concat.
-  simpl.
-  use (ok_disjoint _ _ (proj1 H)).
-Qed.
-
 Lemma trm_fv_open : forall t' t n,
   trm_fv (trm_open_rec n t' t) << trm_fv t \u trm_fv t'.
 Proof.
@@ -65,7 +50,7 @@ Proof.
   gen_eq (E & x ~ M & E') as E0. gen E'.
   induction Typ; intros; subst; simpl trm_subst.
   (* Var *)
-  assert (env_ok (E & y ~ M & E')) by apply* ok_rename.
+  assert (env_ok (E & y ~ M & E')) by auto.
   destruct (x0 == x).
     subst.
     puts (binds_mid _ _ _ _ (proj1 H0)).
@@ -114,7 +99,6 @@ Proof.
   apply* (@typing_app gc K (E & y ~ M & E') S).
   (* Cst *)
   apply* typing_cst.
-  apply* ok_rename.
   (* GC *)
   apply* typing_gc.
 Qed.
@@ -232,11 +216,10 @@ Proof.
           use (binds_map (kind_map (typ_subst S)) B0).
         rewrite* DS.
       apply* typing_weaken_kinds'.
-      apply* kenv_ok_concat.
-      split. apply* ok_combine_fresh.
-      destruct (proj2 (kenv_ok_concat_inv _ _ (proj41 (typing_regular H1)))).
+      kenv_ok_solve.
+        apply* ok_combine_fresh.
       apply list_forall_env_prop.
-      apply* (env_prop_list_forall _ _ H3).
+      apply* (env_prop_list_forall _ _ H4).
     rewrite map_combine.
     rewrite* kinds_subst_open.
     rewrite kinds_subst_fresh.
@@ -426,10 +409,7 @@ Proof.
   (* Let *)
   apply* (@typing_let gc M (L1 \u dom K')).
   intros.
-  assert (kenv_ok (K' & kinds_open_vars (sch_kinds M) Xs)).
-    split*.
-    assert (fresh L1 (sch_arity M) Xs) by auto.
-    destruct* (kenv_ok_concat_inv _ _ (proj1 (typing_regular (H Xs H6)))).
+  assert (kenv_ok (K' & kinds_open_vars (sch_kinds M) Xs)) by forward~ (H Xs).
   apply* H0.
   intro; intros.
   destruct* (in_app_or _ _ _ H7).
@@ -442,10 +422,7 @@ Proof.
   (* Gc *)
   apply* (@typing_gc gc Ks (L \u dom K')).
   intros.
-  assert (kenv_ok (K' & kinds_open_vars Ks Xs)).
-    split*.
-    assert (fresh L (length Ks) Xs) by auto.
-    destruct* (kenv_ok_concat_inv _ _ (proj1 (typing_regular (H0 Xs H5)))).
+  assert (kenv_ok (K' & kinds_open_vars Ks Xs)) by forward~ (H0 Xs).
   apply* (H1 Xs).
   intro; intros.
   destruct* (in_app_or _ _ _ H6).
@@ -833,16 +810,15 @@ Proof.
   destruct M as [U Ks]; simpl in *.
   destruct (var_fresh (L2 \u trm_fv t2 \u dom F)) as [x Hx].
   rewrite concat_assoc in Typ1a.
-  destruct* (kenv_ok_concat_inv _ _ (proj41 (typing_regular Typ1a))).
+  assert (HKM: kenv_ok (K1 & kinds_open_vars Ks Xs)) by auto.
   assert (env_weaker (E & x ~ Sch U Ks) (F & x ~ Sch U (Ks++Ks'))).
     apply* env_weaker_push.
   assert (Hx': x \notin L2) by auto.
-  assert (HK1: kenv_ok K1) by (apply (proj1 (kenv_ok_concat_inv _ _ H0))).
+  assert (HK1: kenv_ok K1) by auto.
   assert (HM': scheme (Sch U (Ks ++ Ks')))
     by (unfold Ks'; apply* scheme_extra).
   destruct* (H2 x Hx' LK (F & x ~ Sch U (Ks ++ Ks'))) as [K2 [HD2 Typ2]];
     clear H2 Hx'.
-    apply* env_ok_concat. split*.
   exists K2; split~.
   assert (LenS: length (Ks ++ Ks') = length (Xs ++ list_fst K1)).
     repeat rewrite app_length; unfold list_fst; rewrite map_length.
@@ -857,18 +833,18 @@ Proof.
       apply (@typing_rename_typ F (Sch U (Ks++Ks')) K (Xs ++ list_fst K1)).
           simpl.
           apply* disjoint_fresh.
-            unfold kinds_open_vars, kind_open in H0.
+            unfold kinds_open_vars in HKM.
             rewrite LenS.
-            rewrite <- (combine_fst_snd K1) in H0.
-            unfold concat in H0.
-            rewrite <- combine_app in H0.
-            apply~ (ok_fresh _ _ (L:={}) (proj1 H0)).
+            rewrite <- (combine_fst_snd K1) in HKM.
+            unfold concat in HKM.
+            rewrite <- combine_app in HKM.
+            apply~ (ok_fresh _ _ (L:={}) (proj1 HKM)).
               do 2 rewrite app_length.
               unfold kinds_open; rewrite map_length. rewrite* length_fst_snd.
             unfold kinds_open; rewrite map_length.
             rewrite* (fresh_length _ _ _ HXs).
           puts (kinds_generalize_disjoint (Xs ++ list_fst K1) (list_snd K1)).
-          fold Ks' in H5.
+          fold Ks' in H1.
           rewrite mkset_app.
           unfold sch_fv in *; simpl S.union in *.
           rewrite kind_fv_list_app.
@@ -876,9 +852,9 @@ Proof.
             rewrite <- (dom_combine (list_fst K1) (list_snd K1)).
               rewrite* combine_fst_snd. 
             unfold list_fst, list_snd; auto.
-          rewrite H6 in *. rewrite <- H6 in *.
-          clear -HD1 HXs H5.
-          rewrite mkset_app in H5.
+          rewrite <- H2 in *.
+          clear -HD1 HXs H1.
+          rewrite mkset_app in H1.
           disjoint_solve.
         rewrite* <- LenS.
       simpl.
@@ -897,8 +873,8 @@ Proof.
             apply Typ1a.
           unfold kinds_open.
           destruct (HM Xs). simpl*.
-          simpl in H6.
-          clear -H6; induction H6. simpl*.
+          simpl in H2.
+          clear -H2; induction H2. simpl*.
           simpl. rewrite IHlist_forall. clear -H.
           rewrite typ_fvars_app.
           rewrite* <- kind_open_extra.
@@ -908,13 +884,11 @@ Proof.
         apply* env_prop_list_forall.
         apply length_fst_snd.
       rewrite map_length. symmetry. auto*.
-    apply* kenv_ok_concat.
+    kenv_ok_solve. apply* ok_combine_fresh.
     simpl.
-    split. apply* ok_combine_fresh.
-    unfold kinds_open_vars.
     apply list_forall_env_prop.
     unfold kinds_open.
-    destruct* (HM' Xs0). simpl in H6.
+    destruct* (HM' Xs0). simpl in H16.
     apply* list_forall_map.
     intros.
     unfold kind_open.
@@ -927,7 +901,7 @@ Proof.
     in Typ2 by (simpl; auto).
   rewrite* (@trm_subst_intro x t2 (trm_fvar x0)).
   apply (typing_rename (y:=x0) _ _ _ Typ2). simpl.
-  puts (trm_fv_open (trm_fvar x) t2 0). simpl in H5.
+  puts (trm_fv_open (trm_fvar x) t2 0). simpl in H1.
   unfold trm_open. auto.
 Qed.
 

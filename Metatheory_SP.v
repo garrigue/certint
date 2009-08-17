@@ -756,6 +756,18 @@ Section Env.
     simpl*.
   Qed.
 
+  Lemma disjoint_ok : forall E F:env A,
+    ok E -> ok F -> disjoint (dom E) (dom F) -> ok (E & F).
+  Proof.
+    induction F; simpl; intros. auto.
+    destruct a; unfold concat.
+    apply ok_cons.
+      apply* IHF. inversion* H0.
+    fold (E&F).
+    rewrite dom_concat.
+    inversions* H0.
+  Qed.
+
   Lemma binds_in : forall x (a:A) E,
     binds x a E -> In (x, a) E.
   Proof.
@@ -937,16 +949,16 @@ Section Env_prop.
     destruct* (in_app_or _ _ _ H1).
   Qed.
 
-  Lemma env_prop_concat_inv1 : forall l1 l2,
-    env_prop P (l1 & l2) -> env_prop P l1.
+  Lemma env_prop_concat_inv : forall l1 l2,
+    env_prop P (l1 & l2) -> env_prop P l1 /\ env_prop P l2.
   Proof.
-    intros; intro; intros. apply* (H x).
+    intros; split; intro; intros; apply* (H x).
   Qed.
 
-  Lemma env_prop_concat_inv2 : forall l1 l2,
-    env_prop P (l1 & l2) -> env_prop P l2.
+  Lemma env_prop_single_inv : forall x a,
+    env_prop P (x ~ a) -> P a.
   Proof.
-    intros; intro; intros. apply* (H x).
+    intros; apply* H.
   Qed.
 
   Lemma env_prop_map : forall (f:A->A) E,
@@ -1032,10 +1044,67 @@ Section Fv_in.
 End Fv_in.
 End Env.
 
-Hint Resolve in_ok_binds ok_map0 ok_single env_prop_single env_prop_concat.
+Hint Resolve in_ok_binds ok_map0 ok_single.
 Hint Resolve list_forall_env_prop in_or_concat.
-Hint Immediate binds_in env_prop_concat_inv1 env_prop_concat_inv2.
+Hint Immediate binds_in.
 Hint Unfold extends.
+
+Ltac instantiate_fail :=
+  instantiate;
+  try ((instantiate (1 := nil) || instantiate (1:={})) ; fail 1);
+  try (match goal with H: _ |- _ =>
+   (instantiate (1:=nil) in H || instantiate (1:={}) in H) end;
+   fail 1).
+
+Ltac env_prop_hyps P :=
+  instantiate_fail;
+  repeat match goal with
+  | H: env_prop P (_ & _) |- _ => destruct (env_prop_concat_inv _ _ H); clear H
+  | H: env_prop P (_ ~ _) |- _ => puts (env_prop_single_inv H); clear H
+  end.
+
+Ltac env_prop_solve_rec :=
+  match goal with
+  | |- env_prop _ (_ & _) => apply env_prop_concat; env_prop_solve_rec
+  | |- env_prop _ (_ ~ _) => apply env_prop_single; try assumption
+  | _ => try assumption
+  end.
+
+Ltac env_prop_solve :=
+  match goal with
+  | |- env_prop ?P _ => env_prop_hyps P; env_prop_solve_rec
+  end.
+
+Hint Extern 2 (env_prop _ _) => env_prop_solve.
+
+Lemma env_prop_solve_test : forall P (E F G : env nat) (a b : var),
+  env_prop P (E & a ~ 0 & G) -> env_prop P (G & b ~ 0 & E).
+Proof.
+  intros. auto.
+Qed.
+
+Ltac ok_hyps :=
+  instantiate_fail;
+  repeat match goal with
+  | H: ok (_ & _) |- _ =>
+    puts (ok_disjoint _ _ H); destruct (ok_concat_inv _ _ H); clear H
+  end.
+
+Ltac ok_solve :=
+  ok_hyps; 
+  repeat apply disjoint_ok;
+  match goal with
+  | |- ok _ => try (apply ok_single || assumption)
+  | |- disjoint _ _ => auto 1
+  end.
+
+Hint Extern 2 (ok _) => solve [ok_solve].
+
+Lemma test_ok_solve : forall E F G : env nat,
+  ok (E & F) -> ok (F & G) -> ok (E & G) -> ok (E & F & G).
+Proof.
+  intros. ok_solve. rewrite* dom_concat.
+Qed.
 
 Lemma get_contradicts : forall (A B:Set) x (a:A) Xs Vs (Ks:list B),
   get x (combine Xs Vs) = Some a ->

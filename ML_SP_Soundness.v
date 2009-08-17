@@ -20,56 +20,9 @@ Module JudgInfra := MkJudgInfra(Delta).
 Import JudgInfra.
 Import Judge.
 
-Hint Immediate disjoint_ok.
-
 Lemma kenv_ok_concat : forall K1 K2,
   kenv_ok K1 -> kenv_ok K2 -> disjoint (dom K1) (dom K2) -> kenv_ok (K1 & K2).
-Proof.
-  intros.
-  destruct H; destruct H0.
-  split*.
-Qed.
-
-Lemma env_ok_concat : forall E1 E2,
-  env_ok E1 -> env_ok E2 -> disjoint (dom E1) (dom E2) -> env_ok (E1 & E2).
-Proof.
-  intros.
-  destruct H; destruct H0.
-  split*.
-Qed.
-
-Definition kenv_ok_def K H1 H2 : kenv_ok K := conj H1 H2.
-Definition env_ok_def E H1 H2 : env_ok E := conj H1 H2.
-
-Lemma kenv_ok_merge : forall (K K1 K2 : kenv),
-  kenv_ok (K & K1) ->
-  kenv_ok (K & K2) ->
-  disjoint (dom K1) (dom K2) -> kenv_ok (K & K1 & K2).
-Proof.
-  intros.
-  destruct (kenv_ok_concat_inv _ _ H0).
-  apply* kenv_ok_concat.
-Qed.
-
-Hint Resolve kenv_ok_merge.
-
-Lemma env_ok_remove : forall F E G,
-  env_ok (E & F & G) -> env_ok (E & G).
-Proof.
-  split*.
-  destruct (env_ok_concat_inv _ _ H).
-  destruct* (env_ok_concat_inv _ _ H0).
-Qed.
-
-Lemma kenv_ok_remove : forall F E G,
-  kenv_ok (E & F & G) -> kenv_ok (E & G).
-Proof.
-  split*.
-  destruct (kenv_ok_concat_inv _ _ H).
-  destruct* (kenv_ok_concat_inv _ _ H0).
-Qed.
-
-Hint Immediate env_ok_remove kenv_ok_remove.
+Proof. auto. Qed.
 
 Lemma ok_kinds_open_vars : forall K Ks Xs,
   ok K -> fresh (dom K) (length Ks) Xs ->
@@ -96,10 +49,8 @@ Proof.
   apply* typing_var. apply* binds_weaken.
   apply_fresh* (@typing_abs gc) as y. apply_ih_bind* H1.
     forward~ (H0 y) as Q.
-    destruct (env_ok_concat_inv _ _ (proj42 (typing_regular Q))). split*.
   apply_fresh* (@typing_let gc M L1) as y. apply_ih_bind* H2.
     forward~ (H1 y) as Q.
-    destruct (env_ok_concat_inv _ _ (proj42 (typing_regular Q))). split*.
   auto*.
   auto.
   apply_fresh* (@typing_gc gc Ks) as y.
@@ -127,11 +78,7 @@ Proof.
     intros. clear H1 H2.
     rewrite concat_assoc.
     apply* H0; clear H0. rewrite* concat_assoc.
-    rewrite <- concat_assoc.
-    split*.
-    apply* env_prop_concat.
-    puts (typing_regular (H Xs (proj1 (fresh_union_r _ _ _ _ H3)))).
-    use (proj2 (proj41 H0)).
+    forward~ (H Xs) as Typ.
   apply* typing_app.
   apply* typing_cst. apply* proper_instance_weaken.
   apply_fresh* (@typing_gc gc Ks) as y.
@@ -139,11 +86,7 @@ Proof.
   rewrite concat_assoc.
   apply* (H1 Xs); clear H1.
     rewrite* concat_assoc.
-  rewrite* <- concat_assoc.
   forward~ (H0 Xs) as Typ; clear H0.
-  apply* kenv_ok_concat.
-  split. apply* ok_combine_fresh.
-  destruct* (kenv_ok_concat_inv _ _ (proj41 (typing_regular Typ))).
 Qed.
 
 Lemma typing_weaken_kinds' : forall gc K K' E t T,
@@ -181,9 +124,9 @@ Proof.
   rewrite map_concat. rewrite <- concat_assoc.
   destruct* (binds_concat_inv H) as [[N B]|B]; clear H.
   destruct k; try constructor.
-  simpl. rewrite* get_notin_dom.
+  simpl. rewrite get_notin_dom by auto.
+  puts (binds_map (kind_subst S) B).
   apply* wk_kind.
-  use (binds_map (kind_subst S) B).
 Qed.
 
 Lemma All_kind_types_subst : forall k S,
@@ -200,24 +143,22 @@ Lemma kenv_ok_subst : forall K K' K'' S,
   env_prop type S ->
   kenv_ok (K & K' & K'') -> kenv_ok (K & map (kind_subst S) K'').
 Proof.
-  introv HS H. split*.
-  intro; intros. destruct H.
-  destruct (in_app_or _ _ _ H0).
-    destruct (in_map_inv _ _ _ _ H2) as [b [Hb B]].
-    subst*.
-  apply* (H1 x).
+  introv HS H.
+  kenv_ok_solve. auto.
+  intro; intros.
+  destruct (in_map_inv _ _ _ _ H1) as [b [Hb B]].
+  subst*.
 Qed.
 
 Lemma env_ok_subst : forall E E' S,
   env_prop type S ->
   env_ok (E & E') -> env_ok (E & map (sch_subst S) E').
 Proof.
-  introv HS H. split*.
-  intro; intros. destruct H.
-  destruct (in_app_or _ _ _ H0).
-    destruct (in_map_inv _ _ _ _ H2) as [b [Hb B]].
-    subst*.
-  apply* (H1 x).
+  introv HS H.
+  env_ok_solve. auto.
+  intro; intros.
+  destruct (in_map_inv _ _ _ _ H0) as [b [Hb B]].
+  subst*.
 Qed.
 
 Hint Resolve env_ok_subst.
@@ -241,9 +182,9 @@ Proof.
     apply* kenv_ok_subst.
     binds_cases H1.
       apply* binds_concat_fresh.
-       rewrite* sch_subst_fresh.
-       use (fv_in_spec sch_fv _ _ _ (binds_in B)).
-      auto*.
+      rewrite* sch_subst_fresh.
+      use (fv_in_spec sch_fv _ _ _ (binds_in B)).
+     auto*.
     destruct M as [T Ks]. simpl.
     apply* proper_instance_subst.
   (* Abs *)
@@ -399,13 +340,10 @@ Proof.
   apply_fresh* (@typing_let (gc,GcAny) M0 L1) as y. 
    intros; apply* H0.
      exists (Lu \u mkset Xs); intros Ys TypM.
-     assert (fresh Lu (sch_arity M) Ys). auto*.
-     generalize (Typu Ys H4); intro; clear H4.
+     forward~ (Typu Ys) as Typu'; clear Typu.
      apply* typing_weaken_kinds.
-     clear H0 H1 H2 L2 t2 T2 Wu Typu.
-     puts (proj41 (typing_regular (H Xs H3))).
-     apply* kenv_ok_merge.
-   rewrite* trm_subst_open_var. 
+     forward~ (H Xs).
+   rewrite* trm_subst_open_var.
    apply_ih_bind* H2.
   assert (exists L : vars, has_scheme_vars (gc,GcAny) L K E u M). exists* Lu.
   auto*.
@@ -414,10 +352,9 @@ Proof.
    intros Xs Fr.
    apply* H1; clear H1.
    exists (Lu \u dom K \u mkset Xs); intros Ys Fr'.
-   forward~ (Typu Ys) as Typu'.
+   forward~ (Typu Ys) as Typu'; clear Typu.
    apply* typing_weaken_kinds.
-   use (proj1 (typing_regular Typu')).
-   forward~ (H0 Xs) as Typx.
+   forward~ (H0 Xs).
 Qed.
 
 (* ********************************************************************** *)
@@ -475,8 +412,7 @@ Proof.
       apply* typing_app.
     split.
       destruct (var_freshes L (length Ks)) as [Xs HXs].
-      destruct (H Xs HXs); clear H.
-      destruct* (kenv_ok_concat_inv _ _ H0).
+      destruct* (H Xs HXs).
     intros; subst.
     apply* (@typing_gc (true,GcLet) Ks L).
       simpl; auto.
@@ -486,8 +422,8 @@ Proof.
     apply* typing_weaken_kinds'.
   split.
     destruct (var_freshes L (length Ks)) as [Xs HXs].
-    destruct (H Xs HXs); clear H.
-    destruct* (kenv_ok_concat_inv _ _ H0).
+    destruct* (H Xs HXs).
+
   intros.
   apply* (@typing_gc (true,GcLet) Ks L).
     simpl; auto.
@@ -541,17 +477,12 @@ Proof.
     rewrite* (@trm_subst_intro x). 
     apply_empty* (@typing_trm_subst gc).
     exists {}. intro. unfold kinds_open_vars, sch_open_vars; simpl.
-    destruct* Xs. simpl. rewrite* typ_open_vars_nil.
-    simpl. intuition.
+    destruct Xs; simpl*. rewrite* typ_open_vars_nil.
   apply* (@typing_gc (gc,GcAny) Ks L).
   intros.
-  use (H0 Xs H2); clear H0.
+  puts (H0 Xs H2); clear H0.
   apply* H1.
   apply* typing_weaken_kinds'.
-Qed.
-
-Definition dummy_env (A:Set) : Env.env A.
-  intros. exact empty.
 Qed.
 
 Lemma preservation_result : preservation.
@@ -613,7 +544,6 @@ Proof.
   split3*. constructor; auto. exists* n2.
 Qed.
 
-
 Lemma progress_delta : forall K t0 t3 t2 T,
   K; empty |(false,GcLet)|= trm_app (trm_app t0 t3) t2 ~: T ->
   valu 0 (trm_app t0 t3) ->
@@ -627,8 +557,7 @@ Proof.
   change (exists t', fold_left trm_app (t2::nil) (const_app c vl) --> t').
   unfold const_app; rewrite <- fold_left_app.
   assert (list_for_n value (S(Const.arity c)) (vl ++ t2 :: nil)).
-    split. rewrite <- Hlen; rewrite app_length; simpl. auto with arith.
-    apply* list_forall_app.
+    split*. apply* list_forall_app.
   exists (Delta.reduce H2).
   apply red_delta.
 Qed.
@@ -670,8 +599,6 @@ Proof.
         left. destruct Val2. exists* n.
       destruct (var_freshes L (length Ks)) as [Xs HXs].
       destruct* (H Xs); clear H.
-      split*.
-      destruct* (kenv_ok_concat_inv _ _ H0).
       right; exists* (trm_app t1' t2).
     right; exists* (trm_app t1 t2').
   left; exists* (Const.arity c).
