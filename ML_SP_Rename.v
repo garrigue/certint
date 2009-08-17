@@ -26,16 +26,6 @@ Import Judge.
 (* ********************************************************************** *)
 (** Renaming lemmas *)
 
-(*
-Lemma ok_rename : forall E x y M E',
-  env_ok (E & x ~ M & E') ->
-  y \notin dom E \u dom E' ->
-  env_ok (E & y ~ M & E').
-Proof.
-  intros. auto.
-Qed.
-*)
-
 Lemma trm_fv_open : forall t' t n,
   trm_fv (trm_open_rec n t' t) << trm_fv t \u trm_fv t'.
 Proof.

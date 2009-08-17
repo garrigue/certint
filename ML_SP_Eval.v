@@ -1225,14 +1225,9 @@ Proof.
   apply typing_weaken_kinds.
     replace E with (empty & E & empty) by (simpl; apply concat_empty).
     apply typing_weaken.
-      simpl.
       apply* H.
     simpl. rewrite* concat_empty.
-  assert (fresh {} (sch_arity M) Xs) by auto.
-  puts (H _ H3).
-  rewrite concat_empty.
-  rewrite concat_empty in H4.
-  apply* kenv_ok_concat.
+  forward~ (H Xs).
 Qed.
 
 Lemma retypable_clos : forall benv t,

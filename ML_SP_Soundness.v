@@ -20,58 +20,9 @@ Module JudgInfra := MkJudgInfra(Delta).
 Import JudgInfra.
 Import Judge.
 
-Hint Immediate disjoint_ok.
-
 Lemma kenv_ok_concat : forall K1 K2,
   kenv_ok K1 -> kenv_ok K2 -> disjoint (dom K1) (dom K2) -> kenv_ok (K1 & K2).
-Proof.
-  intros.
-  destruct H; destruct H0.
-  split*.
-Qed.
-
-Lemma env_ok_concat : forall E1 E2,
-  env_ok E1 -> env_ok E2 -> disjoint (dom E1) (dom E2) -> env_ok (E1 & E2).
-Proof.
-  intros.
-  destruct H; destruct H0.
-  split*.
-Qed.
-
-Definition kenv_ok_def K H1 H2 : kenv_ok K := conj H1 H2.
-Definition env_ok_def E H1 H2 : env_ok E := conj H1 H2.
-
-(*
-Lemma kenv_ok_merge : forall (K K1 K2 : kenv),
-  kenv_ok (K & K1) ->
-  kenv_ok (K & K2) ->
-  disjoint (dom K1) (dom K2) -> kenv_ok (K & K1 & K2).
-Proof.
-  intros. auto.
-  destruct (kenv_ok_concat_inv _ _ H0).
-  apply* kenv_ok_concat.
-Qed.
-
-Hint Resolve kenv_ok_merge.
-
-Lemma env_ok_remove : forall F E G,
-  env_ok (E & F & G) -> env_ok (E & G).
-Proof.
-  split*.
-  destruct (env_ok_concat_inv _ _ H).
-  destruct* (env_ok_concat_inv _ _ H0).
-Qed.
-
-Lemma kenv_ok_remove : forall F E G,
-  kenv_ok (E & F & G) -> kenv_ok (E & G).
-Proof.
-  split*.
-  destruct (kenv_ok_concat_inv _ _ H).
-  destruct* (kenv_ok_concat_inv _ _ H0).
-Qed.
-
-Hint Immediate env_ok_remove kenv_ok_remove.
-*)
+Proof. auto. Qed.
 
 Lemma ok_kinds_open_vars : forall K Ks Xs,
   ok K -> fresh (dom K) (length Ks) Xs ->
@@ -192,24 +143,22 @@ Lemma kenv_ok_subst : forall K K' K'' S,
   env_prop type S ->
   kenv_ok (K & K' & K'') -> kenv_ok (K & map (kind_subst S) K'').
 Proof.
-  introv HS H. split*.
-  intro; intros. destruct H.
-  destruct (in_app_or _ _ _ H0).
-    destruct (in_map_inv _ _ _ _ H2) as [b [Hb B]].
-    subst*.
-  apply* (H1 x).
+  introv HS H.
+  kenv_ok_solve. auto.
+  intro; intros.
+  destruct (in_map_inv _ _ _ _ H1) as [b [Hb B]].
+  subst*.
 Qed.
 
 Lemma env_ok_subst : forall E E' S,
   env_prop type S ->
   env_ok (E & E') -> env_ok (E & map (sch_subst S) E').
 Proof.
-  introv HS H. split*.
-  intro; intros. destruct H.
-  destruct (in_app_or _ _ _ H0).
-    destruct (in_map_inv _ _ _ _ H2) as [b [Hb B]].
-    subst*.
-  apply* (H1 x).
+  introv HS H.
+  env_ok_solve. auto.
+  intro; intros.
+  destruct (in_map_inv _ _ _ _ H0) as [b [Hb B]].
+  subst*.
 Qed.
 
 Hint Resolve env_ok_subst.
@@ -233,9 +182,9 @@ Proof.
     apply* kenv_ok_subst.
     binds_cases H1.
       apply* binds_concat_fresh.
-       rewrite* sch_subst_fresh.
-       use (fv_in_spec sch_fv _ _ _ (binds_in B)).
-      auto*.
+      rewrite* sch_subst_fresh.
+      use (fv_in_spec sch_fv _ _ _ (binds_in B)).
+     auto*.
     destruct M as [T Ks]. simpl.
     apply* proper_instance_subst.
   (* Abs *)
