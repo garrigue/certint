@@ -1434,26 +1434,18 @@ Proof.
   intros. disjoint_solve.
 Qed.
 
-Lemma typing_let_disjoint : forall EK0 L e e0 K',
-  ok (e0 & e) ->
-  ok K' -> incl (e0 & e) K' ->
-  disjoint (close_fvk K' EK0) L ->
-  dom e0 << close_fvk K' EK0 ->
-  disjoint L (EK0 \u dom e0 \u fv_in kind_fv e0).
+Lemma close_fvk_incl : forall EK0 e0 K',
+  ok K' -> dom e0 << close_fvk K' EK0 -> incl e0 K' ->
+  EK0 \u dom e0 \u fv_in kind_fv e0 << close_fvk K' EK0.
 Proof.
-  intros until K'; intros Ok HK' Inc2 Dise Se0.
-  repeat apply disjoint_union; apply disjoint_comm.
-  (* env_fv E *)
-  use (@close_fvk_subset EK0 K').
-  (* dom e0 *)
-  apply* (disjoint_subset (L3:=L) Se0).
-  (* fv_in kind_fv (map (kind_subst s) e0) *)
-  refine (disjoint_subset (proj2 (fv_in_subset_inv _ _ _) _) Dise).
-  intro; intros.
-  destruct (ok_concat_inv _ _ Ok).
-  puts (in_ok_binds _ _ H H0).
-  puts (binds_dom H2).
-  apply* (@close_fvk_ok K' EK0 x a).
+  introv HK' Se0 Inc2.
+  puts (incl_subset_dom Inc2).
+  sets_solve.
+    apply* close_fvk_subset.
+  destruct (fv_in_binds _ _ H0) as [x [a [B B']]].
+  puts (Inc2 _ B').
+  puts (in_dom _ _ _ B').
+  apply* close_fvk_ok.
 Qed.
 
 Lemma mkset_elements : forall L,
@@ -1486,10 +1478,6 @@ Proof.
   induction l; auto.
 Qed.
 
-Definition ok_concat_inv1 A (E1 E2:env A) H := proj1 (ok_concat_inv E1 E2 H).
-Definition ok_concat_inv2 A (E1 E2:env A) H := proj2 (ok_concat_inv E1 E2 H).
-Hint Immediate ok_concat_inv1 ok_concat_inv2.
-
 Lemma typing_let_fresh : forall T1 l l0 K' e e0 e1 e2 fvT1 fvE,
   let ftve := close_fvk K' fvE in
   let Bs := S.elements (S.diff fvT1 (ftve \u dom e2)) in
@@ -1503,27 +1491,20 @@ Lemma typing_let_fresh : forall T1 l l0 K' e e0 e1 e2 fvT1 fvE,
   fresh (fvE \u sch_fv M \u dom e0 \u fv_in kind_fv e0) (sch_arity M) (l++Bs).
 Proof.
   intros until M. intros R4 Ok Ok' HK' Inc2 Inc4 Dise Se0.
-  simpl length. rewrite map_length. rewrite app_length.
+  poses DM (@sch_generalize_disjoint (l++Bs) T1 (l0 ++ l0')).
+  fold M in DM; rewrite mkset_app in DM.
+  simpl length. rewrite map_length, app_length.
   rewrite <- (split_length _ R4).
   puts (split_combine _ R4).
+  assert (incl e0 K') by (intro; auto*).
+  poses SKA (close_fvk_incl HK' Se0 H0); clear H0.
+  fold ftve in SKA.
   apply fresh_app.
-  apply* (ok_fresh l l0).
-    rewrite* H.
-  rewrite* <- (dom_combine l l0).
-  rewrite H.
-  puts (incl_subset_dom Inc4).
-  rewrite dom_concat in H0.
-  assert (dom e2 << dom e) by auto.
-  puts (disjoint_subset H1
-          (typing_let_disjoint _ _ Ok HK' Inc2 Dise Se0)).
-  assert (disjoint (sch_fv M) (dom e2)).
-    unfold M.
-    rewrite <- H.
-    rewrite* dom_combine.
-    puts (@sch_generalize_disjoint (l++Bs) T1 (l0 ++ l0')).
-    rewrite mkset_app in H3.
-    disjoint_solve.
-  disjoint_solve.
+    apply* (ok_fresh l l0).
+      rewrite* H.
+    rewrite <- (dom_combine l l0) in * by auto.
+    rewrite H in *.
+    use (incl_subset_dom Inc4).
   unfold l0'.
   rewrite map_length.
   unfold Bs.
@@ -1532,17 +1513,12 @@ Proof.
   rewrite* dom_combine.
   puts (@diff_disjoint fvT1 (ftve \u mkset l)).
   set (l' := S.diff fvT1 (ftve \u mkset l)) in *.
-  assert (disjoint ftve l') by auto.
-  puts (typing_let_disjoint _ _ Ok HK' Inc2 H1 Se0).
-  clear H1.
-  cut (disjoint (sch_fv M) l'); auto.
-  unfold M.
-  puts (@sch_generalize_disjoint (l++Bs) T1 (l0 ++ l0')).
-  rewrite mkset_app in H1.
-  rewrite <- (mkset_elements l').
-  unfold l'.
-  rewrite* <- (dom_combine l l0).
-  rewrite H. fold Bs. disjoint_solve.
+  rewrite <- (dom_combine l l0) in * by auto.
+  rewrite H in *.
+  subst Bs. rewrite mkset_elements in DM.
+  puts (incl_subset_dom Inc4).
+  subst l'.
+  disjoint_solve.
 Qed.
 
 Lemma typing_let_fresh_2 : forall l1 l2 K' T fvE e e0 e1 e2,
@@ -1571,26 +1547,22 @@ Proof.
   rewrite He1.
   puts (incl_subset_dom Inc4).
   rewrite dom_concat in H.
-  assert (dom e1 << dom e).
-    intros v Hv. apply* (H v).
-  puts (disjoint_subset H0
-         (typing_let_disjoint _ _ Ok (proj1 HK') Inc2 Dise Se0)).
-  repeat apply disjoint_union; auto; apply disjoint_comm.
-  (* sch_fv M' *)
-  apply* disjoint_subset. apply close_fvk_subset.
+  assert (incl e0 K') by (intro; auto*).
+  puts (close_fvk_incl (proj1 HK') Se0 H0).
+  puts (@close_fvk_subset (typ_fv T) K').
+  repeat apply disjoint_union; simpl; auto; apply disjoint_comm.
+  (* Ks *)
   unfold Ks; simpl.
   rewrite <- He1. rewrite* dom_combine.
   apply kinds_generalize_disjoint.
   (* e2 *)
-  refine (disjoint_subset (proj2 (fv_in_subset_inv _ _ _) _) Dise1).
+  refine (disjoint_subset _ Dise1).
   intro; intros.
-  assert (ok e2) by auto*.
-  puts (in_ok_binds _ _ H2 H3).
-  apply* (@close_fvk_ok K' (typ_fv T) x).
-  apply* in_ok_binds.
+  apply* close_fvk_incl.
+  clear -Inc2 Inc4.
+  intro; intros.
   apply Inc2.
-  apply in_or_concat; left.
-  apply* Inc4.
+  apply* in_or_app.
 Qed.
 
 Lemma sch_open_extra : forall Ks Xs T,
@@ -1636,7 +1608,7 @@ Proof.
       apply disjoint_ok.
           apply* ok_combine_fresh.
         rewrite* He2.
-      rewrite* dom_combine. rewrite* dom_combine.
+      rewrite dom_combine. rewrite* dom_combine.
         unfold Bs; rewrite mkset_elements.
         rewrite* <- (dom_combine l l0). rewrite* He2.
       unfold l0'; rewrite* map_length.
@@ -1770,7 +1742,7 @@ Proof.
     rewrite concat_assoc.
     apply* disjoint_ok.
       use (incl_subset_dom Inc4).
-    intro; intros. apply* (proj2 (proj1 (typing_regular Typ')) x).
+    intro; intros. assert (kenv_ok K') by auto. apply* (proj2 H5).
   apply* kenv_ok_sch_kinds. rewrite* H1.
 Qed.
 
