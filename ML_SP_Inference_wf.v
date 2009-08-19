@@ -906,9 +906,8 @@ Lemma kenv_ok_subst : forall K' K Ks Ys S,
   kenv_ok (K' & map (kind_subst S) (kinds_open_vars Ks Ys)).
 Proof.
   introv TS HK HK' Fr.
-  kenv_ok_solve; auto.
-  ok_hyps.
-  apply* (kenv_ok_map (conj H6 H4) TS).
+  apply* kenv_ok_concat.
+  apply* kenv_ok_map.
 Qed.
 
 Lemma env_ok_map : forall E S,
