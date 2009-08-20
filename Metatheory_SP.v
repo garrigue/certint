@@ -892,7 +892,7 @@ Section Map.
   Qed.
 
   Lemma map_snd_env_map : forall l,
-    List.map (fun X:var*A => (fst X, f (snd X))) l = Env.map f l.
+   map_snd f l = Env.map f l.
   Proof.
     induction l; simpl*.
     destruct a. rewrite* IHl.
@@ -967,7 +967,7 @@ Section Env_prop.
     intros; intro; intros.
     apply (H x).
     rewrite <- map_snd_env_map.
-    use (in_map (fun X : var * A => (fst X, f (snd X))) _ _ H0).
+    apply* in_map_snd.
   Qed.
 
   Lemma env_prop_list_forall : forall Xs Vs,

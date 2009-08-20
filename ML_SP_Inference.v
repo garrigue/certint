@@ -2368,7 +2368,7 @@ Proof.
     destruct (fv_in_binds _ _ Hx) as [y [a [Ha B]]].
     assert (In (y, sch_subst S a) (map (sch_subst S) E)).
       rewrite <- map_snd_env_map.
-      apply (in_map (fun X : var * sch => (fst X, sch_subst S (snd X))) _ _ B).
+      apply (in_map_snd (sch_subst S) _ _ _ B).
     eapply subset_trans; [|apply (fv_in_spec sch_fv _ _ _ H)]; clear H.
     destruct a as [T Ks].
     unfold sch_fv in Ha; simpl in Ha.
