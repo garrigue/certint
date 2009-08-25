@@ -1,38 +1,18 @@
 #load"typinf.cmo";;
+open Format;;
 open Typinf;;
+open Cstr;;
 open Infer2;;
 open Infer.Unify.MyEval.Rename.Sound.Infra.Defs;;
 open Infer.Unify.MyEval;;
 open Const;;
 open Variables.VarSet;;
 
-let rec int_of_nat = function O -> 0 | S x -> succ (int_of_nat x);;
-
-let print_nat ppf n =
-  match n with
-  | S m when m == n -> Format.fprintf ppf "omega"
-  | _ -> Format.fprintf ppf "%i" (int_of_nat n);;
-let print_var ppf v = print_nat ppf (Variables.nat_of_var v);;
-#install_printer print_nat;;
-#install_printer print_var;;
-let rec omega = S omega;; (* In ocaml we can define infinity! *)
-
-let rec print_list pp ppf = function
-    Nil -> ()
-  | Cons (a, Nil) -> pp ppf a
-  | Cons (a, l) -> Format.fprintf ppf "%a;@ %a" pp a (print_list pp) l;;
-let print_set ppf s =
-  Format.fprintf ppf "{@[%a@]}" (print_list print_var) (S.elements s);;
-#install_printer print_set;;
-
 let rec list_of_coqlist = function
     Nil -> []
   | Cons (a, l) -> a::list_of_coqlist l;;
 
-let rec coqlist_of_list = function
-    [] -> Nil
-  | a :: l -> Cons (a, coqlist_of_list l);;
-
+(** Wrap typinf for easier use *)
 let typinf2 env trm =
   match typinf1 env trm with
   | Inl (Pair (kenv, typ)) ->
@@ -40,14 +20,72 @@ let typinf2 env trm =
   | Inr Left  -> failwith "Environment is not closed"
   | Inr Right -> failwith "Type Error";;
 
-open Typinf.Cstr;;
-
+(** Conversion functions *)
+let rec int_of_nat = function O -> 0 | S x -> succ (int_of_nat x);;
 let rec nat_of_int n = if n <= 0 then O else S (nat_of_int (n-1));;
 
+let rec coqlist_of_list = function
+    [] -> Nil
+  | a :: l -> Cons (a, coqlist_of_list l);;
+
+(** Abbreviations and pretty printers *)
+
+(* nat and var *)
+let rec omega = S omega;; (* In ocaml we can define infinity! *)
+let print_nat ppf n =
+  match n with
+  | S m when m == n -> fprintf ppf "omega"
+  | _ -> fprintf ppf "%i" (int_of_nat n);;
+let var n = Variables.var_of_nat (nat_of_int n)
+let print_var ppf v = print_nat ppf (Variables.nat_of_var v);;
+#install_printer print_nat;;
+#install_printer print_var;;
+
+(* Types *)
+let tv n = Coq_typ_fvar (var n)
+let bv n = Coq_typ_bvar (nat_of_int n)
+let (@>) t1 t2 = Coq_typ_arrow (t1, t2)
+let any = None
+let rec type_rec lv ppf = function
+  | Coq_typ_bvar n -> fprintf ppf "bv %a" print_nat n
+  | Coq_typ_fvar x -> fprintf ppf "tv %a" print_var x
+  | Coq_typ_arrow (t1, t2) as t ->
+      if lv > 0 then fprintf ppf "(%a)" (type_rec 0) t else
+      fprintf ppf "@[%a @@>@ %a@]" (type_rec 1) t1 (type_rec 0) t2
+let print_type = type_rec 0
+let rec print_list pp ppf = function
+    Nil -> ()
+  | Cons (a, Nil) -> pp ppf a
+  | Cons (a, l) -> fprintf ppf "%a;@ %a" pp a (print_list pp) l;;
+let string_of_sort = function
+  | Ksum -> "Ksum"
+  | Kprod -> "Kprod"
+  | Kbot -> "Kbot"
+let print_set ppf s =
+  Format.fprintf ppf "{@[%a@]}" (print_list print_nat) s
+let print_set_option ppf = function
+  | None -> fprintf ppf "any"
+  | Some s -> print_set ppf s
+let print_type_list =
+  print_list (fun ppf (Pair(n,t)) ->
+    fprintf ppf "@[%a =>@ %a@]" print_nat n print_type t)
+let print_ckind ppf k =
+  let c = k.kind_cstr in
+  fprintf ppf "@[<1><%s,@ %a,@ %a,@ {%a}>@]"
+    (string_of_sort c.cstr_sort)
+    print_set c.cstr_low
+    print_set_option c.cstr_high
+    print_type_list k.kind_rel
+let print_kind ppf = function
+  | None -> fprintf ppf "any"
+  | Some k -> print_ckind ppf k;;
+#install_printer print_type;;
+#install_printer print_kind;;
+
+(* Terms *)
 let app a b = Coq_trm_app (a,b)
 let apps a l = List.fold_left app a l
 let abs a = Coq_trm_abs a
-let var n = Variables.var_of_nat (nat_of_int n)
 let bvar n = Coq_trm_bvar (nat_of_int n)
 let matches l = apps
     (Coq_trm_cst (Const.Coq_matches (coqlist_of_list (List.map nat_of_int l))))
