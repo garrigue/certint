@@ -1,6 +1,14 @@
-The files ML_SP_* contain a proof of type soundness for structural
+
+  A Certified Interpreter for ML with Structural Polymorphism
+                  Jacques Garrigue, August 2009
+
+The files in this archive contain a proof of type soundness for structural
 polymorphism based on local constraints [1], together with soundness
 and principality of the type inference algorithm.
+I started from a proof of type soundness for core ML by Arthur
+Chargueraud, which accompanied "Engineering formal metatheory" [2].
+The library files (Lib_* and Metatheory*) are almost untouched.
+The new files are as follows.
   Metatheory_SP: new generic lemmas used in developments
   Cardinal: lemmas about finite set cardinals
   ML_SP_Definitions: basic definitions
@@ -13,24 +21,21 @@ and principality of the type inference algorithm.
   ML_SP_Domain: instantiation of all the above proofs to polymorphic variants
   ML_SP_Unify/Inference_wf: termination counters are in Prop
 
-I started from a proof of type soundness for coer ML by Arthur
-Chargueraud, which accompanied "Engineering formal metatheory" [2].
-The library files (Lib_* and Metatheory*) are almost untouched.
-The first 3 files (Definitions, Infrastructure and Soundness) were
-heavily modified, and contain completely new properties, like
-elimination of kind_gc.
+Of the above, Definitions, Infrastructure and Soundness are base on
+the core ML proof, but were heavily modified.
 Eval, Unify, Inference and Domain are completely new.
+Read the accompanying paper [3] for information on the proof.
 
 All the above development were checked with coq 8.2.
 You can compile them with "sh build.sh"
 
 You can also play with the type checker. It does not work inside Coq
-at this point (Qed in place of Defined somewhere?), but you should
-execute Extraction.v, compile the resulting typinf.{mli,ml}, and look
-at use_typinf.ml for how to use it (it contains a number of petty
-printers and conversion functions that make things easier).
+at this point, but you should compile typinf.mli and typinf.ml
+(obtained by running Extraction.v), and look at use_typinf.ml for how
+to use them. (It contains a number of petty printers and conversion
+functions that make things easier).
 
-Here are all the steps:
+Here are all the steps: (the first 2 steps are optional)
 
 $ sh build.sh
 $ coqc Extraction.v
@@ -48,3 +53,7 @@ $ ocaml
 [2] Brian Aydemir, Arthur Chargueraud, Benjamin C. Pierce, Randy Pollack
     and Stephanie Weirich: Engineering Formal Metatheory. POPL'08.
     http://www.chargueraud.org/arthur/research/2007/binders/
+
+[3] A Certified Interpreter for ML with Structural Polymorphism.
+    Draft presented at WMM'09, Edinburgh, UK, September 2009.
+    http://www.math.nagoya-u.ac.jp/~garrigue/papers/#certint0908

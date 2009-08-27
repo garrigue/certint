@@ -1,1 +1,2 @@
 390s on hugo (Core duo 2GHz)
+310s on tagen27 (Core duo 2.53GHz)
