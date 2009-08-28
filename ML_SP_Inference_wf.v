@@ -2040,13 +2040,12 @@ Proof.
   use (IHXs Ks).
 Qed.
 
-Lemma well_subst_concat : forall E S0 K0 K S L Xs Us,
+Lemma well_subst_concat : forall E S0 K0 K S L S',
   well_subst (map (kind_subst S0) K0) K S ->
-  (forall t, typ_fv t << L ->
-    typ_subst (S & combine Xs Us) t = typ_subst S t) ->
-  extends (S & combine Xs Us) S0 ->
+  (forall t, typ_fv t << L -> typ_subst (S & S') t = typ_subst S t) ->
+  extends (S & S') S0 ->
   fvs S0 K0 E << L ->
-  well_subst K0 K (S & combine Xs Us).
+  well_subst K0 K (S & S').
 Proof.
   introv WS Hsub Hext' HL.
   intro; intros.
@@ -2078,7 +2077,7 @@ Proof.
   intros until x; intros HTS HL [HUs HWk] WS B Fr AryM Hsub Hext'.
   intro; intros.
   binds_cases H.
-    refine (well_subst_concat (E:=E) _ _ WS Hsub Hext' _ _); auto.
+    refine (well_subst_concat (E:=E) _ WS Hsub Hext' _ _); auto.
   simpl.
   case_eq (get Z (combine Xs Us)); intros.
     rewrite (binds_prepend S H).
