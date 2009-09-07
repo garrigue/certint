@@ -161,7 +161,7 @@ Proof.
   subst*.
 Qed.
 
-Hint Resolve env_ok_subst.
+Hint Resolve kenv_ok_subst env_ok_subst.
 
 (* ********************************************************************** *)
 (** Type substitution preserves typing *)
@@ -179,7 +179,6 @@ Proof.
   induction Typ; introv WS EQ EQ'; subst; simpls typ_subst.
   (* Var *)
   rewrite~ sch_subst_open. apply* typing_var.
-    apply* kenv_ok_subst.
     binds_cases H1.
       apply* binds_concat_fresh.
       rewrite* sch_subst_fresh.
@@ -212,7 +211,6 @@ Proof.
     intro x. rewrite* Delta.closed.
   rewrite* sch_subst_fresh.
   apply* typing_cst.
-    apply* kenv_ok_subst.
   rewrite* <- (sch_subst_fresh S H2).
   destruct (Delta.type c) as [T Ks]; simpl.
   apply* proper_instance_subst.
