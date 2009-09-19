@@ -50,12 +50,11 @@ Proof.
   gen_eq (E & x ~ M & E') as E0. gen E'.
   induction Typ; intros; subst; simpl trm_subst.
   (* Var *)
-  assert (env_ok (E & y ~ M & E')) by auto.
   destruct (x0 == x).
     subst.
     puts (binds_mid _ _ _ _ (proj1 H0)).
-    puts (binds_func H1 H5).
-    subst; clear H5.
+    puts (binds_func H1 H3).
+    subst; clear H3.
     apply* typing_var.
   apply* typing_var.
   binds_cases H1; auto.
@@ -77,10 +76,8 @@ Proof.
   simpl in H2; auto.
   (* Let *)
   clear H H1.
-  apply* (@typing_let gc M0 L1 (L2 \u {{y}} \u {{x}})).
-    clear H2; intros.
-    apply* H0.
-    simpl in H4; auto.
+  simpl in H4.
+  apply~ (@typing_let gc M0 L1 (L2 \u {{y}} \u {{x}})).
   clear H0; intros.
   assert (x0 \notin L2) by auto.
   puts (H2 x0 H0 (E' & x0 ~ M0)); clear H0 H2.
