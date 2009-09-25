@@ -986,17 +986,6 @@ Proof.
   simpl. destruct* (v == v0). inversions* H.
 Qed.
 
-Lemma kind_map2_eq : forall f1 f2 f3 f4 k,
-  (forall T, f1 (f2 T) = f3 (f4 T)) ->
-  kind_map f1 (kind_map f2 k) = kind_map f3 (kind_map f4 k).
-Proof.
-  intros.
-  destruct k as [[kc kv kr kh]|]; simpl*.
-  apply* kind_pi. simpl.
-  clear kh; induction kr; simpl*.
-  rewrite H; rewrite* IHkr.
-Qed.
-
 Lemma kind_subst_compose : forall S1 S2 k,
   kind_subst (compose S1 S2) k = kind_subst S1 (kind_subst S2 k).
 Proof.

@@ -38,12 +38,10 @@ Definition fvs S K E :=
 Lemma typ_fv_subst0 : forall S T,
   typ_fv (typ_subst S T) << S.diff (typ_fv T) (dom S) \u fv_in typ_fv S.
 Proof.
-  induction T; simpl; intros x Hx. elim (in_empty Hx).
-    case_rewrite R1 (get v S).
-      use (fv_in_spec typ_fv _ _ _ (binds_in R1)).
-    puts (get_none_notin _ R1).
-    simpl in Hx. auto.
-  auto.
+  induction T; simpl; intros x Hx; auto.
+  case_rewrite R1 (get v S).
+    forward* (fv_in_spec typ_fv S v t).
+  simpl in Hx; auto.
 Qed.
 
 Lemma typ_fv_subst : forall S T,
@@ -57,12 +55,10 @@ Lemma kind_fv_subst : forall S k,
   kind_fv (kind_subst S k) << S.diff (kind_fv k) (dom S) \u fv_in typ_fv S.
 Proof.
   intros.
-  destruct k as [[kc kv kr kh]|].
-    unfold kind_fv; simpl.
-    clear kh; induction kr; simpl; intros x Hx; auto.
-    destruct* (S.union_1 Hx).
-    use (typ_fv_subst0 _ _ H).
-  unfold kind_fv; simpl*.
+  unfold kind_fv.
+  destruct k as [[kc kv kr kh]|]; simpl*.
+  clear kh; induction kr; simpl; intros x Hx; auto.
+  use (typ_fv_subst0 S (snd a)).
 Qed.
 
 Lemma fv_in_typ_subst : forall S S0,
@@ -71,8 +67,7 @@ Lemma fv_in_typ_subst : forall S S0,
 Proof.
   induction S0; intros y Hy; simpl in *; sets_simpl.
   destruct a. simpl in Hy.
-  sets_solve.
-  use (typ_fv_subst0 _ _ H).
+  use (typ_fv_subst0 S t).
 Qed.
 
 Lemma fv_in_compose : forall S S0,

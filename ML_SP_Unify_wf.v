@@ -70,6 +70,7 @@ Section Moregen.
 
 End Moregen.
 
+Hint Resolve typ_subst_idem.
 
 (** Various properties of substitutions *)
 
@@ -93,7 +94,7 @@ Proof.
       rewrite* (binds_concat_fresh (map (typ_subst S1) S2) H0).
     case_eq (get v (S1 & map (typ_subst S1) S2)); intros; auto.
     destruct (binds_concat_inv H1).
-      destruct H2. rewrite H3 in H0. discriminate.
+      rewrite (proj2 H2) in H0. discriminate.
     destruct (binds_map_inv _ _ H2).
     rewrite (proj2 H3) in H; discriminate.
   rewrite* IHT1.
@@ -132,10 +133,9 @@ Proof.
   destruct (in_app_or _ _ _ H2).
     destruct (in_map_inv _ _ _ _ H3) as [b [F B']].
     subst.
-    use (H _ _ B').
     simpl in *.
     apply* disjoint_subst.
-  simpl in H3. destruct* H3.
+  simpl in H3; destruct* H3.
   inversions* H3.
 Qed.
 
@@ -146,7 +146,7 @@ Lemma typ_subst_disjoint : forall S T,
 Proof.
   intros; induction T; simpl in *; auto.
   case_eq (get v S); intros.
-    use (H _ _ (binds_in H0)).
+    use (H v t).
   simpl*.
 Qed.
 
@@ -203,7 +203,7 @@ Qed.
 
 Lemma is_subst_id : is_subst id.
 Proof.
-  unfold id, is_subst. intro; intros. simpl*.
+  unfold id, is_subst. intro; simpl*.
 Qed.
 
 Lemma binds_subst_idem : forall x T S,
@@ -212,21 +212,8 @@ Proof.
   intros.
   use (binds_typ_subst H).
   use (f_equal (typ_subst S) H1).
-  rewrite typ_subst_idem in H2; auto.
+  rewrite typ_subst_idem in H2 by auto.
   congruence.
-Qed.
-
-Lemma kind_subst_idem : forall S k,
-  is_subst S -> kind_subst S (kind_subst S k) = kind_subst S k.
-Proof.
-  intros.
-  destruct k as [[kc kv kr kh]|].
-    simpl.
-    apply* kind_pi; simpl.
-    clear kh; induction kr; simpl. auto.
-    rewrite IHkr.
-    rewrite* typ_subst_idem.
-  auto.
 Qed.
 
 Lemma kind_subst_combine : forall S S1 S2 k,
@@ -234,60 +221,47 @@ Lemma kind_subst_combine : forall S S1 S2 k,
   kind_subst S1 (kind_subst S2 k) = kind_subst S k.
 Proof.
   intros.
-  destruct k as [[kc kv kr kh]|].
-    simpl; apply* kind_pi; simpl.
-    clear kv kh.
-    induction kr. auto.
-    simpl. rewrite IHkr. rewrite* H.
-  auto.
+  destruct k as [[kc kv kr kh]|]; simpl*.
+  apply* kind_pi; simpl.
+  clear kh; induction kr; simpl*.
+  rewrite IHkr. rewrite* H.
+Qed.
+
+Lemma kind_subst_idem : forall S k,
+  is_subst S -> kind_subst S (kind_subst S k) = kind_subst S k.
+Proof.
+  intros.
+  apply* kind_subst_combine.
+Qed.
+
+Lemma env_prop_map_idem : forall f (S:subs),
+  env_prop (fun T => f T = T) S -> map f S = S.
+Proof.
+  intros.
+  induction S; simpl*.
+  destruct a.
+  rewrite* (H v t).
+  rewrite* IHS.
+  intro; auto*.
 Qed.
 
 Lemma typ_subst_map_idem : forall S,
   is_subst S -> ok S -> map (typ_subst S) S = S.
 Proof.
   intros.
-  remember S as S0.
-  pattern S0 at 1.
-  rewrite HeqS0.
-  assert (env_prop (fun T => typ_subst S T = T) S0).
-    intro; intros.
-    rewrite <- HeqS0.
-    rewrite <- (binds_typ_subst (in_ok_binds _ _ H1 H0)).
-    apply* typ_subst_idem.
-  clear HeqS0 H.
-  induction S0. auto.
-  inversions H0.
-  simpl. rewrite (H1 x a0).
-    rewrite* IHS0.
-    intro; intros.
-    apply (H1 x0 a).
-    simpl.
-    destruct* (x0 == x).
-  simpl*.
+  apply env_prop_map_idem.
+  intro; intros.
+  rewrite* <- (@binds_typ_subst x a S).
 Qed.
 
 Lemma typ_subst_prebind : forall v T S T1,
   typ_subst S T = typ_subst S (typ_fvar v) ->
   typ_subst S (typ_subst (v~T) T1) = typ_subst S T1.
 Proof.
-  induction T1; intros.
-      simpl*.
-    simpl. destruct (v0 == v).
-      subst*.
-    reflexivity.
-  simpl.
+  induction T1; intros; simpl*.
+    destruct* (v0 == v).
+    subst*.
   rewrite* IHT1_1. rewrite* IHT1_2.
-Qed.
-
-Lemma kind_map2_eq : forall f1 f2 f3 f4 k,
-  (forall T, f1 (f2 T) = f3 (f4 T)) ->
-  kind_map f1 (kind_map f2 k) = kind_map f3 (kind_map f4 k).
-Proof.
-  intros.
-  destruct k as [[kc kv kr kh]|]; simpl*.
-  apply* kind_pi. simpl.
-  clear kh; induction kr; simpl*.
-  rewrite H; rewrite* IHkr.
 Qed.
 
 Lemma kind_subst_compose : forall S1 S2 k,
