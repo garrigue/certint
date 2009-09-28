@@ -1,3 +1,6 @@
+coq-8.2:
+628s on marie (Core solo 1.2GHz)
 390s on hugo (Core duo 2GHz)
 310s on tagen27 (Core duo 2.53GHz)
-628s on marie (Core solo 1.2GHz)
+coq-8.2pl1:
+346s on tagen27
