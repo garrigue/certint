@@ -29,16 +29,11 @@ Import Judge.
 Lemma trm_fv_open : forall t' t n,
   trm_fv (trm_open_rec n t' t) << trm_fv t \u trm_fv t'.
 Proof.
-  induction t; simpl; intros; intros x Hx; auto*.
-  destruct (n0 === n). rewrite* union_empty_l.
-    elim (in_empty Hx).
+  induction t; intros; intros x Hx; simpl in *; auto*.
+  destruct (n0 === n); simpl in *; auto.
   apply* (IHt (S n)).
-  sets_solve.
-    use (IHt1 _ _ H).
-  use (IHt2 _ _ H).
-  sets_solve.
-    use (IHt1 _ _ H).
-  use (IHt2 _ _ H).
+  puts (IHt1 n); use (IHt2 (S n)).
+  puts (IHt1 n); use (IHt2 n).
 Qed.
 
 Lemma typing_rename : forall gc K E x y M E' t T,
@@ -62,35 +57,33 @@ Proof.
   clear H0.
   apply* (@typing_abs gc (L \u {{y}} \u {{x}})).
   intros.
-  assert (x0 \notin L) by auto.
-  puts (H1 x0 H2 (E' & x0 ~ Sch U nil)); clear H1.
-  repeat rewrite <- concat_assoc in H4.
-  rewrite trm_subst_open in H4 by auto.
-  simpl trm_subst in H4.
-  destruct (x0 == x).
-    subst. elim H0; auto.
-  apply H4. auto.
-  simpl in *.
-  clear H2 H4; disjoint_solve.
-  puts (trm_fv_open _ _ _ H1); clear H1 .
-  simpl in H2; auto.
+  forward~ (H1 x0) as Typ; clear H1.
+  rewrite concat_assoc in Typ.
+  forward~ (Typ _ (refl_equal _)) as Typ'; clear Typ.
+    simpl in *; disjoint_solve.
+    puts (trm_fv_open _ _ _ H1).
+    simpl in H2; auto.
+  repeat rewrite <- concat_assoc in Typ'.
+  rewrite trm_subst_open in Typ' by auto.
+  simpl trm_subst in Typ'.
+  destruct* (x0 == x).
+  subst. elim H0; auto.
   (* Let *)
   clear H H1.
   simpl in H4.
   apply~ (@typing_let gc M0 L1 (L2 \u {{y}} \u {{x}})).
   clear H0; intros.
-  assert (x0 \notin L2) by auto.
-  puts (H2 x0 H0 (E' & x0 ~ M0)); clear H0 H2.
-  repeat rewrite <- concat_assoc in H1.
-  rewrite trm_subst_open in H1; auto.
-  simpl trm_subst in H1.
-  destruct (x0 == x).
-    subst. elim H; auto.
-  apply* H1; clear H1.
-  simpl in *.
-  disjoint_solve.
-  puts (trm_fv_open _ _ _ H0).
-  simpl in H1; auto.
+  forward~ (H2 x0) as Typ0; clear H2.
+  rewrite concat_assoc in Typ0.
+  forward (Typ0 _ (refl_equal _)) as Typ; clear Typ0.
+    simpl in *. disjoint_solve.
+    puts (trm_fv_open _ _ _ H0).
+    simpl in H1; auto.
+  rewrite <- concat_assoc in Typ.
+  rewrite trm_subst_open in Typ by auto.
+  simpl trm_subst in Typ.
+  destruct* (x0 == x).
+  subst. elim H; auto.
   (* App *)
   simpl in H0.
   apply* (@typing_app gc K (E & y ~ M & E') S).
@@ -172,6 +165,36 @@ Proof.
   rewrite* IHKs.
 Qed.
 
+Lemma well_subst_rename : forall K Ks Xs Ys,
+  let S := combine Xs (typ_fvars Ys) in
+  fresh (fv_in kind_fv K) (length Ks) Xs ->
+  fresh (mkset Xs) (length Xs) Ys ->
+  well_subst
+    (K & kinds_open_vars Ks Xs & combine Ys (kinds_open Ks (typ_fvars Xs)))
+    (K & map (kind_subst S) (combine Ys (kinds_open Ks (typ_fvars Xs)))) S.
+Proof.
+  intros; intro; intros.
+  destruct k as [[kc kv kr kh]|]; [|auto].
+  assert (DS: dom S = mkset Xs) by apply* dom_combine.
+  binds_cases H1.
+      rewrite typ_subst_fresh.
+        rewrite* kind_subst_fresh.
+        rewrite DS.
+        use (fv_in_spec kind_fv _ _ _ (binds_in B0)).
+      rewrite DS; simpl*.
+    unfold kinds_open_vars in B1.
+    assert (length (kinds_open Ks (typ_fvars Xs)) = length Xs)
+      by (unfold kinds_open; auto).
+    destruct (binds_rename _ _ _ _ H1 H0 B1) as [Z' [HT HG]].
+    unfold S at 3. rewrite HT.
+    simpl; apply* wk_kind.
+    use (binds_map (kind_subst S) HG).
+  rewrite typ_subst_fresh.
+    unfold kind_subst. simpl.
+    use (binds_map (kind_map (typ_subst S)) B0).
+  rewrite* DS.
+Qed.
+
 Lemma typing_rename_typ : forall E M K Xs Ys gc t,
   fresh (env_fv E \u sch_fv M \u dom K \u fv_in kind_fv K)
     (sch_arity M) Xs ->
@@ -185,33 +208,15 @@ Proof.
   assert (TS: env_prop type S).
     unfold S; apply list_forall_env_prop. refine (proj2 (types_typ_fvars _)).
   unfold sch_open_vars, typ_open_vars.
-  rewrite (typ_subst_intro Xs (Us:=typ_fvars Ys)).
+  unfold sch_fv in H.
+  rewrite~ (typ_subst_intro Xs (Us:=typ_fvars Ys)).
     fold S.
     replace E with (E & map (sch_subst S) empty) by auto.
     replace (kinds_open_vars (sch_kinds M) Ys) with
       (map(kind_subst S)(combine Ys (kinds_open (sch_kinds M) (typ_fvars Xs)))).
       apply* typing_typ_subst.
           rewrite* DS.
-        instantiate (1 := kinds_open_vars (sch_kinds M) Xs).
-        intro; intros.
-        destruct k as [[kc kv kr kh]|]; [|auto].
-        binds_cases H2.
-            rewrite typ_subst_fresh.
-              rewrite* kind_subst_fresh.
-              rewrite DS.
-              use (fv_in_spec kind_fv _ _ _ (binds_in B0)).
-            rewrite DS; simpl*.
-          unfold kinds_open_vars in B1.
-          assert (length (kinds_open (sch_kinds M) (typ_fvars Xs)) = length Xs).
-            unfold kinds_open; auto.
-          destruct (binds_rename _ _ _ _ H2 H0 B1) as [Z' [HT HG]].
-          unfold S at 3. rewrite HT.
-          simpl; apply* wk_kind.
-          use (binds_map (kind_subst S) HG).
-        rewrite typ_subst_fresh.
-          unfold kind_subst. simpl.
-          use (binds_map (kind_map (typ_subst S)) B0).
-        rewrite* DS.
+        apply* well_subst_rename.
       apply* typing_weaken_kinds'.
       kenv_ok_solve.
         apply* ok_combine_fresh.
@@ -221,13 +226,10 @@ Proof.
     rewrite* kinds_subst_open.
     rewrite kinds_subst_fresh.
       subst S.
-      assert (fresh {} (length (typ_fvars Ys)) Xs).
-        unfold typ_fvars; rewrite map_length.
-        rewrite* <- (fresh_length _ _ _ H0).
-      rewrite* (fresh_subst _ _ _ H2).
-    unfold sch_fv in H.
+      rewrite* (fresh_subst {} Xs (typ_fvars Ys)).
+      unfold typ_fvars; rewrite map_length.
+      rewrite* <- (fresh_length _ _ _ H0).
     rewrite* DS.
-   unfold sch_fv in H. auto*.
   rewrite* (fresh_length _ _ _ H0).
 Qed.
 
