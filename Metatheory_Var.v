@@ -40,8 +40,8 @@ Parameter var_fresh : forall (L : vars), { x : var | x \notin L }.
 
 (** Variables can be enumerated *)
 
-Parameter var_of_nat : nat -> var.
-Parameter nat_of_var : var -> nat.
+Parameter var_of_Z : Z -> var.
+Parameter Z_of_var : var -> Z.
 
 End VARIABLES.
 
@@ -51,14 +51,16 @@ End VARIABLES.
 
 Module Variables : VARIABLES.
 
-Definition var := nat.
+Open Scope Z_scope.
 
-Definition var_default : var := O.
+Definition var := Z.
 
-Definition var_of_nat x : var := x.
-Definition nat_of_var x : nat := x.
+Definition var_default : var := 0.
 
-Module Var_as_OT := Nat_as_OT.
+Definition var_of_Z x : var := x.
+Definition Z_of_var x : Z := x.
+
+Module Var_as_OT := Z_as_OT.
 
 Module Import VarSet : FinSet with Module E := Var_as_OT :=
   Lib_FinSetImpl.Make Var_as_OT.
@@ -66,32 +68,31 @@ Open Local Scope set_scope.
 
 Definition vars := VarSet.S.t.
 
-Open Scope nat_scope.
-
 Lemma max_lt_l :
-  forall (x y z : nat), x <= y -> x <= max y z.
+  forall (x y z : Z), x <= y -> x <= Zmax y z.
 Proof.
-  induction x; auto with arith.
-  induction y; induction z; simpl; auto with arith.
+  intros.
+  apply (Zle_trans _ _ _ H).
+  apply Zle_max_l.
 Qed.
 
-Lemma finite_nat_list_max : forall (l : list nat),
-  { n : nat | forall x, In x l -> x <= n }.
+Lemma finite_nat_list_max : forall (l : list Z),
+  { n : Z | forall x, In x l -> x <= n }.
 Proof.
   induction l as [ | l ls IHl ].
   exists 0; intros x H; inversion H.
   inversion IHl as [x H].
-  exists (max x l); intros y J; simpl in J; inversion J.
-    subst; auto with arith.
+  exists (Zmax x l); intros y J; simpl in J; inversion J.
+    subst; apply Zle_max_r.
     assert (y <= x); auto using max_lt_l.
 Qed.
 
-Lemma finite_nat_list_max' : forall (l : list nat),
-  { n : nat | ~ In n l }.
+Lemma finite_nat_list_max' : forall (l : list Z),
+  { n : Z | ~ In n l }.
 Proof.
   intros l.
   case (finite_nat_list_max l); intros x H.
-  exists (S x).
+  exists (x+1).
   intros J.
   assert (K := H _ J); omega.
 Qed.
