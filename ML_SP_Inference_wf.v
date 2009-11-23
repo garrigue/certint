@@ -5,7 +5,7 @@
 
 Set Implicit Arguments.
 
-Require Import List Arith Metatheory Cardinal.
+Require Import List Arith Omega Metatheory Cardinal.
 Require Import ML_SP_Definitions ML_SP_Unify_wf.
 
 Module MkInfer(Cstr:CstrIntf)(Const:CstIntf).
@@ -614,13 +614,14 @@ Proof.
   right. apply* get_none_notin.
 Qed.
 
-Definition typinf_res E L (res : kenv * subs * vars) :=
+Definition typinf_res E L (res : kenv * subs * Z) :=
  let (KS',L') := res in let (K',S') := KS' in
- (ok K' /\ is_subst S' /\ disjoint (dom S') (dom K')) /\ fvs S' K' E \u L << L'.
+ (ok K' /\ is_subst S' /\ disjoint (dom S') (dom K'))
+ /\ Zle (Zmax (var_maj (fvs S' K' E)) L) L'.
 
 Fixpoint typinf K E t T L S (h:Acc lt (trm_depth t)) (HS:is_subst S) (HK:ok K)
-  (D:disjoint (dom S) (dom K)) (HL: fvs S K E \u typ_fv T << L) {struct h} :
-  option (sig (typinf_res E L)) :=
+  (D:disjoint (dom S) (dom K)) (HL: Zle (var_maj (fvs S K E \u typ_fv T)) L)
+  {struct h} : option (sig (typinf_res E L)) :=
   match t as t' return t = t' -> option (sig (typinf_res E L)) with
   | trm_bvar _ => fun eq => None
   | trm_fvar x => fun eq =>

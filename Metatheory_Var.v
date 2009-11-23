@@ -29,6 +29,7 @@ Declare Module Var_as_OT : UsualOrderedType with Definition t := var.
 
 Declare Module Import VarSet : FinSet with Module E := Var_as_OT.
 Open Local Scope set_scope.
+Open Local Scope Z_scope.
 
 Definition vars := VarSet.S.t.
 
@@ -37,6 +38,11 @@ Definition vars := VarSet.S.t.
 Parameter var_generate : vars -> var.
 Parameter var_generate_spec : forall E, (var_generate E) \notin E.
 Parameter var_fresh : forall (L : vars), { x : var | x \notin L }.
+
+Parameter var_maj : vars -> Z.
+Parameter var_next : forall (n : Z),
+  {x : var | forall L, var_maj L <= n -> x \notin L}.
+Parameter maj_grow : forall L1 L2, L1 << L2 -> var_maj L1 <= var_maj L2.
 
 (** Variables can be enumerated *)
 
@@ -68,51 +74,83 @@ Open Local Scope set_scope.
 
 Definition vars := VarSet.S.t.
 
-Lemma max_lt_l :
-  forall (x y z : Z), x <= y -> x <= Zmax y z.
+Fixpoint var_maj_list (l : list var) : Z :=
+  match l with
+  | nil => 0
+  | n :: l' => Zmax n (var_maj_list l')
+  end.
+
+Definition var_maj L := var_maj_list (S.elements L).
+
+Lemma maj_grow : forall L1 L2, L1 << L2 -> var_maj L1 <= var_maj L2.
 Proof.
   intros.
-  apply (Zle_trans _ _ _ H).
-  apply Zle_max_l.
+  unfold var_maj.
+  assert (incl (S.elements L1) (S.elements L2)).
+    intro; intros.
+    assert (InA S.E.eq a (S.elements L2)).
+      apply S.elements_1.
+      apply H.
+      apply S.elements_2.
+      apply In_InA; intros; auto.
+      reflexivity.
+    clear -H1.
+    induction H1.
+      inversion H.
+      subst*.
+    auto.
+  induction (S.elements L1).
+    simpl.
+    clear.
+    induction (S.elements L2). auto with zarith.
+    simpl. apply (Zle_trans _ _ _ IHl). apply Zle_max_r.
+  simpl.
+  apply (Zmax_case a (var_maj_list l)).
+    assert (In a (S.elements L2)).
+      apply H0. auto.
+    clear -H1; induction (S.elements L2). elim H1.
+    simpls.
+    destruct H1. subst. apply Zle_max_l.
+    apply (Zle_trans _ _ _ (IHl H)).
+    apply Zle_max_r.
+  apply IHl.
+  intro; intros. apply H0. auto.
 Qed.
 
-Lemma finite_nat_list_max : forall (l : list Z),
-  { n : Z | forall x, In x l -> x <= n }.
+Definition var_next : forall (n : Z),
+  {x : var | forall L, var_maj L <= n -> x \notin L}.
 Proof.
-  induction l as [ | l ls IHl ].
-  exists 0; intros x H; inversion H.
-  inversion IHl as [x H].
-  exists (Zmax x l); intros y J; simpl in J; inversion J.
-    subst; apply Zle_max_r.
-    assert (y <= x); auto using max_lt_l.
-Qed.
+  intros.
+  exists (1+n).
+  unfold var_maj.
+  intros; intro.
+  puts (S.elements_1 H0).
+  clear H0; induction H1.
+    simpl in H.
+    inversions H0.
+    revert H.
+    apply Zmax_case_strong; intros; omega.
+  apply IHInA.
+  simpl in H.
+  revert H.
+  apply Zmax_case_strong; intros; omega.
+Defined.
 
-Lemma finite_nat_list_max' : forall (l : list Z),
-  { n : Z | ~ In n l }.
-Proof.
-  intros l.
-  case (finite_nat_list_max l); intros x H.
-  exists (x+1).
-  intros J.
-  assert (K := H _ J); omega.
-Qed.
-
-Definition var_generate (L : vars) : var :=
-  proj1_sig (finite_nat_list_max' (S.elements L)).
-
+Definition var_generate L : var := proj1_sig (var_next (var_maj L)).
 Lemma var_generate_spec : forall E, (var_generate E) \notin E.
 Proof.
-  unfold var_generate. intros E.
-  destruct (finite_nat_list_max' (S.elements E)) as [n pf].
-  simpl. intros a.
-  assert (In n (S.elements E)). rewrite <- InA_iff_In.
-  auto using S.elements_1.
-  intuition.
+  intros.
+  unfold var_generate.
+  destruct (var_next (var_maj E)).
+  simpl.
+  apply n.
+  auto with zarith.
 Qed.
-
-Lemma var_fresh : forall (L : vars), { x : var | x \notin L }.
-Proof.
-  intros L. exists (var_generate L). apply var_generate_spec.
+  
+Definition var_fresh : forall (L : vars), { x : var | x \notin L }.
+  intros.
+  exists (var_generate L).
+  apply var_generate_spec.
 Qed.
 
 End Variables.
