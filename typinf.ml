@@ -30,6 +30,18 @@ let fst = function
 let snd = function
   | Pair (x, y) -> y
 
+type comparison =
+  | Eq
+  | Lt
+  | Gt
+
+(** val compOpp : comparison -> comparison **)
+
+let compOpp = function
+  | Eq -> Eq
+  | Lt -> Gt
+  | Gt -> Lt
+
 type 'a sig0 = 'a
   (* singleton inductive, whose constructor was exist *)
 
@@ -151,17 +163,6 @@ let rec eq_nat_dec n m =
                  | O -> Right
                  | S m0 -> eq_nat_dec n0 m0)
 
-(** val lt_eq_lt_dec : nat -> nat -> sumbool sumor **)
-
-let rec lt_eq_lt_dec n m =
-  match n with
-    | O -> (match m with
-              | O -> Inleft Right
-              | S n0 -> Inleft Left)
-    | S n0 -> (match m with
-                 | O -> Inright
-                 | S m0 -> lt_eq_lt_dec n0 m0)
-
 (** val le_lt_dec : nat -> nat -> sumbool **)
 
 let rec le_lt_dec n m =
@@ -171,6 +172,150 @@ let rec le_lt_dec n m =
                  | O -> Right
                  | S m0 -> le_lt_dec n0 m0)
 
+type positive =
+  | XI of positive
+  | XO of positive
+  | XH
+
+(** val psucc : positive -> positive **)
+
+let rec psucc = function
+  | XI p -> XO (psucc p)
+  | XO p -> XI p
+  | XH -> XO XH
+
+(** val pplus : positive -> positive -> positive **)
+
+let rec pplus x y =
+  match x with
+    | XI p ->
+        (match y with
+           | XI q -> XO (pplus_carry p q)
+           | XO q -> XI (pplus p q)
+           | XH -> XO (psucc p))
+    | XO p ->
+        (match y with
+           | XI q -> XI (pplus p q)
+           | XO q -> XO (pplus p q)
+           | XH -> XI p)
+    | XH ->
+        (match y with
+           | XI q -> XO (psucc q)
+           | XO q -> XI q
+           | XH -> XO XH)
+
+(** val pplus_carry : positive -> positive -> positive **)
+
+and pplus_carry x y =
+  match x with
+    | XI p ->
+        (match y with
+           | XI q -> XI (pplus_carry p q)
+           | XO q -> XO (pplus_carry p q)
+           | XH -> XI (psucc p))
+    | XO p ->
+        (match y with
+           | XI q -> XO (pplus_carry p q)
+           | XO q -> XI (pplus p q)
+           | XH -> XO (psucc p))
+    | XH ->
+        (match y with
+           | XI q -> XI (psucc q)
+           | XO q -> XO (psucc q)
+           | XH -> XI XH)
+
+(** val pdouble_minus_one : positive -> positive **)
+
+let rec pdouble_minus_one = function
+  | XI p -> XI (XO p)
+  | XO p -> XI (pdouble_minus_one p)
+  | XH -> XH
+
+type positive_mask =
+  | IsNul
+  | IsPos of positive
+  | IsNeg
+
+(** val pdouble_plus_one_mask : positive_mask -> positive_mask **)
+
+let pdouble_plus_one_mask = function
+  | IsNul -> IsPos XH
+  | IsPos p -> IsPos (XI p)
+  | IsNeg -> IsNeg
+
+(** val pdouble_mask : positive_mask -> positive_mask **)
+
+let pdouble_mask = function
+  | IsNul -> IsNul
+  | IsPos p -> IsPos (XO p)
+  | IsNeg -> IsNeg
+
+(** val pdouble_minus_two : positive -> positive_mask **)
+
+let pdouble_minus_two = function
+  | XI p -> IsPos (XO (XO p))
+  | XO p -> IsPos (XO (pdouble_minus_one p))
+  | XH -> IsNul
+
+(** val pminus_mask : positive -> positive -> positive_mask **)
+
+let rec pminus_mask x y =
+  match x with
+    | XI p ->
+        (match y with
+           | XI q -> pdouble_mask (pminus_mask p q)
+           | XO q -> pdouble_plus_one_mask (pminus_mask p q)
+           | XH -> IsPos (XO p))
+    | XO p ->
+        (match y with
+           | XI q -> pdouble_plus_one_mask (pminus_mask_carry p q)
+           | XO q -> pdouble_mask (pminus_mask p q)
+           | XH -> IsPos (pdouble_minus_one p))
+    | XH -> (match y with
+               | XH -> IsNul
+               | _ -> IsNeg)
+
+(** val pminus_mask_carry : positive -> positive -> positive_mask **)
+
+and pminus_mask_carry x y =
+  match x with
+    | XI p ->
+        (match y with
+           | XI q -> pdouble_plus_one_mask (pminus_mask_carry p q)
+           | XO q -> pdouble_mask (pminus_mask p q)
+           | XH -> IsPos (pdouble_minus_one p))
+    | XO p ->
+        (match y with
+           | XI q -> pdouble_mask (pminus_mask_carry p q)
+           | XO q -> pdouble_plus_one_mask (pminus_mask_carry p q)
+           | XH -> pdouble_minus_two p)
+    | XH -> IsNeg
+
+(** val pminus : positive -> positive -> positive **)
+
+let pminus x y =
+  match pminus_mask x y with
+    | IsPos z0 -> z0
+    | _ -> XH
+
+(** val pcompare : positive -> positive -> comparison -> comparison **)
+
+let rec pcompare x y r =
+  match x with
+    | XI p ->
+        (match y with
+           | XI q -> pcompare p q r
+           | XO q -> pcompare p q Gt
+           | XH -> Gt)
+    | XO p ->
+        (match y with
+           | XI q -> pcompare p q Lt
+           | XO q -> pcompare p q r
+           | XH -> Gt)
+    | XH -> (match y with
+               | XH -> r
+               | _ -> Lt)
+
 (** val max : nat -> nat -> nat **)
 
 let rec max n m =
@@ -179,6 +324,80 @@ let rec max n m =
     | S n' -> (match m with
                  | O -> n
                  | S m' -> S (max n' m'))
+
+type z =
+  | Z0
+  | Zpos of positive
+  | Zneg of positive
+
+(** val zplus : z -> z -> z **)
+
+let zplus x y =
+  match x with
+    | Z0 -> y
+    | Zpos x' ->
+        (match y with
+           | Z0 -> Zpos x'
+           | Zpos y' -> Zpos (pplus x' y')
+           | Zneg y' ->
+               (match pcompare x' y' Eq with
+                  | Eq -> Z0
+                  | Lt -> Zneg (pminus y' x')
+                  | Gt -> Zpos (pminus x' y')))
+    | Zneg x' ->
+        (match y with
+           | Z0 -> Zneg x'
+           | Zpos y' ->
+               (match pcompare x' y' Eq with
+                  | Eq -> Z0
+                  | Lt -> Zpos (pminus y' x')
+                  | Gt -> Zneg (pminus x' y'))
+           | Zneg y' -> Zneg (pplus x' y'))
+
+(** val zcompare : z -> z -> comparison **)
+
+let zcompare x y =
+  match x with
+    | Z0 -> (match y with
+               | Z0 -> Eq
+               | Zpos y' -> Lt
+               | Zneg y' -> Gt)
+    | Zpos x' -> (match y with
+                    | Zpos y' -> pcompare x' y' Eq
+                    | _ -> Gt)
+    | Zneg x' ->
+        (match y with
+           | Zneg y' -> compOpp (pcompare x' y' Eq)
+           | _ -> Lt)
+
+(** val zmax : z -> z -> z **)
+
+let zmax m n =
+  match zcompare m n with
+    | Lt -> n
+    | _ -> m
+
+(** val dcompare_inf : comparison -> sumbool sumor **)
+
+let dcompare_inf = function
+  | Eq -> Inleft Left
+  | Lt -> Inleft Right
+  | Gt -> Inright
+
+(** val zcompare_rec :
+    z -> z -> (__ -> 'a1) -> (__ -> 'a1) -> (__ -> 'a1) -> 'a1 **)
+
+let zcompare_rec x y h1 h2 h3 =
+  match dcompare_inf (zcompare x y) with
+    | Inleft x0 -> (match x0 with
+                      | Left -> h1 __
+                      | Right -> h2 __)
+    | Inright -> h3 __
+
+(** val z_eq_dec : z -> z -> sumbool **)
+
+let z_eq_dec x y =
+  zcompare_rec x y (fun _ -> Left) (fun _ -> Right) (fun _ -> Right)
 
 type 'x compare =
   | LT
@@ -226,23 +445,22 @@ module type UsualOrderedType =
   val eq_dec : t -> t -> sumbool
  end
 
-module Nat_as_OT = 
+module Z_as_OT = 
  struct 
-  type t = nat
+  type t = z
   
-  (** val compare : t -> t -> nat compare **)
+  (** val compare : z -> z -> z compare **)
   
   let compare x y =
-    match lt_eq_lt_dec x y with
-      | Inleft s -> (match s with
-                       | Left -> LT
-                       | Right -> EQ)
-      | Inright -> GT
+    match zcompare x y with
+      | Eq -> EQ
+      | Lt -> LT
+      | Gt -> GT
   
-  (** val eq_dec : nat -> nat -> sumbool **)
+  (** val eq_dec : z -> z -> sumbool **)
   
-  let eq_dec n m =
-    eq_nat_dec n m
+  let eq_dec x y =
+    z_eq_dec x y
  end
 
 module type S = 
@@ -724,46 +942,46 @@ module type VARIABLES =
   
   val var_fresh : vars -> var
   
-  val var_of_nat : nat -> var
+  val var_of_Z : z -> var
   
-  val nat_of_var : var -> nat
+  val coq_Z_of_var : var -> z
  end
 
 module Variables = 
  struct 
-  type var = nat
+  type var = z
   
   (** val var_default : var **)
   
   let var_default =
-    O
+    Z0
   
-  (** val var_of_nat : var -> var **)
+  (** val var_of_Z : var -> var **)
   
-  let var_of_nat x =
+  let var_of_Z x =
     x
   
-  (** val nat_of_var : nat -> nat **)
+  (** val coq_Z_of_var : z -> z **)
   
-  let nat_of_var x =
+  let coq_Z_of_var x =
     x
   
-  module Var_as_OT = Nat_as_OT
+  module Var_as_OT = Z_as_OT
   
-  module VarSet = Make(Nat_as_OT)
+  module VarSet = Make(Z_as_OT)
   
   type vars = VarSet.S.t
   
-  (** val finite_nat_list_max : nat list -> nat **)
+  (** val finite_nat_list_max : z list -> z **)
   
   let rec finite_nat_list_max = function
-    | Nil -> O
-    | Cons (a, l0) -> max (finite_nat_list_max l0) a
+    | Nil -> Z0
+    | Cons (a, l0) -> zmax (finite_nat_list_max l0) a
   
-  (** val finite_nat_list_max' : nat list -> nat **)
+  (** val finite_nat_list_max' : z list -> z **)
   
   let finite_nat_list_max' l =
-    S (finite_nat_list_max l)
+    zplus (finite_nat_list_max l) (Zpos XH)
   
   (** val var_generate : vars -> var **)
   
@@ -879,9 +1097,9 @@ let map_snd f l =
 let rec assoc eq_dec0 x = function
   | Nil -> None
   | Cons (p, r) ->
-      let Pair (y, z) = p in
+      let Pair (y, z0) = p in
       (match eq_dec0 x y with
-         | Left -> Some z
+         | Left -> Some z0
          | Right -> assoc eq_dec0 x r)
 
 (** val cut : nat -> 'a1 list -> ('a1 list, 'a1 list) prod **)
@@ -1341,17 +1559,17 @@ module MkInfra =
   
   (** val trm_subst : Variables.var -> Defs.trm -> Defs.trm -> Defs.trm **)
   
-  let rec trm_subst z u = function
+  let rec trm_subst z0 u = function
     | Defs.Coq_trm_bvar i -> Defs.Coq_trm_bvar i
     | Defs.Coq_trm_fvar x ->
-        (match eq_var_dec x z with
+        (match eq_var_dec x z0 with
            | Left -> u
            | Right -> Defs.Coq_trm_fvar x)
-    | Defs.Coq_trm_abs t1 -> Defs.Coq_trm_abs (trm_subst z u t1)
+    | Defs.Coq_trm_abs t1 -> Defs.Coq_trm_abs (trm_subst z0 u t1)
     | Defs.Coq_trm_let (t1, t2) -> Defs.Coq_trm_let (
-        (trm_subst z u t1), (trm_subst z u t2))
+        (trm_subst z0 u t1), (trm_subst z0 u t2))
     | Defs.Coq_trm_app (t1, t2) -> Defs.Coq_trm_app (
-        (trm_subst z u t1), (trm_subst z u t2))
+        (trm_subst z0 u t1), (trm_subst z0 u t2))
     | Defs.Coq_trm_cst c -> Defs.Coq_trm_cst c
   
   module MkJudgInfra = 
@@ -1380,10 +1598,7 @@ module MkSound =
     module Mk3 = 
      functor (SH:SndHypIntf) ->
      struct 
-      (** val dummy_env : 'a1 Env.env **)
       
-      let dummy_env =
-        Env.empty
      end
    end
  end
@@ -2839,9 +3054,9 @@ type 'a decidable0 = 'a -> sumbool
 let rec ok_dec = function
   | Nil -> Left
   | Cons (a, l0) ->
+      let Pair (v, s) = a in
       (match ok_dec l0 with
          | Left ->
-             let Pair (v, s) = a in
              (match Env.get v l0 with
                 | Some s0 -> Right
                 | None -> Left)
@@ -2908,8 +3123,7 @@ let typinf1 e t0 =
                (match env_prop_dec scheme_dec e with
                   | Left ->
                       (match Infer2.typinf' e t0 with
-                         | Some p ->
-                             let Pair (e0, t1) = p in Inl (Pair (e0, t1))
+                         | Some p -> Inl p
                          | None -> Inr Right)
                   | Right -> Inr Right)
            | Right -> Inr Right)

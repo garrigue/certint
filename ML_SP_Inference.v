@@ -1971,7 +1971,7 @@ Qed.
 
 Lemma typing_moregen : forall gc K E E' t T,
   K; E |gc|= t ~: T ->
- moregen_env K E' E -> env_ok E' ->
+  moregen_env K E' E -> env_ok E' ->
   K; E' |gc|= t ~: T.
 Proof.
   intros; gen E'.

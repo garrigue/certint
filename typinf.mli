@@ -23,6 +23,13 @@ val fst : ('a1, 'a2) prod -> 'a1
 
 val snd : ('a1, 'a2) prod -> 'a2
 
+type comparison =
+  | Eq
+  | Lt
+  | Gt
+
+val compOpp : comparison -> comparison
+
 type 'a sig0 = 'a
   (* singleton inductive, whose constructor was exist *)
 
@@ -66,11 +73,58 @@ val seq : nat -> nat -> nat list
 
 val eq_nat_dec : nat -> nat -> sumbool
 
-val lt_eq_lt_dec : nat -> nat -> sumbool sumor
-
 val le_lt_dec : nat -> nat -> sumbool
 
+type positive =
+  | XI of positive
+  | XO of positive
+  | XH
+
+val psucc : positive -> positive
+
+val pplus : positive -> positive -> positive
+
+val pplus_carry : positive -> positive -> positive
+
+val pdouble_minus_one : positive -> positive
+
+type positive_mask =
+  | IsNul
+  | IsPos of positive
+  | IsNeg
+
+val pdouble_plus_one_mask : positive_mask -> positive_mask
+
+val pdouble_mask : positive_mask -> positive_mask
+
+val pdouble_minus_two : positive -> positive_mask
+
+val pminus_mask : positive -> positive -> positive_mask
+
+val pminus_mask_carry : positive -> positive -> positive_mask
+
+val pminus : positive -> positive -> positive
+
+val pcompare : positive -> positive -> comparison -> comparison
+
 val max : nat -> nat -> nat
+
+type z =
+  | Z0
+  | Zpos of positive
+  | Zneg of positive
+
+val zplus : z -> z -> z
+
+val zcompare : z -> z -> comparison
+
+val zmax : z -> z -> z
+
+val dcompare_inf : comparison -> sumbool sumor
+
+val zcompare_rec : z -> z -> (__ -> 'a1) -> (__ -> 'a1) -> (__ -> 'a1) -> 'a1
+
+val z_eq_dec : z -> z -> sumbool
 
 type 'x compare =
   | LT
@@ -105,13 +159,13 @@ module type UsualOrderedType =
   val eq_dec : t -> t -> sumbool
  end
 
-module Nat_as_OT : 
+module Z_as_OT : 
  sig 
-  type t = nat
+  type t = z
   
-  val compare : t -> t -> nat compare
+  val compare : z -> z -> z compare
   
-  val eq_dec : nat -> nat -> sumbool
+  val eq_dec : z -> z -> sumbool
  end
 
 module type S = 
@@ -564,9 +618,9 @@ module type VARIABLES =
   
   val var_fresh : vars -> var
   
-  val var_of_nat : nat -> var
+  val var_of_Z : z -> var
   
-  val nat_of_var : var -> nat
+  val coq_Z_of_var : var -> z
  end
 
 module Variables : 
@@ -1185,7 +1239,7 @@ module MkSound :
     module Mk3 : 
      functor (SH:SndHypIntf) ->
      sig 
-      val dummy_env : 'a1 Env.env
+      
      end
    end
  end
@@ -1404,7 +1458,7 @@ module MkRename :
       module Mk3 : 
        functor (SH:SndHypIntf) ->
        sig 
-        val dummy_env : 'a1 Env.env
+        
        end
      end
    end
@@ -1442,7 +1496,7 @@ module MkRename :
       module Mk3 : 
        functor (SH:SndHypIntf) ->
        sig 
-        val dummy_env : 'a1 Env.env
+        
        end
      end
     
@@ -1672,7 +1726,7 @@ module MkEval :
         module Mk3 : 
          functor (SH:SndHypIntf) ->
          sig 
-          val dummy_env : 'a1 Env.env
+          
          end
        end
      end
@@ -1710,7 +1764,7 @@ module MkEval :
         module Mk3 : 
          functor (SH:SndHypIntf) ->
          sig 
-          val dummy_env : 'a1 Env.env
+          
          end
        end
       
@@ -1825,7 +1879,7 @@ module MkEval :
         module Mk3 : 
          functor (SH:SndHypIntf) ->
          sig 
-          val dummy_env : 'a1 Env.env
+          
          end
        end
       
@@ -1850,7 +1904,7 @@ module MkEval :
      sig 
       module Sound3 : 
        sig 
-        val dummy_env : 'a1 Env.env
+        
        end
       
       val eval :
@@ -2092,7 +2146,7 @@ module MkUnify :
           module Mk3 : 
            functor (SH:SndHypIntf) ->
            sig 
-            val dummy_env : 'a1 Env.env
+            
            end
          end
        end
@@ -2130,7 +2184,7 @@ module MkUnify :
           module Mk3 : 
            functor (SH:SndHypIntf) ->
            sig 
-            val dummy_env : 'a1 Env.env
+            
            end
          end
         
@@ -2246,7 +2300,7 @@ module MkUnify :
           module Mk3 : 
            functor (SH:SndHypIntf) ->
            sig 
-            val dummy_env : 'a1 Env.env
+            
            end
          end
         
@@ -2271,7 +2325,7 @@ module MkUnify :
        sig 
         module Sound3 : 
          sig 
-          val dummy_env : 'a1 Env.env
+          
          end
         
         val eval :
@@ -2635,7 +2689,7 @@ module MkInfer :
             module Mk3 : 
              functor (SH:SndHypIntf) ->
              sig 
-              val dummy_env : 'a1 Env.env
+              
              end
            end
          end
@@ -2673,7 +2727,7 @@ module MkInfer :
             module Mk3 : 
              functor (SH:SndHypIntf) ->
              sig 
-              val dummy_env : 'a1 Env.env
+              
              end
            end
           
@@ -2792,7 +2846,7 @@ module MkInfer :
             module Mk3 : 
              functor (SH:SndHypIntf) ->
              sig 
-              val dummy_env : 'a1 Env.env
+              
              end
            end
           
@@ -2818,7 +2872,7 @@ module MkInfer :
          sig 
           module Sound3 : 
            sig 
-            val dummy_env : 'a1 Env.env
+            
            end
           
           val eval :
@@ -3006,7 +3060,7 @@ module MkInfer :
           module Mk3 : 
            functor (SH:SndHypIntf) ->
            sig 
-            val dummy_env : 'a1 Env.env
+            
            end
          end
         
@@ -3034,7 +3088,7 @@ module MkInfer :
        sig 
         module Sound3 : 
          sig 
-          val dummy_env : 'a1 Env.env
+          
          end
         
         val eval :
@@ -3415,7 +3469,7 @@ module Infer :
             module Mk3 : 
              functor (SH:SndHypIntf) ->
              sig 
-              val dummy_env : 'a1 Env.env
+              
              end
            end
          end
@@ -3453,7 +3507,7 @@ module Infer :
             module Mk3 : 
              functor (SH:SndHypIntf) ->
              sig 
-              val dummy_env : 'a1 Env.env
+              
              end
            end
           
@@ -3572,7 +3626,7 @@ module Infer :
             module Mk3 : 
              functor (SH:SndHypIntf) ->
              sig 
-              val dummy_env : 'a1 Env.env
+              
              end
            end
           
@@ -3598,7 +3652,7 @@ module Infer :
          sig 
           module Sound3 : 
            sig 
-            val dummy_env : 'a1 Env.env
+            
            end
           
           val eval :
@@ -3786,7 +3840,7 @@ module Infer :
           module Mk3 : 
            functor (SH:SndHypIntf) ->
            sig 
-            val dummy_env : 'a1 Env.env
+            
            end
          end
         
@@ -3814,7 +3868,7 @@ module Infer :
        sig 
         module Sound3 : 
          sig 
-          val dummy_env : 'a1 Env.env
+          
          end
         
         val eval :
@@ -3968,7 +4022,7 @@ module Infer2 :
         module Mk3 : 
          functor (SH:SndHypIntf) ->
          sig 
-          val dummy_env : 'a1 Env.env
+          
          end
        end
       
@@ -3996,7 +4050,7 @@ module Infer2 :
      sig 
       module Sound3 : 
        sig 
-        val dummy_env : 'a1 Env.env
+        
        end
       
       val eval :
@@ -4107,7 +4161,7 @@ module Sound3 :
  sig 
   module Sound3 : 
    sig 
-    val dummy_env : 'a1 Env.env
+    
    end
   
   val eval :
