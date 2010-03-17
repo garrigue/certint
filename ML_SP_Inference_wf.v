@@ -28,10 +28,15 @@ Import JudgInfra.
 Import Judge.
 Import Unify.
 
+Section Typinf.
+
 (* Free variables in the inference environment *)
 
+Definition lenv_fv :=
+  List.fold_right (fun s L => sch_fv s \u L) {}.
+
 Definition fvs S K E :=
-  dom S \u fv_in typ_fv S \u dom K \u fv_in kind_fv K \u env_fv E.
+  dom S \u fv_in typ_fv S \u dom K \u fv_in kind_fv K \u lenv_fv E.
 
 (* Prepare for inclusion of free variables *)
 
@@ -286,7 +291,7 @@ Definition vars_subst S L :=
   typ_fv_list (List.map (fun x => typ_subst S (typ_fvar x)) (S.elements L)).
 
 Definition typinf_generalize K' E' L T1 :=
-  let ftve := close_fvk K' (env_fv E') in
+  let ftve := close_fvk K' (lenv_fv E') in
   let (K'', KA) := split_env ftve K' in
   let B := close_fvk K' (typ_fv T1) in
   let (_, KB) := split_env B K'' in
@@ -389,15 +394,15 @@ Proof.
   unfold fvs in H0. auto.
 Qed.
 
-Lemma subset_abs : forall S K E L S' K' v1 v2 T x,
+Lemma subset_abs : forall S K E L S' K' v1 v2 T,
   fvs S K E \u typ_fv T << L ->
   fvs S' K' E << fvs S K E \u ({{v1}} \u {{v2}}) \u typ_fv T ->
-  fvs S' K' (E & x ~ Sch (typ_fvar v1) nil) \u {{v2}} <<
+  fvs S' K' (Sch (typ_fvar v1) nil :: E) \u {{v2}} <<
   L \u {{v1}} \u {{v2}}.
 Proof.
   intros.
   unfold fvs in *.
-  unfold env_fv. rewrite fv_in_concat. fold (env_fv E).
+  simpl.
   unfold sch_fv; simpl*.
 Qed.
 
@@ -449,21 +454,21 @@ Proof.
   rewrite* IHXs.
 Qed.
 
-Lemma ok_generalize : forall K0 K1 S' S E T L v L' L0 x,
+Lemma ok_generalize : forall K0 K1 S' S E T L v L' L0,
   ok K0 -> disjoint (dom S') (dom K0) ->
   fvs S K1 E \u typ_fv T << L ->
   fvs S' K0 E \u (L \u {{v}}) << L' ->
   let K := Env.map (kind_subst S') K0 in
-  let E' := Env.map (sch_subst S') E in
+  let E' := List.map (sch_subst S') E in
   let T1 := typ_subst S' (typ_fvar v) in
   let KAM := typinf_generalize K E' L0 T1 in
   ok (fst KAM) /\ disjoint (dom S') (dom (fst KAM)) /\
-  fvs S' (fst KAM) (E & x ~ snd KAM) \u typ_fv T << L'.
+  fvs S' (fst KAM) (snd KAM :: E) \u typ_fv T << L'.
 Proof.
   introv HK0 D' HL HL'; intros.
   unfold KAM; clear KAM.
   unfold typinf_generalize.
-  case_eq (split_env (close_fvk K (env_fv E')) K); introv R1.
+  case_eq (split_env (close_fvk K (lenv_fv E')) K); introv R1.
   case_eq (split_env (close_fvk K (typ_fv T1)) e); introv R2.
   case_eq (split e2); introv R4.
   case_eq (split_env L0 e); introv R3.
@@ -483,7 +488,7 @@ Proof.
   split.
     clear -D' H1.
     subst K. rewrite dom_map in H1. auto.
-  set (ftve := close_fvk K (env_fv E')).
+  set (ftve := close_fvk K (lenv_fv E')).
   set (fvT := close_fvk K (typ_fv T1)).
   set (B := S.elements (S.diff fvT (ftve \u dom e2))).
   unfold fvs, env_fv. simpl.
@@ -537,7 +542,8 @@ Proof.
   intros; auto.
 Qed.
 
-Lemma subset_fvar : forall S K E T L L0 x M Vs,
+(*
+Lemma subset_fvar : forall S K E T L L0 b M Vs,
   fresh L (sch_arity M) Vs ->
   binds x M E ->
   fvs S K E \u typ_fv T << L ->
@@ -558,17 +564,18 @@ Proof.
   rewrite typ_fv_typ_fvars in H1.
   auto.
 Qed.
+*)
 
-Lemma subset_abs2 : forall S' K' E x L v1 v2 L',
-  fvs S' K' (E & x ~ Sch (typ_fvar v1) nil) \u (L \u {{v1}} \u {{v2}}) << L' ->
+Lemma subset_abs2 : forall S' K' E L v1 v2 L',
+  fvs S' K' (Sch (typ_fvar v1) nil :: E) \u (L \u {{v1}} \u {{v2}}) << L' ->
   fvs S' K' E \u L << L'.
 Proof.
-  unfold fvs, env_fv, sch_fv; simpl; intros. auto.
+  unfold fvs, lenv_fv, sch_fv; simpl; intros. auto.
 Qed.
 
-Lemma subset_let2 : forall L0 L v L' S' K' E x M L'',
+Lemma subset_let2 : forall L0 L v L' S' K' E M L'',
   L0 \u (L \u {{v}}) << L' ->
-  fvs S' K' (E & x ~ M) \u L' << L'' ->
+  fvs S' K' (M :: E) \u L' << L'' ->
   fvs S' K' E \u L << L''.
 Proof.
   unfold fvs, env_fv; simpl; intros; auto.
@@ -621,11 +628,15 @@ Definition typinf_res E v (res : kenv * subs * var) :=
   (ok K' /\ is_subst S' /\ disjoint(dom S')(dom K'))
   /\ var_maj (fvs S' K' E \u {{v}}) v'.
 
+Section Typinf.
+
+Variable genv : Defs.env.
+
 Fixpoint typinf K E t T v S (h:Acc lt (trm_depth t)) (HS:is_subst S) (HK:ok K)
   (D:disjoint (dom S) (dom K)) (HL: var_maj (fvs S K E \u typ_fv T) v)
   {struct h} : option (sig (typinf_res E v)) :=
   match t as t' return t = t' -> option (sig (typinf_res E v)) with
-  | trm_bvar _ => fun eq => None
+  | trm_bvar n => fun eq => None
   | trm_fvar x => fun eq =>
     match get_dep x E with
     | inright _ => None
