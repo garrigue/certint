@@ -614,25 +614,29 @@ Proof.
   right. apply* get_none_notin.
 Qed.
 
-Definition typinf_res E L (res : kenv * subs * vars) :=
- let (KS',L') := res in let (K',S') := KS' in
- (ok K' /\ is_subst S' /\ disjoint (dom S') (dom K')) /\ fvs S' K' E \u L << L'.
+Definition var_maj L v := S.E.lt (vars_rep L) v.
 
-Fixpoint typinf K E t T L S (h:Acc lt (trm_depth t)) (HS:is_subst S) (HK:ok K)
-  (D:disjoint (dom S) (dom K)) (HL: fvs S K E \u typ_fv T << L) {struct h} :
-  option (sig (typinf_res E L)) :=
-  match t as t' return t = t' -> option (sig (typinf_res E L)) with
+Definition typinf_res E v (res : kenv * subs * var) :=
+  let (KS',v') := res in let (K',S') := KS' in
+  (ok K' /\ is_subst S' /\ disjoint(dom S')(dom K'))
+  /\ var_maj (fvs S' K' E \u {{v}}) v'.
+
+Fixpoint typinf K E t T v S (h:Acc lt (trm_depth t)) (HS:is_subst S) (HK:ok K)
+  (D:disjoint (dom S) (dom K)) (HL: var_maj (fvs S K E \u typ_fv T) v)
+  {struct h} : option (sig (typinf_res E v)) :=
+  match t as t' return t = t' -> option (sig (typinf_res E v)) with
   | trm_bvar _ => fun eq => None
   | trm_fvar x => fun eq =>
     match get_dep x E with
     | inright _ => None
     | inleft (exist M eq1) =>
-      let (Vs, Fr) := var_freshes L (sch_arity M) in
+      let Vs := var_nexts v (sch_arity M) in
+      let Fr := var_nexts_fresh (fvs S K E \u typ_fv T) (sch_arity M) in
       match unify_dep (M ^ Vs) T HS
         (ok_kinds_open_vars _ _ HK (fresh_sub _ _ Fr (dom_K_L _ HL)))
         (disjoint_fvar _ _ _ D HL Fr) with
       | inleft (exist (K',S') (conj _ (conj HKSD' HL'))) =>
-        Some (exist _ (K',S',L \u mkset Vs)
+        Some (exist _ (K',S',var_shift v (sch_arity M))
           (conj HKSD' (subset_fvar _ _ Fr eq1 HL (HL' E))))
       | inright _ => None
       end
