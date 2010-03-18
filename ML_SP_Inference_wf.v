@@ -542,10 +542,29 @@ Proof.
   intros; auto.
 Qed.
 
-(*
-Lemma subset_fvar : forall S K E T L L0 b M Vs,
+Section Nth.
+
+Variable A : Set.
+
+Inductive is_nth : nat -> A -> list A -> Prop :=
+  | is_nth_0 : forall a l, is_nth 0 a (a :: l)
+  | is_nth_S : forall n a b l, is_nth n a l -> is_nth (S n) a (b :: l).
+
+Definition nth_dep n l : {a:A | is_nth n a l}+{length l <= n}.
+Proof.
+  induction n; destruct l. right*.
+      left; exists a; constructor.
+    right; simpl; omega.
+  destruct (IHn l) as [[b H]|H].
+    left; exists b; constructor. auto.
+  right; simpl; omega.
+Qed.
+
+End Nth.
+
+Lemma subset_bvar : forall S K E T L L0 M Vs n,
   fresh L (sch_arity M) Vs ->
-  binds x M E ->
+  is_nth n M E ->
   fvs S K E \u typ_fv T << L ->
   L0 << fvs S (K & kinds_open_vars (sch_kinds M) Vs) E \u
   typ_fv (sch_open_vars M Vs) \u typ_fv T ->
@@ -556,7 +575,7 @@ Proof.
   rewrite dom_kinds_open_vars by auto.
   rewrite fv_in_concat.
   puts (fv_in_kinds_open_vars (sch_kinds M) Vs).
-  assert (sch_fv M << env_fv E) by apply* fv_in_spec.
+  assert (sch_fv M << lenv_fv E) by apply* fv_in_spec.
   unfold sch_fv in H0; simpl in H0.
   intros; sets_solve.
   unfold sch_open_vars, typ_open_vars in H3; simpl in H3.
@@ -631,14 +650,29 @@ Definition typinf_res E v (res : kenv * subs * var) :=
 Section Typinf.
 
 Variable genv : Defs.env.
+Hypothesis genv_ok : env_ok genv /\ env_fv genv = {}.
 
 Fixpoint typinf K E t T v S (h:Acc lt (trm_depth t)) (HS:is_subst S) (HK:ok K)
   (D:disjoint (dom S) (dom K)) (HL: var_maj (fvs S K E \u typ_fv T) v)
   {struct h} : option (sig (typinf_res E v)) :=
   match t as t' return t = t' -> option (sig (typinf_res E v)) with
-  | trm_bvar n => fun eq => None
+  | trm_bvar n => fun eq =>
+    match nth_dep n E with
+    | inright _ => None
+    | inleft (exist M eq1) =>
+      let Vs := var_nexts v (sch_arity M) in
+      let Fr := var_nexts_fresh (fvs S K E \u typ_fv T) (sch_arity M) in
+      match unify_dep (M ^ Vs) T HS
+        (ok_kinds_open_vars _ _ HK (fresh_sub _ _ Fr (dom_K_L _ HL)))
+        (disjoint_fvar _ _ _ D HL Fr) with
+      | inleft (exist (K',S') (conj _ (conj HKSD' HL'))) =>
+        Some (exist _ (K',S',var_shift v (sch_arity M))
+          (conj HKSD' (subset_fvar _ _ Fr eq1 HL (HL' E))))
+      | inright _ => None
+      end
+    end
   | trm_fvar x => fun eq =>
-    match get_dep x E with
+    match get_dep x genv with
     | inright _ => None
     | inleft (exist M eq1) =>
       let Vs := var_nexts v (sch_arity M) in
