@@ -368,24 +368,24 @@ Section Eval.
 
 Variable fenv : env clos.
 
+Definition result eval h c stack :=
+  match stack with
+  | nil => Result h c
+  | Frame benv' app' t :: rem => eval benv' (c::app') t rem
+  end.
+
 Fixpoint eval (h:nat) (benv:list clos) (app:list clos) (t:trm)
   (stack : list frame) {struct h} : eval_res :=
   match h with
   | 0 => Inter (Frame benv app t :: stack)
   | S h =>
-    let result c :=
-      match stack with
-      | nil => Result h c
-      | Frame benv' app' t :: rem => eval h benv' (c::app') t rem
-      end
-    in
     match trm2app t with
     | Some (t1, t2) =>
       eval h benv nil t2 (Frame benv app t1 :: stack)
     | _ =>
     let c := trm2clos benv fenv t in
     match app with
-    | nil => result c
+    | nil => result (eval h) h c stack
     | c1 :: rem =>
     match c with
     | clos_abs t1 benv =>
@@ -401,7 +401,7 @@ Fixpoint eval (h:nat) (benv:list clos) (app:list clos) (t:trm)
           | (clos_abs t1 benv, app3) =>
             eval h benv (app3 ++ app') (trm_abs t1) stack
           end
-        else result (clos_const cst (l++app))
+        else result (eval h) h (clos_const cst (l++app)) stack
       end
     end end
   end.
@@ -1055,10 +1055,12 @@ Proof.
   destruct args.
     case_rewrite R2 (trm2clos benv fenv t).
       apply* Eval_abs'.
+      unfold result.
       destruct* fl.
       destruct* f0.
     apply* Eval_const'; rewrite <- app_nil_end.
       inversion* Ht2.
+    unfold result.
     destruct* fl.
     destruct* f0.
   case_rewrite R2 (trm2clos benv fenv t).
@@ -1089,6 +1091,7 @@ Proof.
     unfold lt in l0.
     rewrite <- R3 in l0.
     rewrite* app_length.
+  unfold result.
   destruct* fl.
   destruct* f0.
 Qed.
