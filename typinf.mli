@@ -1907,6 +1907,10 @@ module MkEval :
         
        end
       
+      val result :
+        (clos list -> clos list -> Rename.Sound.Infra.Defs.trm -> frame list
+        -> eval_res) -> nat -> clos -> frame list -> eval_res
+      
       val eval :
         clos Env.env -> nat -> clos list -> clos list ->
         Rename.Sound.Infra.Defs.trm -> frame list -> eval_res
@@ -2327,6 +2331,10 @@ module MkUnify :
          sig 
           
          end
+        
+        val result :
+          (clos list -> clos list -> Rename.Sound.Infra.Defs.trm -> frame
+          list -> eval_res) -> nat -> clos -> frame list -> eval_res
         
         val eval :
           clos Env.env -> nat -> clos list -> clos list ->
@@ -2875,6 +2883,10 @@ module MkInfer :
             
            end
           
+          val result :
+            (clos list -> clos list -> Rename.Sound.Infra.Defs.trm -> frame
+            list -> eval_res) -> nat -> clos -> frame list -> eval_res
+          
           val eval :
             clos Env.env -> nat -> clos list -> clos list ->
             Rename.Sound.Infra.Defs.trm -> frame list -> eval_res
@@ -3090,6 +3102,12 @@ module MkInfer :
          sig 
           
          end
+        
+        val result :
+          (Unify.MyEval.clos list -> Unify.MyEval.clos list ->
+          Unify.MyEval.Rename.Sound.Infra.Defs.trm -> Unify.MyEval.frame list
+          -> Unify.MyEval.eval_res) -> nat -> Unify.MyEval.clos ->
+          Unify.MyEval.frame list -> Unify.MyEval.eval_res
         
         val eval :
           Unify.MyEval.clos Env.env -> nat -> Unify.MyEval.clos list ->
@@ -3655,6 +3673,10 @@ module Infer :
             
            end
           
+          val result :
+            (clos list -> clos list -> Rename.Sound.Infra.Defs.trm -> frame
+            list -> eval_res) -> nat -> clos -> frame list -> eval_res
+          
           val eval :
             clos Env.env -> nat -> clos list -> clos list ->
             Rename.Sound.Infra.Defs.trm -> frame list -> eval_res
@@ -3871,6 +3893,12 @@ module Infer :
           
          end
         
+        val result :
+          (Unify.MyEval.clos list -> Unify.MyEval.clos list ->
+          Unify.MyEval.Rename.Sound.Infra.Defs.trm -> Unify.MyEval.frame list
+          -> Unify.MyEval.eval_res) -> nat -> Unify.MyEval.clos ->
+          Unify.MyEval.frame list -> Unify.MyEval.eval_res
+        
         val eval :
           Unify.MyEval.clos Env.env -> nat -> Unify.MyEval.clos list ->
           Unify.MyEval.clos list -> Unify.MyEval.Rename.Sound.Infra.Defs.trm
@@ -4053,6 +4081,13 @@ module Infer2 :
         
        end
       
+      val result :
+        (Infer.Unify.MyEval.clos list -> Infer.Unify.MyEval.clos list ->
+        Infer.Unify.MyEval.Rename.Sound.Infra.Defs.trm ->
+        Infer.Unify.MyEval.frame list -> Infer.Unify.MyEval.eval_res) -> nat
+        -> Infer.Unify.MyEval.clos -> Infer.Unify.MyEval.frame list ->
+        Infer.Unify.MyEval.eval_res
+      
       val eval :
         Infer.Unify.MyEval.clos Env.env -> nat -> Infer.Unify.MyEval.clos
         list -> Infer.Unify.MyEval.clos list ->
@@ -4163,6 +4198,13 @@ module Sound3 :
    sig 
     
    end
+  
+  val result :
+    (Infer.Unify.MyEval.clos list -> Infer.Unify.MyEval.clos list ->
+    Infer.Unify.MyEval.Rename.Sound.Infra.Defs.trm ->
+    Infer.Unify.MyEval.frame list -> Infer.Unify.MyEval.eval_res) -> nat ->
+    Infer.Unify.MyEval.clos -> Infer.Unify.MyEval.frame list ->
+    Infer.Unify.MyEval.eval_res
   
   val eval :
     Infer.Unify.MyEval.clos Env.env -> nat -> Infer.Unify.MyEval.clos list ->

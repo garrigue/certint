@@ -28,6 +28,23 @@ let rec coqlist_of_list = function
     [] -> Nil
   | a :: l -> Cons (a, coqlist_of_list l);;
 
+let rec int_of_pos = function
+    XH -> 1
+  | XO p -> int_of_pos p * 2
+  | XI p -> int_of_pos p * 2 + 1
+let rec pos_of_int n =
+  if n <= 1 then XH else
+  let p = pos_of_int (n/2) in
+  if n mod 2 = 0 then XO p else XI p
+let int_of_z = function
+    Z0 -> 0
+  | Zpos p -> int_of_pos p
+  | Zneg p -> - int_of_pos p
+let z_of_int z =
+  if z < 0 then Zneg (pos_of_int (-z)) else
+  if z > 0 then Zpos (pos_of_int z) else Z0
+;;
+
 (** Abbreviations and pretty printers *)
 
 (* nat and var *)
@@ -36,8 +53,9 @@ let print_nat ppf n =
   match n with
   | S m when m == n -> fprintf ppf "omega"
   | _ -> fprintf ppf "%i" (int_of_nat n);;
-let var n = Variables.var_of_nat (nat_of_int n)
-let print_var ppf v = print_nat ppf (Variables.nat_of_var v);;
+let print_z ppf z = fprintf ppf "%i" (int_of_z z);;
+let var n = Variables.var_of_Z (z_of_int n)
+let print_var ppf v = print_z ppf (Variables.coq_Z_of_var v);;
 #install_printer print_nat;;
 #install_printer print_var;;
 

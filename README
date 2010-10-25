@@ -1,6 +1,6 @@
 
   A Certified Interpreter for ML with Structural Polymorphism
-                  Jacques Garrigue, August 2009
+                  Jacques Garrigue, September 2010
 
 The files in this archive contain a proof of type soundness for structural
 polymorphism based on local constraints [1], together with soundness
@@ -35,16 +35,16 @@ at this point, but you should compile typinf.mli and typinf.ml
 to use them. (It contains a number of petty printers and conversion
 functions that make things easier).
 
-Here are all the steps: (the first 2 steps are optional)
+Here are all the steps: (the first 3 steps are optional)
 
-$ sh build.sh
-$ coqc Extraction.v
+$ sh mkmakefile.sh
+$ make Extraction.vo
+$ make html
 $ ocamlc -c typinf.mli
 $ ocamlc -c typinf.ml
 $ ocaml
         Objective Caml version ...
 # #use "use_typinf.ml";;
-
 
 [1] Jacques Garrigue: Simple Type Inference for Structural Polymorphism.
     FOOL 9, Portland, Oregon, January 2002.
@@ -55,5 +55,5 @@ $ ocaml
     http://www.chargueraud.org/arthur/research/2007/binders/
 
 [3] A Certified Interpreter for ML with Structural Polymorphism.
-    Draft presented at WMM'09, Edinburgh, UK, September 2009.
-    http://www.math.nagoya-u.ac.jp/~garrigue/papers/#certint0908
+    Presented at APLAS'10, Shanghai, China, November 2010.
+    http://www.math.nagoya-u.ac.jp/~garrigue/papers/#certint1009

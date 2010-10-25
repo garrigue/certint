@@ -3,11 +3,6 @@
 * Brian Aydemir & Arthur Charguéraud, March 2007, Coq v8.1                 *
 ***************************************************************************)
 
-(* Very useful tactic, for development only *)
-Axiom skip : False.
-Ltac skip := assert False; [ apply skip | contradiction ].
-
-
 (* ********************************************************************** *)
 (** * Simple variations on existing tactics *)
 

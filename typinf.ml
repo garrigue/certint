@@ -1820,6 +1820,16 @@ module MkEval =
      struct 
       module Sound3 = Rename2.Sound2.Mk3(SH)
       
+      (** val result :
+          (clos list -> clos list -> Rename.Sound.Infra.Defs.trm -> frame
+          list -> eval_res) -> nat -> clos -> frame list -> eval_res **)
+      
+      let result eval0 h c = function
+        | Nil -> Result (h, c)
+        | Cons (y, rem) ->
+            let { frm_benv = benv'; frm_app = app'; frm_trm = t0 } = y in
+            eval0 benv' (Cons (c, app')) t0 rem
+      
       (** val eval :
           clos Env.env -> nat -> clos list -> clos list ->
           Rename.Sound.Infra.Defs.trm -> frame list -> eval_res **)
@@ -1851,9 +1861,9 @@ module MkEval =
                                       | Rename.Sound.Infra.Defs.Coq_trm_cst c ->
                                           Coq_clos_const (c, Nil)
                                       | _ -> clos_def))
-                               | Cons (f, rem) ->
+                               | Cons (y, rem) ->
                                    let { frm_benv = benv'; frm_app = app';
-                                     frm_trm = t1 } = f
+                                     frm_trm = t1 } = y
                                    in
                                    eval fenv h0 benv' (Cons
                                      ((match t0 with
@@ -1917,10 +1927,10 @@ module MkEval =
                                                  (Coq_clos_const (cst,
                                                  (app l app0))))
                                              | Cons (
-                                                 f, rem0) ->
+                                                 y, rem0) ->
                                                  let { frm_benv = benv';
                                                   frm_app = app'; frm_trm =
-                                                  t1 } = f
+                                                  t1 } = y
                                                  in
                                                  eval fenv h0 benv' (Cons
                                                   ((Coq_clos_const (cst,
