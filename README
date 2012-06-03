@@ -8,6 +8,7 @@ and principality of the type inference algorithm.
 I started from a proof of type soundness for core ML by Arthur
 Chargueraud, which accompanied "Engineering formal metatheory" [2].
 The library files (Lib_* and Metatheory*) are almost untouched.
+For compatibility we also copied FSetList.v from Coq 8.2.
 The new files are as follows.
   Metatheory_SP: new generic lemmas used in developments
   Cardinal: lemmas about finite set cardinals
