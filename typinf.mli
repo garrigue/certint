@@ -1,59 +1,75 @@
 type __ = Obj.t
 
 type bool =
-  | True
-  | False
+| True
+| False
 
 type nat =
-  | O
-  | S of nat
+| O
+| S of nat
 
 type 'a option =
-  | Some of 'a
-  | None
+| Some of 'a
+| None
 
 type ('a, 'b) sum =
-  | Inl of 'a
-  | Inr of 'b
+| Inl of 'a
+| Inr of 'b
 
 type ('a, 'b) prod =
-  | Pair of 'a * 'b
+| Pair of 'a * 'b
 
 val fst : ('a1, 'a2) prod -> 'a1
 
 val snd : ('a1, 'a2) prod -> 'a2
 
 type comparison =
-  | Eq
-  | Lt
-  | Gt
+| Eq
+| Lt
+| Gt
 
 val compOpp : comparison -> comparison
 
-type 'a sig0 = 'a
+type 'a list =
+| Nil
+| Cons of 'a * 'a list
+
+val length : 'a1 list -> nat
+
+val app : 'a1 list -> 'a1 list -> 'a1 list
+
+type 'a sig0 =
+  'a
   (* singleton inductive, whose constructor was exist *)
 
-val proj1_sig : 'a1 -> 'a1
-
 type sumbool =
-  | Left
-  | Right
+| Left
+| Right
 
 type 'a sumor =
-  | Inleft of 'a
-  | Inright
+| Inleft of 'a
+| Inright
 
 val plus : nat -> nat -> nat
 
 val minus : nat -> nat -> nat
 
-type 'a list =
-  | Nil
-  | Cons of 'a * 'a list
+module type TotalOrder' = 
+ sig 
+  type t 
+ end
 
-val length : 'a1 list -> nat
+val eq_nat_dec : nat -> nat -> sumbool
 
-val app : 'a1 list -> 'a1 list -> 'a1 list
+val le_lt_dec : nat -> nat -> sumbool
+
+module MakeOrderTac : 
+ functor (O:TotalOrder') ->
+ sig 
+  
+ end
+
+val max : nat -> nat -> nat
 
 val nth : nat -> 'a1 list -> 'a1 -> 'a1
 
@@ -71,14 +87,10 @@ val combine : 'a1 list -> 'a2 list -> ('a1, 'a2) prod list
 
 val seq : nat -> nat -> nat list
 
-val eq_nat_dec : nat -> nat -> sumbool
-
-val le_lt_dec : nat -> nat -> sumbool
-
 type positive =
-  | XI of positive
-  | XO of positive
-  | XH
+| XI of positive
+| XO of positive
+| XH
 
 val psucc : positive -> positive
 
@@ -89,9 +101,9 @@ val pplus_carry : positive -> positive -> positive
 val pdouble_minus_one : positive -> positive
 
 type positive_mask =
-  | IsNul
-  | IsPos of positive
-  | IsNeg
+| IsNul
+| IsPos of positive
+| IsNeg
 
 val pdouble_plus_one_mask : positive_mask -> positive_mask
 
@@ -107,29 +119,25 @@ val pminus : positive -> positive -> positive
 
 val pcompare : positive -> positive -> comparison -> comparison
 
-val max : nat -> nat -> nat
+val positive_eq_dec : positive -> positive -> sumbool
 
 type z =
-  | Z0
-  | Zpos of positive
-  | Zneg of positive
+| Z0
+| Zpos of positive
+| Zneg of positive
 
 val zplus : z -> z -> z
 
 val zcompare : z -> z -> comparison
 
-val zmax : z -> z -> z
-
-val dcompare_inf : comparison -> sumbool sumor
-
-val zcompare_rec : z -> z -> (__ -> 'a1) -> (__ -> 'a1) -> (__ -> 'a1) -> 'a1
-
 val z_eq_dec : z -> z -> sumbool
 
+val zmax : z -> z -> z
+
 type 'x compare =
-  | LT
-  | EQ
-  | GT
+| LT
+| EQ
+| GT
 
 module type OrderedType = 
  sig 
@@ -143,6 +151,16 @@ module type OrderedType =
 module OrderedTypeFacts : 
  functor (O:OrderedType) ->
  sig 
+  module OrderElts : 
+   sig 
+    type t = O.t
+   end
+  
+  module OrderTac : 
+   sig 
+    
+   end
+  
   val eq_dec : O.t -> O.t -> sumbool
   
   val lt_dec : O.t -> O.t -> sumbool
@@ -240,6 +258,16 @@ module Raw :
  sig 
   module MX : 
    sig 
+    module OrderElts : 
+     sig 
+      type t = X.t
+     end
+    
+    module OrderTac : 
+     sig 
+      
+     end
+    
     val eq_dec : X.t -> X.t -> sumbool
     
     val lt_dec : X.t -> X.t -> sumbool
@@ -303,6 +331,16 @@ module MakeRaw :
    sig 
     module MX : 
      sig 
+      module OrderElts : 
+       sig 
+        type t = X.t
+       end
+      
+      module OrderTac : 
+       sig 
+        
+       end
+      
       val eq_dec : X.t -> X.t -> sumbool
       
       val lt_dec : X.t -> X.t -> sumbool
@@ -370,6 +408,16 @@ module MakeRaw :
   
   module OTFacts : 
    sig 
+    module OrderElts : 
+     sig 
+      type t = X.t
+     end
+    
+    module OrderTac : 
+     sig 
+      
+     end
+    
     val eq_dec : X.t -> X.t -> sumbool
     
     val lt_dec : X.t -> X.t -> sumbool
@@ -391,7 +439,7 @@ module MakeRaw :
   
   type t = slist
   
-  type elt = X.t
+  type elt = E.t
   
   val mem : elt -> t -> bool
   
@@ -458,6 +506,16 @@ module Make :
      sig 
       module MX : 
        sig 
+        module OrderElts : 
+         sig 
+          type t = X.t
+         end
+        
+        module OrderTac : 
+         sig 
+          
+         end
+        
         val eq_dec : X.t -> X.t -> sumbool
         
         val lt_dec : X.t -> X.t -> sumbool
@@ -525,6 +583,16 @@ module Make :
     
     module OTFacts : 
      sig 
+      module OrderElts : 
+       sig 
+        type t = X.t
+       end
+      
+      module OrderTac : 
+       sig 
+        
+       end
+      
       val eq_dec : X.t -> X.t -> sumbool
       
       val lt_dec : X.t -> X.t -> sumbool
@@ -546,7 +614,7 @@ module Make :
     
     type t = slist
     
-    type elt = X.t
+    type elt = E.t
     
     val mem : elt -> t -> bool
     
@@ -607,7 +675,7 @@ module type VARIABLES =
   val var_default : var
   
   module Var_as_OT : 
-   UsualOrderedType with type t= var
+   UsualOrderedType with type t = var
   
   module VarSet : 
    FinSet with module E = Var_as_OT
@@ -628,6 +696,16 @@ module Variables :
 
 module Var_as_OT_Facts : 
  sig 
+  module OrderElts : 
+   sig 
+    type t = Variables.var
+   end
+  
+  module OrderTac : 
+   sig 
+    
+   end
+  
   val eq_dec : Variables.var -> Variables.var -> sumbool
   
   val lt_dec : Variables.var -> Variables.var -> sumbool
@@ -711,9 +789,9 @@ module MkDefs :
  functor (Const:CstIntf) ->
  sig 
   type typ =
-    | Coq_typ_bvar of nat
-    | Coq_typ_fvar of Variables.var
-    | Coq_typ_arrow of typ * typ
+  | Coq_typ_bvar of nat
+  | Coq_typ_fvar of Variables.var
+  | Coq_typ_arrow of typ * typ
   
   val typ_rect :
     (nat -> 'a1) -> (Variables.var -> 'a1) -> (typ -> 'a1 -> typ -> 'a1 ->
@@ -772,12 +850,12 @@ module MkDefs :
   val kind_open : kind -> typ list -> kind
   
   type trm =
-    | Coq_trm_bvar of nat
-    | Coq_trm_fvar of Variables.var
-    | Coq_trm_abs of trm
-    | Coq_trm_let of trm * trm
-    | Coq_trm_app of trm * trm
-    | Coq_trm_cst of Const.const
+  | Coq_trm_bvar of nat
+  | Coq_trm_fvar of Variables.var
+  | Coq_trm_abs of trm
+  | Coq_trm_let of trm * trm
+  | Coq_trm_app of trm * trm
+  | Coq_trm_cst of Const.const
   
   val trm_rect :
     (nat -> 'a1) -> (Variables.var -> 'a1) -> (trm -> 'a1 -> 'a1) -> (trm ->
@@ -833,8 +911,8 @@ module MkDefs :
    functor (Delta:DeltaIntf) ->
    sig 
     type gc_kind =
-      | GcAny
-      | GcLet
+    | GcAny
+    | GcLet
     
     val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
     
@@ -855,9 +933,9 @@ module MkInfra :
   module Defs : 
    sig 
     type typ =
-      | Coq_typ_bvar of nat
-      | Coq_typ_fvar of Variables.var
-      | Coq_typ_arrow of typ * typ
+    | Coq_typ_bvar of nat
+    | Coq_typ_fvar of Variables.var
+    | Coq_typ_arrow of typ * typ
     
     val typ_rect :
       (nat -> 'a1) -> (Variables.var -> 'a1) -> (typ -> 'a1 -> typ -> 'a1 ->
@@ -917,12 +995,12 @@ module MkInfra :
     val kind_open : kind -> typ list -> kind
     
     type trm =
-      | Coq_trm_bvar of nat
-      | Coq_trm_fvar of Variables.var
-      | Coq_trm_abs of trm
-      | Coq_trm_let of trm * trm
-      | Coq_trm_app of trm * trm
-      | Coq_trm_cst of Const.const
+    | Coq_trm_bvar of nat
+    | Coq_trm_fvar of Variables.var
+    | Coq_trm_abs of trm
+    | Coq_trm_let of trm * trm
+    | Coq_trm_app of trm * trm
+    | Coq_trm_cst of Const.const
     
     val trm_rect :
       (nat -> 'a1) -> (Variables.var -> 'a1) -> (trm -> 'a1 -> 'a1) -> (trm
@@ -978,8 +1056,8 @@ module MkInfra :
      functor (Delta:DeltaIntf) ->
      sig 
       type gc_kind =
-        | GcAny
-        | GcLet
+      | GcAny
+      | GcLet
       
       val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
       
@@ -1011,8 +1089,8 @@ module MkInfra :
     module Judge : 
      sig 
       type gc_kind =
-        | GcAny
-        | GcLet
+      | GcAny
+      | GcLet
       
       val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
       
@@ -1036,9 +1114,9 @@ module MkSound :
     module Defs : 
      sig 
       type typ =
-        | Coq_typ_bvar of nat
-        | Coq_typ_fvar of Variables.var
-        | Coq_typ_arrow of typ * typ
+      | Coq_typ_bvar of nat
+      | Coq_typ_fvar of Variables.var
+      | Coq_typ_arrow of typ * typ
       
       val typ_rect :
         (nat -> 'a1) -> (Variables.var -> 'a1) -> (typ -> 'a1 -> typ -> 'a1
@@ -1098,12 +1176,12 @@ module MkSound :
       val kind_open : kind -> typ list -> kind
       
       type trm =
-        | Coq_trm_bvar of nat
-        | Coq_trm_fvar of Variables.var
-        | Coq_trm_abs of trm
-        | Coq_trm_let of trm * trm
-        | Coq_trm_app of trm * trm
-        | Coq_trm_cst of Const.const
+      | Coq_trm_bvar of nat
+      | Coq_trm_fvar of Variables.var
+      | Coq_trm_abs of trm
+      | Coq_trm_let of trm * trm
+      | Coq_trm_app of trm * trm
+      | Coq_trm_cst of Const.const
       
       val trm_rect :
         (nat -> 'a1) -> (Variables.var -> 'a1) -> (trm -> 'a1 -> 'a1) -> (trm
@@ -1159,8 +1237,8 @@ module MkSound :
        functor (Delta:DeltaIntf) ->
        sig 
         type gc_kind =
-          | GcAny
-          | GcLet
+        | GcAny
+        | GcLet
         
         val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
         
@@ -1192,8 +1270,8 @@ module MkSound :
       module Judge : 
        sig 
         type gc_kind =
-          | GcAny
-          | GcLet
+        | GcAny
+        | GcLet
         
         val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
         
@@ -1216,8 +1294,8 @@ module MkSound :
       module Judge : 
        sig 
         type gc_kind =
-          | GcAny
-          | GcLet
+        | GcAny
+        | GcLet
         
         val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
         
@@ -1255,9 +1333,9 @@ module MkRename :
       module Defs : 
        sig 
         type typ =
-          | Coq_typ_bvar of nat
-          | Coq_typ_fvar of Variables.var
-          | Coq_typ_arrow of typ * typ
+        | Coq_typ_bvar of nat
+        | Coq_typ_fvar of Variables.var
+        | Coq_typ_arrow of typ * typ
         
         val typ_rect :
           (nat -> 'a1) -> (Variables.var -> 'a1) -> (typ -> 'a1 -> typ -> 'a1
@@ -1317,12 +1395,12 @@ module MkRename :
         val kind_open : kind -> typ list -> kind
         
         type trm =
-          | Coq_trm_bvar of nat
-          | Coq_trm_fvar of Variables.var
-          | Coq_trm_abs of trm
-          | Coq_trm_let of trm * trm
-          | Coq_trm_app of trm * trm
-          | Coq_trm_cst of Const.const
+        | Coq_trm_bvar of nat
+        | Coq_trm_fvar of Variables.var
+        | Coq_trm_abs of trm
+        | Coq_trm_let of trm * trm
+        | Coq_trm_app of trm * trm
+        | Coq_trm_cst of Const.const
         
         val trm_rect :
           (nat -> 'a1) -> (Variables.var -> 'a1) -> (trm -> 'a1 -> 'a1) ->
@@ -1378,8 +1456,8 @@ module MkRename :
          functor (Delta:DeltaIntf) ->
          sig 
           type gc_kind =
-            | GcAny
-            | GcLet
+          | GcAny
+          | GcLet
           
           val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
           
@@ -1411,8 +1489,8 @@ module MkRename :
         module Judge : 
          sig 
           type gc_kind =
-            | GcAny
-            | GcLet
+          | GcAny
+          | GcLet
           
           val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
           
@@ -1435,8 +1513,8 @@ module MkRename :
         module Judge : 
          sig 
           type gc_kind =
-            | GcAny
-            | GcLet
+          | GcAny
+          | GcLet
           
           val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
           
@@ -1473,8 +1551,8 @@ module MkRename :
         module Judge : 
          sig 
           type gc_kind =
-            | GcAny
-            | GcLet
+          | GcAny
+          | GcLet
           
           val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
           
@@ -1522,9 +1600,9 @@ module MkEval :
         module Defs : 
          sig 
           type typ =
-            | Coq_typ_bvar of nat
-            | Coq_typ_fvar of Variables.var
-            | Coq_typ_arrow of typ * typ
+          | Coq_typ_bvar of nat
+          | Coq_typ_fvar of Variables.var
+          | Coq_typ_arrow of typ * typ
           
           val typ_rect :
             (nat -> 'a1) -> (Variables.var -> 'a1) -> (typ -> 'a1 -> typ ->
@@ -1584,12 +1662,12 @@ module MkEval :
           val kind_open : kind -> typ list -> kind
           
           type trm =
-            | Coq_trm_bvar of nat
-            | Coq_trm_fvar of Variables.var
-            | Coq_trm_abs of trm
-            | Coq_trm_let of trm * trm
-            | Coq_trm_app of trm * trm
-            | Coq_trm_cst of Const.const
+          | Coq_trm_bvar of nat
+          | Coq_trm_fvar of Variables.var
+          | Coq_trm_abs of trm
+          | Coq_trm_let of trm * trm
+          | Coq_trm_app of trm * trm
+          | Coq_trm_cst of Const.const
           
           val trm_rect :
             (nat -> 'a1) -> (Variables.var -> 'a1) -> (trm -> 'a1 -> 'a1) ->
@@ -1646,8 +1724,8 @@ module MkEval :
            functor (Delta:DeltaIntf) ->
            sig 
             type gc_kind =
-              | GcAny
-              | GcLet
+            | GcAny
+            | GcLet
             
             val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
             
@@ -1679,8 +1757,8 @@ module MkEval :
           module Judge : 
            sig 
             type gc_kind =
-              | GcAny
-              | GcLet
+            | GcAny
+            | GcLet
             
             val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
             
@@ -1703,8 +1781,8 @@ module MkEval :
           module Judge : 
            sig 
             type gc_kind =
-              | GcAny
-              | GcLet
+            | GcAny
+            | GcLet
             
             val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
             
@@ -1741,8 +1819,8 @@ module MkEval :
           module Judge : 
            sig 
             type gc_kind =
-              | GcAny
-              | GcLet
+            | GcAny
+            | GcLet
             
             val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
             
@@ -1778,8 +1856,8 @@ module MkEval :
    end
   
   type clos =
-    | Coq_clos_abs of Rename.Sound.Infra.Defs.trm * clos list
-    | Coq_clos_const of Const.const * clos list
+  | Coq_clos_abs of Rename.Sound.Infra.Defs.trm * clos list
+  | Coq_clos_const of Const.const * clos list
   
   val clos_rect :
     (Rename.Sound.Infra.Defs.trm -> clos list -> 'a1) -> (Const.const -> clos
@@ -1824,8 +1902,8 @@ module MkEval :
     Rename.Sound.Infra.Defs.trm -> frame list -> Rename.Sound.Infra.Defs.trm
   
   type eval_res =
-    | Result of nat * clos
-    | Inter of frame list
+  | Result of nat * clos
+  | Inter of frame list
   
   val eval_res_rect :
     (nat -> clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
@@ -1856,8 +1934,8 @@ module MkEval :
           module Judge : 
            sig 
             type gc_kind =
-              | GcAny
-              | GcLet
+            | GcAny
+            | GcLet
             
             val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
             
@@ -1946,9 +2024,9 @@ module MkUnify :
           module Defs : 
            sig 
             type typ =
-              | Coq_typ_bvar of nat
-              | Coq_typ_fvar of Variables.var
-              | Coq_typ_arrow of typ * typ
+            | Coq_typ_bvar of nat
+            | Coq_typ_fvar of Variables.var
+            | Coq_typ_arrow of typ * typ
             
             val typ_rect :
               (nat -> 'a1) -> (Variables.var -> 'a1) -> (typ -> 'a1 -> typ ->
@@ -2008,12 +2086,12 @@ module MkUnify :
             val kind_open : kind -> typ list -> kind
             
             type trm =
-              | Coq_trm_bvar of nat
-              | Coq_trm_fvar of Variables.var
-              | Coq_trm_abs of trm
-              | Coq_trm_let of trm * trm
-              | Coq_trm_app of trm * trm
-              | Coq_trm_cst of Const.const
+            | Coq_trm_bvar of nat
+            | Coq_trm_fvar of Variables.var
+            | Coq_trm_abs of trm
+            | Coq_trm_let of trm * trm
+            | Coq_trm_app of trm * trm
+            | Coq_trm_cst of Const.const
             
             val trm_rect :
               (nat -> 'a1) -> (Variables.var -> 'a1) -> (trm -> 'a1 -> 'a1)
@@ -2070,8 +2148,8 @@ module MkUnify :
              functor (Delta:DeltaIntf) ->
              sig 
               type gc_kind =
-                | GcAny
-                | GcLet
+              | GcAny
+              | GcLet
               
               val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
               
@@ -2103,8 +2181,8 @@ module MkUnify :
             module Judge : 
              sig 
               type gc_kind =
-                | GcAny
-                | GcLet
+              | GcAny
+              | GcLet
               
               val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
               
@@ -2127,8 +2205,8 @@ module MkUnify :
             module Judge : 
              sig 
               type gc_kind =
-                | GcAny
-                | GcLet
+              | GcAny
+              | GcLet
               
               val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
               
@@ -2165,8 +2243,8 @@ module MkUnify :
             module Judge : 
              sig 
               type gc_kind =
-                | GcAny
-                | GcLet
+              | GcAny
+              | GcLet
               
               val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
               
@@ -2202,8 +2280,8 @@ module MkUnify :
      end
     
     type clos =
-      | Coq_clos_abs of Rename.Sound.Infra.Defs.trm * clos list
-      | Coq_clos_const of Const.const * clos list
+    | Coq_clos_abs of Rename.Sound.Infra.Defs.trm * clos list
+    | Coq_clos_const of Const.const * clos list
     
     val clos_rect :
       (Rename.Sound.Infra.Defs.trm -> clos list -> 'a1) -> (Const.const ->
@@ -2215,8 +2293,8 @@ module MkUnify :
     
     val clos2trm : clos -> Rename.Sound.Infra.Defs.trm
     
-    type frame = { frm_benv : clos list; frm_app : 
-                   clos list; frm_trm : Rename.Sound.Infra.Defs.trm }
+    type frame = { frm_benv : clos list; frm_app : clos list;
+                   frm_trm : Rename.Sound.Infra.Defs.trm }
     
     val frame_rect :
       (clos list -> clos list -> Rename.Sound.Infra.Defs.trm -> 'a1) -> frame
@@ -2249,8 +2327,8 @@ module MkUnify :
       Rename.Sound.Infra.Defs.trm
     
     type eval_res =
-      | Result of nat * clos
-      | Inter of frame list
+    | Result of nat * clos
+    | Inter of frame list
     
     val eval_res_rect :
       (nat -> clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
@@ -2281,8 +2359,8 @@ module MkUnify :
             module Judge : 
              sig 
               type gc_kind =
-                | GcAny
-                | GcLet
+              | GcAny
+              | GcLet
               
               val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
               
@@ -2389,10 +2467,10 @@ module MkUnify :
     prod list) prod option
   
   type unif_res =
-    | Uok of (MyEval.Rename.Sound.Infra.Defs.typ,
-             MyEval.Rename.Sound.Infra.Defs.typ) prod list
-       * MyEval.Rename.Sound.Infra.Defs.kenv * MyEval.Rename.Sound.Infra.subs
-    | Ufail
+  | Uok of (MyEval.Rename.Sound.Infra.Defs.typ,
+           MyEval.Rename.Sound.Infra.Defs.typ) prod list
+     * MyEval.Rename.Sound.Infra.Defs.kenv * MyEval.Rename.Sound.Infra.subs
+  | Ufail
   
   val unif_res_rect :
     ((MyEval.Rename.Sound.Infra.Defs.typ, MyEval.Rename.Sound.Infra.Defs.typ)
@@ -2493,9 +2571,9 @@ module MkInfer :
             module Defs : 
              sig 
               type typ =
-                | Coq_typ_bvar of nat
-                | Coq_typ_fvar of Variables.var
-                | Coq_typ_arrow of typ * typ
+              | Coq_typ_bvar of nat
+              | Coq_typ_fvar of Variables.var
+              | Coq_typ_arrow of typ * typ
               
               val typ_rect :
                 (nat -> 'a1) -> (Variables.var -> 'a1) -> (typ -> 'a1 -> typ
@@ -2555,12 +2633,12 @@ module MkInfer :
               val kind_open : kind -> typ list -> kind
               
               type trm =
-                | Coq_trm_bvar of nat
-                | Coq_trm_fvar of Variables.var
-                | Coq_trm_abs of trm
-                | Coq_trm_let of trm * trm
-                | Coq_trm_app of trm * trm
-                | Coq_trm_cst of Const.const
+              | Coq_trm_bvar of nat
+              | Coq_trm_fvar of Variables.var
+              | Coq_trm_abs of trm
+              | Coq_trm_let of trm * trm
+              | Coq_trm_app of trm * trm
+              | Coq_trm_cst of Const.const
               
               val trm_rect :
                 (nat -> 'a1) -> (Variables.var -> 'a1) -> (trm -> 'a1 -> 'a1)
@@ -2617,8 +2695,8 @@ module MkInfer :
                functor (Delta:DeltaIntf) ->
                sig 
                 type gc_kind =
-                  | GcAny
-                  | GcLet
+                | GcAny
+                | GcLet
                 
                 val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
                 
@@ -2650,8 +2728,8 @@ module MkInfer :
               module Judge : 
                sig 
                 type gc_kind =
-                  | GcAny
-                  | GcLet
+                | GcAny
+                | GcLet
                 
                 val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
                 
@@ -2674,8 +2752,8 @@ module MkInfer :
               module Judge : 
                sig 
                 type gc_kind =
-                  | GcAny
-                  | GcLet
+                | GcAny
+                | GcLet
                 
                 val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
                 
@@ -2712,8 +2790,8 @@ module MkInfer :
               module Judge : 
                sig 
                 type gc_kind =
-                  | GcAny
-                  | GcLet
+                | GcAny
+                | GcLet
                 
                 val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
                 
@@ -2750,8 +2828,8 @@ module MkInfer :
        end
       
       type clos =
-        | Coq_clos_abs of Rename.Sound.Infra.Defs.trm * clos list
-        | Coq_clos_const of Const.const * clos list
+      | Coq_clos_abs of Rename.Sound.Infra.Defs.trm * clos list
+      | Coq_clos_const of Const.const * clos list
       
       val clos_rect :
         (Rename.Sound.Infra.Defs.trm -> clos list -> 'a1) -> (Const.const ->
@@ -2763,8 +2841,8 @@ module MkInfer :
       
       val clos2trm : clos -> Rename.Sound.Infra.Defs.trm
       
-      type frame = { frm_benv : clos list; frm_app : 
-                     clos list; frm_trm : Rename.Sound.Infra.Defs.trm }
+      type frame = { frm_benv : clos list; frm_app : clos list;
+                     frm_trm : Rename.Sound.Infra.Defs.trm }
       
       val frame_rect :
         (clos list -> clos list -> Rename.Sound.Infra.Defs.trm -> 'a1) ->
@@ -2799,8 +2877,8 @@ module MkInfer :
         Rename.Sound.Infra.Defs.trm
       
       type eval_res =
-        | Result of nat * clos
-        | Inter of frame list
+      | Result of nat * clos
+      | Inter of frame list
       
       val eval_res_rect :
         (nat -> clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
@@ -2831,8 +2909,8 @@ module MkInfer :
               module Judge : 
                sig 
                 type gc_kind =
-                  | GcAny
-                  | GcLet
+                | GcAny
+                | GcLet
                 
                 val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
                 
@@ -2941,11 +3019,10 @@ module MkInfer :
       MyEval.Rename.Sound.Infra.Defs.typ) prod list) prod option
     
     type unif_res =
-      | Uok of (MyEval.Rename.Sound.Infra.Defs.typ,
-               MyEval.Rename.Sound.Infra.Defs.typ) prod list
-         * MyEval.Rename.Sound.Infra.Defs.kenv
-         * MyEval.Rename.Sound.Infra.subs
-      | Ufail
+    | Uok of (MyEval.Rename.Sound.Infra.Defs.typ,
+             MyEval.Rename.Sound.Infra.Defs.typ) prod list
+       * MyEval.Rename.Sound.Infra.Defs.kenv * MyEval.Rename.Sound.Infra.subs
+    | Ufail
     
     val unif_res_rect :
       ((MyEval.Rename.Sound.Infra.Defs.typ,
@@ -3049,8 +3126,8 @@ module MkInfer :
             module Judge : 
              sig 
               type gc_kind =
-                | GcAny
-                | GcLet
+              | GcAny
+              | GcLet
               
               val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
               
@@ -3203,6 +3280,8 @@ module MkInfer :
    end
  end
 
+val set_incl : ('a1 -> 'a1 -> sumbool) -> 'a1 list -> 'a1 list -> sumbool
+
 module Cstr : 
  sig 
   type attr = nat
@@ -3210,16 +3289,16 @@ module Cstr :
   val eq_dec : nat -> nat -> sumbool
   
   type ksort =
-    | Ksum
-    | Kprod
-    | Kbot
+  | Ksum
+  | Kprod
+  | Kbot
   
   val ksort_rect : 'a1 -> 'a1 -> 'a1 -> ksort -> 'a1
   
   val ksort_rec : 'a1 -> 'a1 -> 'a1 -> ksort -> 'a1
   
-  type cstr_impl = { cstr_sort : ksort; cstr_low : 
-                     nat list; cstr_high : nat list option }
+  type cstr_impl = { cstr_sort : ksort; cstr_low : nat list;
+                     cstr_high : nat list option }
   
   val cstr_impl_rect :
     (ksort -> nat list -> nat list option -> 'a1) -> cstr_impl -> 'a1
@@ -3249,11 +3328,11 @@ module Cstr :
 module Const : 
  sig 
   type ops =
-    | Coq_tag of Cstr.attr
-    | Coq_matches of Cstr.attr list
-    | Coq_record of Cstr.attr list
-    | Coq_sub of Cstr.attr
-    | Coq_recf
+  | Coq_tag of Cstr.attr
+  | Coq_matches of Cstr.attr list
+  | Coq_record of Cstr.attr list
+  | Coq_sub of Cstr.attr
+  | Coq_recf
   
   val ops_rect :
     (Cstr.attr -> 'a1) -> (Cstr.attr list -> __ -> 'a1) -> (Cstr.attr list ->
@@ -3283,9 +3362,9 @@ module Infer :
             module Defs : 
              sig 
               type typ =
-                | Coq_typ_bvar of nat
-                | Coq_typ_fvar of Variables.var
-                | Coq_typ_arrow of typ * typ
+              | Coq_typ_bvar of nat
+              | Coq_typ_fvar of Variables.var
+              | Coq_typ_arrow of typ * typ
               
               val typ_rect :
                 (nat -> 'a1) -> (Variables.var -> 'a1) -> (typ -> 'a1 -> typ
@@ -3345,12 +3424,12 @@ module Infer :
               val kind_open : kind -> typ list -> kind
               
               type trm =
-                | Coq_trm_bvar of nat
-                | Coq_trm_fvar of Variables.var
-                | Coq_trm_abs of trm
-                | Coq_trm_let of trm * trm
-                | Coq_trm_app of trm * trm
-                | Coq_trm_cst of Const.const
+              | Coq_trm_bvar of nat
+              | Coq_trm_fvar of Variables.var
+              | Coq_trm_abs of trm
+              | Coq_trm_let of trm * trm
+              | Coq_trm_app of trm * trm
+              | Coq_trm_cst of Const.const
               
               val trm_rect :
                 (nat -> 'a1) -> (Variables.var -> 'a1) -> (trm -> 'a1 -> 'a1)
@@ -3407,8 +3486,8 @@ module Infer :
                functor (Delta:DeltaIntf) ->
                sig 
                 type gc_kind =
-                  | GcAny
-                  | GcLet
+                | GcAny
+                | GcLet
                 
                 val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
                 
@@ -3440,8 +3519,8 @@ module Infer :
               module Judge : 
                sig 
                 type gc_kind =
-                  | GcAny
-                  | GcLet
+                | GcAny
+                | GcLet
                 
                 val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
                 
@@ -3464,8 +3543,8 @@ module Infer :
               module Judge : 
                sig 
                 type gc_kind =
-                  | GcAny
-                  | GcLet
+                | GcAny
+                | GcLet
                 
                 val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
                 
@@ -3502,8 +3581,8 @@ module Infer :
               module Judge : 
                sig 
                 type gc_kind =
-                  | GcAny
-                  | GcLet
+                | GcAny
+                | GcLet
                 
                 val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
                 
@@ -3540,8 +3619,8 @@ module Infer :
        end
       
       type clos =
-        | Coq_clos_abs of Rename.Sound.Infra.Defs.trm * clos list
-        | Coq_clos_const of Const.const * clos list
+      | Coq_clos_abs of Rename.Sound.Infra.Defs.trm * clos list
+      | Coq_clos_const of Const.const * clos list
       
       val clos_rect :
         (Rename.Sound.Infra.Defs.trm -> clos list -> 'a1) -> (Const.const ->
@@ -3553,8 +3632,8 @@ module Infer :
       
       val clos2trm : clos -> Rename.Sound.Infra.Defs.trm
       
-      type frame = { frm_benv : clos list; frm_app : 
-                     clos list; frm_trm : Rename.Sound.Infra.Defs.trm }
+      type frame = { frm_benv : clos list; frm_app : clos list;
+                     frm_trm : Rename.Sound.Infra.Defs.trm }
       
       val frame_rect :
         (clos list -> clos list -> Rename.Sound.Infra.Defs.trm -> 'a1) ->
@@ -3589,8 +3668,8 @@ module Infer :
         Rename.Sound.Infra.Defs.trm
       
       type eval_res =
-        | Result of nat * clos
-        | Inter of frame list
+      | Result of nat * clos
+      | Inter of frame list
       
       val eval_res_rect :
         (nat -> clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1
@@ -3621,8 +3700,8 @@ module Infer :
               module Judge : 
                sig 
                 type gc_kind =
-                  | GcAny
-                  | GcLet
+                | GcAny
+                | GcLet
                 
                 val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
                 
@@ -3731,11 +3810,10 @@ module Infer :
       MyEval.Rename.Sound.Infra.Defs.typ) prod list) prod option
     
     type unif_res =
-      | Uok of (MyEval.Rename.Sound.Infra.Defs.typ,
-               MyEval.Rename.Sound.Infra.Defs.typ) prod list
-         * MyEval.Rename.Sound.Infra.Defs.kenv
-         * MyEval.Rename.Sound.Infra.subs
-      | Ufail
+    | Uok of (MyEval.Rename.Sound.Infra.Defs.typ,
+             MyEval.Rename.Sound.Infra.Defs.typ) prod list
+       * MyEval.Rename.Sound.Infra.Defs.kenv * MyEval.Rename.Sound.Infra.subs
+    | Ufail
     
     val unif_res_rect :
       ((MyEval.Rename.Sound.Infra.Defs.typ,
@@ -3839,8 +3917,8 @@ module Infer :
             module Judge : 
              sig 
               type gc_kind =
-                | GcAny
-                | GcLet
+              | GcAny
+              | GcLet
               
               val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
               
@@ -4027,8 +4105,8 @@ module Infer2 :
           module Judge : 
            sig 
             type gc_kind =
-              | GcAny
-              | GcLet
+            | GcAny
+            | GcLet
             
             val gc_kind_rect : 'a1 -> 'a1 -> gc_kind -> 'a1
             

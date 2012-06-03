@@ -229,6 +229,15 @@ Hint Immediate ltA_eqA eqA_ltA.
 Notation Inf := (lelistA ltA).
 Notation Sort := (sort ltA).
 
+Lemma strictOrder_ltA : StrictOrder ltA.
+Proof.
+  try repeat (constructor; intuition).
+  intro; intros; intro.
+  apply (ltA_not_eqA H).
+  auto.
+Qed.
+Hint Resolve strictOrder_ltA.
+
 Lemma not_InA_if_Sort_Inf :
   forall xs a, Sort xs -> Inf a xs -> ~ InA (@eq A) a xs.
 Proof.
@@ -256,8 +265,8 @@ Proof.
   assert (Q4 : InA (@eq A) y (x :: xs)) by firstorder.
   inversion Q3; subst; auto.
   inversion Q4; subst; auto.
-  assert (ltA y x) by (refine (SortA_InfA_InA _ _ _ _ _ H6 H7 H1); auto).
-  assert (ltA x y) by (refine (SortA_InfA_InA _ _ _ _ _ H2 H3 H4); auto).
+  assert (ltA y x) by (refine (SortA_InfA_InA _ _ _ H6 H7 H1); intuition).
+  assert (ltA x y) by (refine (SortA_InfA_InA _ _ _ H2 H3 H4); intuition).
   assert (y <> y) by eauto.
   intuition.
 Qed.

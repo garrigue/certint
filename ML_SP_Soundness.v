@@ -474,6 +474,8 @@ Proof.
     pick_fresh x. 
     rewrite* (@trm_subst_intro x). 
     apply_empty* (@typing_trm_subst gc).
+      simpl in H0.
+      apply* H0.
     exists {}. intro. unfold kinds_open_vars, sch_open_vars; simpl.
     destruct Xs; simpl*. rewrite* typ_open_vars_nil.
   apply* (@typing_gc (gc,GcAny) Ks L).
@@ -491,7 +493,8 @@ Proof.
     try (destruct (const_app_inv c tl) as [eq | [T1' [T2' eq]]];
          rewrite eq in *; discriminate).
   (* Let *)
-  pick_fresh x. rewrite* (@trm_subst_intro x). 
+  pick_fresh x. rewrite* (@trm_subst_intro x).
+   simpl in H1.
    apply_empty* (@typing_trm_subst true).
   (* Let *)
   apply* (@typing_let (true,GcAny) M L1).

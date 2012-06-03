@@ -60,10 +60,11 @@ Definition var_default : var := 0.
 Definition var_of_Z x : var := x.
 Definition Z_of_var x : Z := x.
 
-Module Var_as_OT := Z_as_OT.
+Module Var_as_OT : UsualOrderedType with Definition t := var := Z_as_OT.
 
 Module Import VarSet : FinSet with Module E := Var_as_OT :=
   Lib_FinSetImpl.Make Var_as_OT.
+
 Open Local Scope set_scope.
 
 Definition vars := VarSet.S.t.

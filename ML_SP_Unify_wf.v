@@ -310,7 +310,7 @@ Definition decidable (A : Type) (P : A -> Prop) :=
   forall x, {P x}+{~P x}.
 
 Definition in_dec L : decidable (fun x => x \in L).
-  intros L x.
+  intros x.
   case_eq (S.mem x L); intros. left. exact (S.mem_2 H).
   right. exact (mem_3 H).
 Qed.

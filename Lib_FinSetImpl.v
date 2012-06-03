@@ -316,8 +316,7 @@ Module Make (X : UsualOrderedType) <: FinSet with Module E := X.
         eexact E.lt_trans.
         eexact E.lt_not_eq.
         intros. eapply OTFacts.lt_eq; eauto.
-        intros. eapply OTFacts.eq_lt; eauto.
-    intros. subst.
+    subst.
     rewrite (eq_proofs_unicity bool_dec H J).
     reflexivity.
   Qed.

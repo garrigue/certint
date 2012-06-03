@@ -25,9 +25,7 @@ Lemma diff_empty_r : forall L, S.diff L {} = L.
   apply* S.diff_3.
 Qed.
 
-Definition sort_lt_all :=
-  InfA_alt S.E.eq_refl S.E.eq_sym S.E.lt_trans
-     Var_as_OT_Facts.lt_eq Var_as_OT_Facts.eq_lt.
+Definition sort_lt_all := InfA_alt _ _ _.
 (* Check sort_lt_all. *)
 
 Lemma sort_lt_notin : forall a l0,
@@ -41,9 +39,7 @@ Proof.
   elim (S.E.lt_not_eq _ _ H2). reflexivity.
 Qed.
 
-Definition sort_lt_nodup :=
-  SortA_NoDupA S.E.eq_refl S.E.eq_sym S.E.lt_trans S.E.lt_not_eq
-    Var_as_OT_Facts.lt_eq Var_as_OT_Facts.eq_lt.
+Definition sort_lt_nodup (l : list var) := SortA_NoDupA _ _ _ (l:=l).
 (* Check sort_lt_nodup. *)
 
 Lemma sort_lt_ext : forall l1 l2,
@@ -62,7 +58,7 @@ Proof.
       elim (sort_lt_notin H1 (cons_leA _ _ _ _ l1)).
       apply* (proj1 (H2 a)).
     rewrite <- e in *. clear e a0.
-    rewrite* (IHsort l0).
+    rewrite* (IHSorted l0).
     intro; split; intro.
       destruct (a0 == a).
         subst.
@@ -93,8 +89,8 @@ Proof.
   split*.
   intro. inversions H4.
     elim H2.
-    apply (InA_eqA S.E.eq_sym S.E.eq_trans H6 (l:=l1++a::l2)).
-    apply (In_InA S.E.eq_refl).
+    apply (InA_eqA _ H6 (l:=l1++a::l2)).
+    apply (In_InA _).
     apply in_or_app. simpl*.
   elim (H0 H6).
 Qed.
@@ -136,7 +132,7 @@ Proof.
   destruct l1; simpl in *.
     inversions H.
     inversions H3.
-    apply* (InfA_ltA S.E.lt_trans).
+    apply* (InfA_ltA _).
     inversions* H.
   inversions* H3.
 Qed.
@@ -207,7 +203,7 @@ Proof.
   rewrite <- (IHelts (S.remove a0 L)); clear IHelts.
     apply sort_lt_ext. apply S.elements_3.
       constructor. apply S.elements_3.
-      apply (InA_InfA S.E.eq_refl).
+      apply (InA_InfA _).
       intros.
       use (S.remove_3 (S.elements_2 H)).
       use (elements_tl (sym_equal Heqelts)).
@@ -278,7 +274,7 @@ Proof.
       rewrite Hl in H2.
       use (sort_lt_nodup H2).
       destruct (nodup_notin_split _ _ _ H3).
-      subst; destruct* (InA_app H).
+      subst; destruct* (InA_app _ H).
     apply* S.remove_2.
     apply S.elements_2.
     rewrite Hl.

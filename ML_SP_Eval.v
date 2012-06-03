@@ -1728,8 +1728,6 @@ Hint Extern 1 (list_forall2 _ _ _) => solve [constructor; simpl; auto].
 Hint Extern 1 (equiv_clos _ _) => solve [constructor; simpl; auto].
 Hint Extern 1 (equiv_frame _ _) => solve [constructor; simpl; auto].
 
-Definition eq2 := eq.
-
 Definition eval_res_cont r :=
   match r with
   | Result (S _) _ => true

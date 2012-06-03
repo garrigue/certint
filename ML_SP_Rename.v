@@ -260,7 +260,7 @@ Proof.
       destruct (index_ok _ var_default _ _ H).
       rewrite <- (map_length typ_fvar) in H0.
       rewrite <- (f_equal typ_fvar H1).
-      rewrite <- map_nth.
+      rewrite <- (map_nth typ_fvar).
       apply* nth_indep.
     auto.
   congruence.

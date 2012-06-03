@@ -1258,7 +1258,7 @@ Lemma subset_incl_elements : forall L1 L2,
 Proof.
   intros; intro; intros. 
   apply InA_In; apply S.elements_1.
-  use (S.elements_2 (SetoidList.In_InA E.eq_refl H0)).
+  use (S.elements_2 (SetoidList.In_InA _ H0)).
 Qed.
 
 Lemma elements_singleton : forall x,

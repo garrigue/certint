@@ -1409,7 +1409,7 @@ Proof.
   unfold vars_subst.
   puts (S.elements_1 H).
   induction H0; intros x Hx.
-    simpl. rewrite <- H0. auto with sets.
+    simpl. do 2 rewrite <- H0. auto with sets.
   simpl.
   puts (IHInA _ Hx). auto with sets.
 Qed.
@@ -1448,7 +1448,7 @@ Proof.
   intros. apply eq_ext.
   intros; split; intro.
     apply S.elements_2.
-    apply (SetoidList.In_InA S.E.eq_refl).
+    apply (SetoidList.In_InA _).
     apply* mkset_in.
   apply in_mkset.
   puts (S.elements_1 H).
@@ -1464,7 +1464,7 @@ Proof.
   rewrite <- (mkset_elements L) in H.
   gen L1; induction H0; intros. simpl*.
   simpl in *. split*.
-  apply IHsort.
+  apply IHSorted.
   disjoint_solve.
   elim (sort_lt_notin H0 H).
   puts (mkset_in _ Hy').
@@ -2596,12 +2596,12 @@ Proof.
     intros x Hx.
     apply InA_In. unfold l; apply S.elements_1.
     destruct (in_app_or _ _ _ Hx); [apply S.union_2|apply S.union_3];
-      apply S.elements_2; apply (SetoidList.In_InA E.eq_refl).
+      apply S.elements_2; apply (SetoidList.In_InA _).
       fold l1; auto.
     fold l2; auto.
   assert (incl l (l1 ++ l2)).
     intros x Hx.
-    puts (SetoidList.In_InA E.eq_refl Hx).
+    puts (SetoidList.In_InA _ Hx).
     apply in_or_app.
     destruct (S.union_1 (S.elements_2 H0));
       [left | right]; apply InA_In; apply* (S.elements_1 H1).
@@ -2682,7 +2682,7 @@ Proof.
       rewrite (kind_fv_after_subst S).
       use (vars_subst_in S H0).
     use (IHKs H0).
-  revert L Hx H. generalize (dom K).
+  revert Hx H. generalize L; clear L. generalize (dom K).
   induction (length K); simpl close_fvars; intros. auto.
   case_rewrite R1 (S.choose (S.inter v L)).
     case_rewrite R2 (get e K).
