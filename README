@@ -28,6 +28,7 @@ Eval, Unify, Inference and Domain are completely new.
 Read the accompanying paper [3] for information on the proof.
 
 All the above development were checked with coq 8.3pl2.
+(Porting to 8.3 is the only change wrt. the previous version of september 2010)
 You can compile them with "sh build.sh"
 
 You can also play with the type checker. It does not work inside Coq
@@ -57,4 +58,5 @@ $ ocaml
 
 [3] A Certified Interpreter for ML with Structural Polymorphism.
     Presented at APLAS'10, Shanghai, China, November 2010.
-    http://www.math.nagoya-u.ac.jp/~garrigue/papers/#certint1009
+    Extended version submitted to MSCS.
+    http://www.math.nagoya-u.ac.jp/~garrigue/papers/aplas20120.html
