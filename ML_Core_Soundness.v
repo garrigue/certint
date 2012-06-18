@@ -8,6 +8,39 @@ Require Import List Metatheory
   ML_Core_Definitions
   ML_Core_Infrastructure.
 
+Ltac disjoint_simpls :=
+  repeat match goal with
+  | H: fresh _ _ _ |- _ =>
+    let Hf := fresh "Hf" in poses Hf (fresh_disjoint _ _ H);
+    let Hn := fresh "Hn" in poses Hn (fresh_length _ _ _ H); clear H
+  | H: ok (_ & _) |- _ =>
+    let Ho := fresh "Ho" in poses Ho (ok_disjoint _ _ H); clear H
+  | H: binds _ _ _ |- _ =>
+    let Hb := fresh "Hb" in poses Hb (binds_dom H); clear H
+  | H: get _ _ = None |- _ =>
+    let Hn := fresh "Hn" in poses Hn (get_none_notin _ H); clear H
+  | H: In _ _ |- _ =>
+    let Hi := fresh "Hi" in poses Hi (in_mkset H); clear H
+  | H: ~In _ _ |- _ =>
+    let Hn := fresh "Hn" in poses Hn (notin_mkset _ H); clear H
+  | x := ?y : env _ |- _ => subst x
+  end.
+
+Ltac disjoint_solve :=
+  instantiate_fail;
+  disjoint_simpls;
+  unfold env_fv in *;
+  repeat progress
+    (simpl dom in *; simpl fv_in in *; simpl typ_fv in *;
+     try rewrite dom_concat in *; try rewrite fv_in_concat in *;
+     try rewrite dom_map in *);
+  sets_solve.
+
+Hint Extern 1 (_ \in _) => solve [disjoint_solve].
+Hint Extern 1 (_ << _) => solve [disjoint_solve].
+Hint Extern 1 (_ \notin _) => solve [disjoint_solve].
+Hint Extern 1 (disjoint _ _) => solve [disjoint_solve].
+
 (* ********************************************************************** *)
 (** Typing schemes for expressions *)
 
@@ -33,7 +66,8 @@ Proof.
   rewrite~ sch_subst_open. apply* typing_var.
     binds_cases H0.
       apply* binds_concat_fresh.
-       rewrite* sch_subst_fresh. use (fv_in_spec sch_fv B).
+       rewrite* sch_subst_fresh.
+       use (fv_in_spec sch_fv E x M (binds_in B)).
       auto*.
     rewrite~ sch_subst_arity. apply* typ_subst_type_list.
   apply_fresh* typing_abs as y.
@@ -134,12 +168,14 @@ Lemma preservation_result : preservation.
 Proof.
   introv Typ. gen t'.
   induction Typ; introv Red; subst; inversions Red.
-  pick_fresh x. rewrite* (@trm_subst_intro x). 
-   apply_empty* typing_trm_subst. 
+  pick_fresh x. rewrite* (@trm_subst_intro x).
+   simpl in H1.
+   apply_empty* typing_trm_subst.
    apply* (@has_scheme_from_vars L1). 
   apply* (@typing_let M L1).
   inversions Typ1. pick_fresh x. 
-   rewrite* (@trm_subst_intro x). 
+   rewrite* (@trm_subst_intro x).
+   simpl in H6.
    apply_empty* typing_trm_subst.
    apply* has_scheme_from_typ.
   auto*.

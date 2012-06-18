@@ -522,8 +522,8 @@ Lemma typing_regular : forall E e T,
 Proof.
   split3; induction* H.
   (* ok *)
-  pick_fresh y. forward~ (H1 y) as K. inversions* K.
-  pick_fresh y. forward~ (H2 y) as K. inversions* K.
+  pick_fresh y. forward~ (H1 y) as K.
+  pick_fresh y. forward~ (H2 y) as K.
   (* term *) 
   apply_fresh* term_let as y.
     pick_freshes (sch_arity M) Xs.
