@@ -155,4 +155,5 @@ Defined.
 Definition eval1 fenv t h := eval fenv h nil nil t nil.
 
 (* Export and try to do this in ocaml *)
+Set Extraction AccessOpaque.
 Extraction "typinf" typinf1 eval1.

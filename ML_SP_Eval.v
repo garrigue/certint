@@ -99,7 +99,7 @@ Inductive clos_ok : clos -> Prop :=
       list_forall clos_ok cls ->
       List.length cls <= Const.arity c ->
       clos_ok (clos_const c cls).
-Reset clos_ok_ind.
+(* Reset clos_ok_ind. *)
 Hint Constructors clos_ok.
 
 Hint Extern 1 (clos_ok ?x) => solve [list_forall_find clos_ok x].
@@ -115,7 +115,7 @@ Hypothesis Hconst : forall c cls,
   length cls <= Const.arity c ->
   list_forall P cls -> P (clos_const c cls).
 
-Lemma clos_ok_ind : forall c, clos_ok c -> P c.
+Lemma clos_ok_ind' : forall c, clos_ok c -> P c.
 Proof.
   Hint Resolve Habs Hconst.
   intros c H; induction c using clos_ind'; inversion* H.
@@ -131,7 +131,7 @@ Fixpoint clos2trm (c:clos) : trm :=
 Lemma clos_ok_term : forall cl,
   clos_ok cl -> term (clos2trm cl).
 Proof.
-  induction 1; simpl.
+  induction 1 using clos_ok_ind'; simpl.
     apply term_trm_inst_closed.
       rewrite map_length.
       constructor; auto.
@@ -305,7 +305,7 @@ Lemma clos_ok_value : forall cl,
   clos_ok cl -> value (clos2trm cl).
 Proof.
   unfold value.
-  induction 1; simpl;
+  induction 1 using clos_ok_ind'; simpl;
     assert (list_forall term (List.map clos2trm cls))
       by (clear -H; apply* list_forall_map; auto using clos_ok_term).
     exists 0. unfold trm_inst. simpl. constructor.

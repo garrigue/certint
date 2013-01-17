@@ -525,9 +525,8 @@ Module Delta.
     (* sub *)
     split. simpl*.
     repeat (constructor; auto).
+    apply type_nth_typ_vars; omega.
     unfold All_kind_types. simpl.
-    repeat (constructor; simpl*).
-    (* recf *)
     repeat (constructor; simpl*).
   Qed.
 End Delta.

@@ -315,7 +315,6 @@ Module Make (X : UsualOrderedType) <: FinSet with Module E := X.
       unfold Raw.t in *. eapply Sort_InA_eq_ext; eauto using to_sorted.
         eexact E.lt_trans.
         eexact E.lt_not_eq.
-        intros. eapply OTFacts.lt_eq; eauto.
     subst.
     rewrite (eq_proofs_unicity bool_dec H J).
     reflexivity.

@@ -939,7 +939,8 @@ Section Env_prop.
   Proof.
     intros; intro; intros.
     destruct* H0.
-    inversions* H0.
+      inversions* H0.
+    elim H0.
   Qed.
 
   Lemma env_prop_concat : forall l1 l2,
