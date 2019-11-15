@@ -3,11 +3,16 @@
 
 The files in this archive contain a proof of type soundness for structural
 polymorphism based on local constraints [1], together with soundness
-and principality of the type inference algorithm.
+and principality of the type inference algorithm, and a certified interpreter.
+See the
+[support page](http://www.math.nagoya-u.ac.jp/~garrigue/papers/aplas2010.html)
+for detailed information.
+
 I started from a proof of type soundness for core ML by Arthur
 Chargueraud, which accompanied "Engineering formal metatheory" [2].
 The library files (Lib_* and Metatheory*) are almost untouched.
 For compatibility we also copied FSetList.v from Coq 8.2.
+
 The new files are as follows.
 * `Metatheory_SP`: new generic lemmas used in developments
 * `Cardinal`: lemmas about finite set cardinals
@@ -24,7 +29,6 @@ The new files are as follows.
 Of the above, Definitions, Infrastructure and Soundness are base on
 the core ML proof, but were heavily modified.
 Eval, Unify, Inference and Domain are completely new.
-Read the accompanying paper [3] for information on the proof.
 
 All the above development were checked with coq 8.10.1.
 (Porting to 8.10.1 is the only change wrt. the version of september 2010)
@@ -48,16 +52,13 @@ $ ocaml
 # #use "use_typinf.ml";;
 ```
 
-[1] Jacques Garrigue: Simple Type Inference for Structural Polymorphism.
-    FOOL 9, Portland, Oregon, January 2002.
-    [link](http://www.math.nagoya-u.ac.jp/~garrigue/papers/#strucpoly)
+[1] Jacques Garrigue: A Certified Interpreter of ML with Structural
+                      Polymorphism and Recursive Types.
+    Mathematical Structures in Computer Science, November 2014, pages 1-25.
+    Earlier version presented at APLAS'10, Shanghai, China, November 2010.
+    [link](http://www.math.nagoya-u.ac.jp/~garrigue/papers/aplas2010.html)
 
 [2] Brian Aydemir, Arthur Chargueraud, Benjamin C. Pierce, Randy Pollack
     and Stephanie Weirich: Engineering Formal Metatheory. POPL'08.
     [link](http://www.chargueraud.org/arthur/research/2007/binders/)
 
-[3] Jacques Garrigue: A Certified Interpreter of ML with Structural
-                      Polymorphism and Recursive Types.
-    Mathematical Structures in Computer Science, November 2014, pages 1-25.
-    Earlier version presented at APLAS'10, Shanghai, China, November 2010.
-    [link](http://www.math.nagoya-u.ac.jp/~garrigue/papers/aplas2010.html)
