@@ -19,7 +19,7 @@ Module Type CstrIntf.
   Parameter lub : cstr -> cstr -> cstr.
   Parameter entails : cstr -> cstr -> Prop.
   Parameter entails_refl : forall c, entails c c.
-  Hint Resolve entails_refl.
+  Hint Resolve entails_refl : core.
   Parameter entails_trans : forall c1 c2 c3,
     entails c1 c2 -> entails c2 c3 -> entails c1 c3.
   Parameter entails_lub : forall c1 c2 c,
@@ -34,6 +34,8 @@ Module Type CstIntf.
   Parameter const : Set.
   Parameter arity : const -> nat.
 End CstIntf.
+
+Declare Scope typ_scope.
 
 (* Parameterized definitions *)
 
@@ -276,7 +278,7 @@ Inductive well_kinded : kenv -> kind -> typ -> Prop :=
       entails k' k ->
       well_kinded K (Some k) (typ_fvar x).
 
-Hint Constructors well_kinded.
+Hint Constructors well_kinded : core.
 
 Definition kinds_open Ks Us :=
   List.map (fun k:kind => kind_open k Us) Ks.

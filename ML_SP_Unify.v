@@ -5,6 +5,8 @@
 
 Require Import Arith List Metatheory.
 Require Import ML_SP_Definitions Cardinal ML_SP_Eval.
+Require Omega.
+Ltac omega := Omega.omega.
 
 Set Implicit Arguments.
 
@@ -131,7 +133,7 @@ Definition unify_kinds (k1 k2:kind) : option (kind * list (typ*typ)).
   match k1, k2 with
   | None, _ => Some (k2, nil)
   | Some _, None => Some (k1, nil)
-  | Some (Kind kc1 kv1 kr1 kh1), Some (Kind kc2 kv2 kr2 kh2) =>
+  | Some (@Kind kc1 kv1 kr1 kh1), Some (@Kind kc2 kv2 kr2 kh2) =>
     let kc := Cstr.lub kc1 kc2 in
     if Cstr.valid_dec kc then
       let krp := unify_kind_rel (kr1 ++ kr2) nil (Cstr.unique kc) nil in
@@ -162,7 +164,7 @@ Proof.
   case_rewrite R (get x K).
   subst*.
 Qed.
-Hint Resolve get_kind_binds.
+Hint Resolve get_kind_binds : core.
 
 Definition unify_vars (K:kenv) (x y:var) :=
   match unify_kinds (get_kind x K) (get_kind y K) with
@@ -308,7 +310,7 @@ Proof.
   inversions* H3.
 Qed.
 
-Hint Resolve add_binding_is_subst.
+Hint Resolve add_binding_is_subst : core.
 
 Lemma typ_subst_disjoint : forall S T,
   is_subst S -> disjoint (dom S) (typ_fv (typ_subst S T)).
@@ -334,7 +336,7 @@ Proof.
   use (typ_subst_res_fresh _ H H0).
 Qed.
 
-Hint Resolve typ_subst_disjoint typ_subst_res_fresh typ_subst_res_fresh'.
+Hint Resolve typ_subst_disjoint typ_subst_res_fresh typ_subst_res_fresh' : core.
 
 Lemma binds_add_binding : forall S T0 T1 v x T,
   typ_subst S T0 = typ_fvar v ->
@@ -348,7 +350,7 @@ Proof.
   apply* binds_map.
 Qed.
 
-Hint Resolve binds_add_binding.
+Hint Resolve binds_add_binding : core.
 
 Definition id := Env.empty (A:=typ).
 
@@ -398,7 +400,7 @@ Proof.
   apply* notin_union_l.
 Qed.
 
-Hint Resolve ok_remove_env.
+Hint Resolve ok_remove_env : core.
 
 Lemma binds_remove_env : forall (A:Set) v K x (a:A),
   binds x a K -> x <> v -> binds x a (remove_env K v).
@@ -412,7 +414,7 @@ Proof.
   simpl. destruct* (x == v0).
 Qed.
 
-Hint Resolve binds_remove_env.
+Hint Resolve binds_remove_env : core.
 
 Lemma disjoint_add_binding : forall v T S (K:kenv),
   is_subst S -> ok K ->
@@ -426,7 +428,7 @@ Proof.
   simpl; rewrite* dom_map.
 Qed.
 
-Hint Resolve disjoint_add_binding.
+Hint Resolve disjoint_add_binding : core.
 
 Definition kind_entails k k' :=
   match k' with
@@ -447,13 +449,13 @@ Proof.
   apply (wk_kind H1). apply (entails_trans H2 H).
 Qed.
 
-Hint Resolve kind_entails_well_kinded.
+Hint Resolve kind_entails_well_kinded : core.
 
 Lemma neq_notin_fv : forall v v0,
   v <> v0 -> v \notin (typ_fv (typ_fvar v0)).
 Proof. simpl*. Qed.
 
-Hint Resolve neq_notin_fv.
+Hint Resolve neq_notin_fv : core.
 
 Section Soundness.
 
@@ -557,7 +559,7 @@ Proof.
     (fun K S _ => is_subst S' /\
       forall x T, binds x (typ_subst S T) S -> binds x (typ_subst S' T) S'));
     clear H H0 h pairs K S; intros.
-    destruct H6; split*.
+    destruct H6; split2*.
     intros. apply H7.
     apply* binds_add_binding.
   intros.
@@ -574,7 +576,7 @@ Proof.
   rewrite typ_subst_idem in H2; auto.
   congruence.
 Qed.
-Hint Resolve binds_subst_idem.
+Hint Resolve binds_subst_idem : core.
 
 Lemma typ_subst_extend : forall h pairs K S,
   is_subst S ->
@@ -598,7 +600,7 @@ Proof.
   simpl. congruence.
 Qed.
 
-Hint Resolve typ_subst_extend.
+Hint Resolve typ_subst_extend : core.
 
 Lemma typ_size_1 : forall T, 1 <= typ_size T.
   destruct T; simpl; omega.
@@ -667,7 +669,7 @@ Proof.
         simpl. destruct* (v == v).
         rewrite typ_subst_compose.
         rewrite* (typ_subst_fresh (v ~ typ_subst S T2)).
-        simpl*. disjoint_solve. elim H4; rewrite* (S.singleton_1 H1).
+        simpl*. disjoint_solve. intuition.
       rewrite <- (typ_subst_extend _ _ _ H4 H0).
       rewrite <- (typ_subst_extend _ _ _ H4 H0 T2).
       do 2 rewrite typ_subst_compose. rewrite H1; rewrite H2.
@@ -737,7 +739,7 @@ Lemma unify_kind_rel_keep : forall kr kr' uniq pairs k' l,
   unify_kind_rel kr kr' uniq pairs = (k', l) ->
   incl kr' k' /\ incl pairs l.
 Proof.
-  induction kr; simpl; intros. inversions H. split*.
+  induction kr; simpl; intros. inversions H. split2*.
   destruct a.
   case_rewrite R (uniq a).
     case_rewrite R1 (assoc Cstr.eq_dec a kr'); destruct* (IHkr _ _ _ _ _ H).
@@ -781,12 +783,12 @@ Proof.
      rewrite R1 in *.
      use (unify_kind_rel_incl _ _ _ _ R1 H0).
      destruct (proj2 (Cstr.entails_lub kc kc0 _) (Cstr.entails_refl _)).
-     split; split*; simpl; intros;
+     split; split2*; simpl; intros;
        rewrite R1; apply H; unfold map_snd; rewrite* map_app.
-    split*.
+    split2*.
     inversions H; clear H.
     simpl. apply entails_refl.
-   split*.
+   split2*.
    inversions H; clear H.
    simpl. apply entails_refl.
   auto.
@@ -1077,7 +1079,7 @@ Proof.
         inversions H1; clear H1.
         apply* (kh' a).
         apply H.
-        right.
+        right*.
         unfold map_snd; rewrite map_app.
         use (in_map_snd (typ_subst S) _ _ _ (assoc_sound _ _ _ R1)).
       intuition.
@@ -1205,7 +1207,7 @@ Proof.
   intros; intro; intros; apply* H.
 Qed.
 
-Hint Resolve unifies_tl.
+Hint Resolve unifies_tl : core.
 
 Lemma unify_mgu0 : forall h pairs K0 S0 K S,
   unify h pairs K0 S0 = Some (K,S) -> is_subst S0 ->
@@ -1251,7 +1253,7 @@ Proof.
     intro; simpl; intros.
     destruct* H3.
     inversions* H3.
-  split*.
+  split2*.
   intros.
   rewrite <- (H3 T3).
   rewrite <- (H3 T4).
@@ -1518,7 +1520,6 @@ Proof.
   replace (really_all_fv S0 K0 ((t, t0) :: pairs))
     with (really_all_fv S0 K0 ((typ_fvar v, typ_fvar v0) :: pairs)).
     apply* really_all_fv_decr.
-      rewrite H3 in H7. simpl typ_fv in *. clearbody S. disjoint_solve.
     fold S.
     unfold really_all_fv in *.
     simpl in *.
@@ -1674,14 +1675,14 @@ Proof.
           /\ kind_entails (get_kind v1 K) (kind_subst S (get_kind v K0))
           /\ kind_entails (get_kind v1 K) (kind_subst S (get_kind v0 K0))).
     case_rewrite R3 (get_kind v0 K0).
-      inversions Wk0. right; exists x. rewrite H0; split*.
+      inversions Wk0. right*; exists x. rewrite H0; split2*.
       simpl in Wk0; rewrite <- H0 in Wk0.
       rewrite Sv_Sv0 in Wk; simpl in Wk; rewrite <- H0 in Wk.
       split; apply* well_kinded_kind_entails.
     case_rewrite R4 (get_kind v K0).
-      inversions Wk. right; exists x.
+      inversions Wk. right*; exists x.
       rewrite <- Sv_Sv0; rewrite H0.
-      split*.
+      split2*.
       split; apply well_kinded_kind_entails.
       rewrite* H0.
       apply wk_any.

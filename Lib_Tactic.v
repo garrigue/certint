@@ -305,7 +305,7 @@ Lemma modus_ponens : forall (P Q : Prop),
   P -> (P -> Q) -> Q.
 Proof. auto. Qed.
 
-Implicit Arguments modus_ponens [P Q].
+Arguments modus_ponens [P Q].
 
 Tactic Notation "forward" constr(x) "as" simple_intropattern(H) :=
     (refine (modus_ponens (x _ _ _ _ _ _ _ _ _) _); [ | | | | | | | | | intros H ])
@@ -398,7 +398,7 @@ Tactic Notation "unsimpl" "*" constr(E) :=
   unsimpl E; auto*.
 Tactic Notation "unsimpl" "*" constr(E) "in" hyp(H) := 
   unsimpl E in H; auto*.
-Tactic Notation "split" "*" :=
+Tactic Notation "split2" "*" :=
   split; auto*.
 Tactic Notation "split3" "*" := 
   split3; auto*.
@@ -463,7 +463,7 @@ Tactic Notation "destruct" "~" constr(H) "as" simple_intropattern(I) :=
   destruct H as I; auto.
 Tactic Notation "destructi" "~" constr(H) "as" simple_intropattern(I) :=
   destructi H as I; auto.
-Tactic Notation "split" "~" :=
+Tactic Notation "split2" "~" :=
   split; auto.
 Tactic Notation "split3" "~" :=
   split3; auto.

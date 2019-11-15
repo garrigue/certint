@@ -5,6 +5,8 @@
 
 Require Import Arith List Metatheory Cardinal.
 Require Import ML_SP_Definitions ML_SP_Eval.
+Require Omega.
+Ltac omega := Omega.omega.
 
 Set Implicit Arguments.
 
@@ -70,7 +72,7 @@ Section Moregen.
 
 End Moregen.
 
-Hint Resolve typ_subst_idem.
+Hint Resolve typ_subst_idem : core.
 
 (** Various properties of substitutions *)
 
@@ -139,7 +141,7 @@ Proof.
   inversions* H3.
 Qed.
 
-Hint Resolve add_binding_is_subst.
+Hint Resolve add_binding_is_subst : core.
 
 Lemma typ_subst_disjoint : forall S T,
   is_subst S -> disjoint (dom S) (typ_fv (typ_subst S T)).
@@ -165,12 +167,12 @@ Proof.
   use (typ_subst_res_fresh _ H H0).
 Qed.
 
-Hint Resolve typ_subst_disjoint typ_subst_res_fresh typ_subst_res_fresh'.
+Hint Resolve typ_subst_disjoint typ_subst_res_fresh typ_subst_res_fresh' : core.
 
 Lemma neq_notin_fv : forall v v0,
   v <> v0 -> v \notin (typ_fv (typ_fvar v0)).
 Proof. simpl*. Qed.
-Hint Resolve neq_notin_fv.
+Hint Resolve neq_notin_fv : core.
 
 Lemma is_subst_compose_var : forall S x y,
   is_subst S -> x <> y -> disjoint (dom S) {{y}} ->
@@ -191,7 +193,7 @@ Proof.
   apply* binds_map.
 Qed.
 
-Hint Resolve binds_add_binding.
+Hint Resolve binds_add_binding : core.
 
 Definition id := Env.empty (A:=typ).
 
@@ -293,7 +295,7 @@ Proof.
   case_rewrite R (get x K).
   subst*.
 Qed.
-Hint Resolve get_kind_binds.
+Hint Resolve get_kind_binds : core.
 
 Lemma get_kind_subst : forall S x K,
   get_kind x (map (kind_subst S) K) = kind_subst S (get_kind x K).
@@ -311,8 +313,8 @@ Definition decidable (A : Type) (P : A -> Prop) :=
 
 Definition in_dec L : decidable (fun x => x \in L).
   intros x.
-  case_eq (S.mem x L); intros. left. exact (S.mem_2 H).
-  right. exact (mem_3 H).
+  case_eq (S.mem x L); intros. left*. exact (S.mem_2 H).
+  right*.
 Qed.
 
 Section RemoveEnv.
@@ -410,7 +412,7 @@ Section RemoveEnv.
 
 End RemoveEnv.
 
-Hint Resolve ok_remove_env notin_remove_env.
+Hint Resolve ok_remove_env notin_remove_env : core.
 
 Lemma disjoint_add_binding : forall v T S (K:kenv),
   is_subst S -> ok K ->
@@ -424,7 +426,7 @@ Proof.
   simpl; rewrite* dom_map.
 Qed.
 
-Hint Resolve disjoint_add_binding.
+Hint Resolve disjoint_add_binding : core.
 
 (* ====================================================================== *)
 (** Start of the algorithm *)
@@ -477,7 +479,7 @@ Definition unify_kinds (k1 k2:kind) : option (kind * list (typ*typ)).
   match k1, k2 with
   | None, _ => Some (k2, nil)
   | Some _, None => Some (k1, nil)
-  | Some (Kind kc1 kv1 kr1 kh1), Some (Kind kc2 kv2 kr2 kh2) =>
+  | Some (@Kind kc1 kv1 kr1 kh1), Some (@Kind kc2 kv2 kr2 kh2) =>
     let kc := Cstr.lub kc1 kc2 in
     if Cstr.valid_dec kc then
       let krp := unify_kind_rel (kr1 ++ kr2) nil (Cstr.unique kc) nil in
@@ -840,7 +842,6 @@ Proof.
   apply cardinal_subset.
   sets_solve.
   apply* really_all_fv_decr.
-    clearbody S; simpl*.
   fold S.
   unfold really_all_fv in *.
   simpl in *.
@@ -899,14 +900,14 @@ Definition Acc_lt2_lt : forall a b c d,
   c < a -> Acc lt2 (a,b) -> Acc lt2 (c,d).
   intros.
   apply (Acc_inv H0).
-  left; simpl*.
+  left*.
 Defined.
 
 Definition Acc_lt2_le : forall a b c d,
   c <= a -> d < b -> Acc lt2 (a,b) -> Acc lt2 (c,d).
   intros.
   apply (Acc_inv H1).
-  destruct H; [right|left]; simpl*.
+  destruct H; [right*|left*]; simpl*.
   auto with arith.
 Defined.
 
@@ -924,7 +925,7 @@ Definition size_pairs2 S K pairs :=
 Lemma lt2_le : forall a b c d,
   a <= c -> b < d -> lt2 (a,b) (c,d).
 Proof.
-  intros; destruct H. right; simpl*. left; simpl; omega.
+  intros; destruct H. right*; simpl*. left*; simpl; omega.
 Qed.
 
 Lemma size_pairs2_tl : forall S K pairs p,
@@ -936,7 +937,7 @@ Proof.
     apply le_n_S. apply cardinal_subset. auto.
   unfold pairs_size; simpl. omega.
 Qed.
-Hint Resolve size_pairs2_tl.
+Hint Resolve size_pairs2_tl : core.
 
 Lemma size_pairs2_comm : forall S K T1 T2 pairs,
   size_pairs2 S K ((T1,T2)::pairs) = size_pairs2 S K ((T2,T1)::pairs).
@@ -959,7 +960,7 @@ Lemma size_pairs2_nv : forall v T T1 T2,
   lt2 (size_pairs2 (compose (v ~ T) S) (remove_env K v) pairs) (size T1 T2).
 Proof.
   introv R1 R2 R3.
-  left. simpl.
+  left*. simpl.
   unfold size_pairs at 2, size_pairs, really_all_fv, all_fv; simpl.
   rewrite* <- (typ_subst_idem T1 HS).
   rewrite* <- (typ_subst_idem T2 HS).
@@ -980,7 +981,7 @@ Proof.
   rewrite <- (typ_subst_idem T1 HS).
   rewrite <- (typ_subst_idem T2 HS).
   rewrite R1; rewrite R2.
-  right; simpl; split.
+  right*; simpl; split.
     repeat rewrite union_assoc.
     rewrite <- (union_assoc _ (typ_fv (typ_subst S t))).
     rewrite <- (union_comm _ (typ_fv (typ_subst S t))).
@@ -988,7 +989,7 @@ Proof.
   omega.
 Qed.
 
-Hint Resolve size_pairs2_tl size_pairs2_nv size_pairs2_arrow.
+Hint Resolve size_pairs2_tl size_pairs2_nv size_pairs2_arrow : core.
 
 Lemma unify1_decr_nv : forall v T T1 T2,
   unify_nv K S v T = Uok pairs' K' S' ->
@@ -1001,7 +1002,7 @@ Proof.
   case_rewrite R3 (S.mem v (typ_fv T)).
   use (mem_3 R3).
   case_rewrite R4 (get_kind v K).
-  inversions HU.
+  inversion HU.
   apply* size_pairs2_nv.
 Qed.
 
@@ -1023,7 +1024,7 @@ Proof.
      unfold unify_vars in HU.
      case_rewrite R3 (unify_kinds (get_kind v K) (get_kind v0 K)).
      destruct p. inversions HU; clear HU.
-     left. simpl.
+     left*. simpl.
      unfold size_pairs at 2, really_all_fv, all_fv. simpl.
      rewrite <- (typ_subst_idem T1 HS).
      rewrite <- (typ_subst_idem T2 HS).
@@ -1111,7 +1112,7 @@ Qed.
 
 End Unify1.
 
-Hint Resolve unify1_kok unify1_subst unify1_decr.
+Hint Resolve unify1_kok unify1_subst unify1_decr : core.
 
 (* Termination lemmas used directly inside the algorithm *)
 
@@ -1162,7 +1163,7 @@ Definition unify1_dep : forall T1 T2 K S,
   {unify1 T1 T2 K S = Ufail}.
 introv HS HK.
 case_eq (unify1 T1 T2 K S); introv R1.
-  left; exists (l,k,s); intuition eauto.
+  left*; exists (l,k,s); intuition eauto.
   rewrite H; apply* unify1_decr.
 right*.
 Qed.
@@ -1174,7 +1175,7 @@ Fixpoint unify pairs K S (HS:is_subst S) (HK:ok K) (h:Accu S K pairs) {struct h}
   | (T1, T2) :: pairs => fun eq =>
     match @unify1_dep T1 T2 K S HS HK with
     | inright _ => None
-    | inleft (exist (pairs', K', S') (conj _ (conj HK' (conj HS' lt')))) =>
+    | inleft (exist _ (pairs', K', S') (conj _ (conj HK' (conj HS' lt')))) =>
       @unify (pairs' ++ pairs) K' S' HS' HK'
        (Acc_inv h _ (lt' _ _ eq))
     end
@@ -1195,7 +1196,7 @@ Proof.
   rewrite normalize_unify.
   pose (h1 := (size_pairs S K pairs + 1, pairs_size S pairs)).
   assert (lt2 (size_pairs2 S K pairs) h1)
-    by (unfold h1, size_pairs2, size_pairs; left; simpl; omega).
+    by (unfold h1, size_pairs2, size_pairs; left*; simpl; omega).
   clearbody h1; gen pairs K S.
   induction h1 using (well_founded_ind lt2_wf); intros.
   destruct pairs as [|[T1 T2]].
@@ -1224,7 +1225,7 @@ Proof.
   induction 1; auto.
 Qed.
 
-Hint Resolve unify_spec_subst unify_spec_kok.
+Hint Resolve unify_spec_subst unify_spec_kok : core.
 
 Definition kind_entails k k' :=
   match k', k with
@@ -1243,13 +1244,13 @@ Proof.
   apply* (@wk_kind k'0). apply* (@entails_trans k'0 k0).
 Qed.
 
-Hint Resolve kind_entails_well_kinded.
+Hint Resolve kind_entails_well_kinded : core.
 
 Lemma unifies_nil : forall S, unifies S nil.
 Proof.
   intros; intro; intros; contradiction.
 Qed.
-Hint Resolve unifies_nil.
+Hint Resolve unifies_nil : core.
 
 Section Soundness.
 
@@ -1334,7 +1335,7 @@ Proof.
     (fun K S _ => is_subst S' /\
       forall x T, binds x (typ_subst S T) S -> binds x (typ_subst S' T) S'));
     intros.
-    destruct H4; split*.
+    destruct H4; split2*.
     intros. apply H5.
     unfold S1. apply* binds_add_binding.
   intuition.
@@ -1363,7 +1364,7 @@ Proof.
   simpl. congruence.
 Qed.
 
-Hint Resolve typ_subst_extend.
+Hint Resolve typ_subst_extend : core.
 
 Theorem unify_types : forall pairs K S,
   unify_spec pairs K S (Some (K',S')) ->
@@ -1393,7 +1394,7 @@ Lemma unify_kind_rel_keep : forall kr kr' uniq pairs k' l,
   unify_kind_rel kr kr' uniq pairs = (k', l) ->
   incl kr' k' /\ incl pairs l.
 Proof.
-  induction kr; simpl; intros. inversions H. split*.
+  induction kr; simpl; intros. inversions H. split2*.
   destruct a.
   case_rewrite R (uniq a).
     case_rewrite R1 (assoc Cstr.eq_dec a kr'); destruct* (IHkr _ _ _ _ _ H).
@@ -1437,12 +1438,12 @@ Proof.
      rewrite R1 in *.
      use (unify_kind_rel_incl _ _ _ _ R1 H0).
      destruct (proj2 (Cstr.entails_lub kc kc0 _) (Cstr.entails_refl _)).
-     split; split*; simpl; intros;
+     split; split2*; simpl; intros;
        rewrite R1; apply H; unfold map_snd; rewrite* map_app.
-    split*.
+    split2*.
     inversions H; clear H.
     simpl. apply entails_refl.
-   split*.
+   split2*.
    inversions H; clear H.
    simpl. apply entails_refl.
   auto.
@@ -1621,7 +1622,7 @@ Proof.
         inversions H1; clear H1.
         apply* (kh' a).
         apply H.
-        right.
+        right*.
         unfold map_snd; rewrite map_app.
         use (in_map_snd (typ_subst S) _ _ _ (assoc_sound _ _ _ R1)).
       intuition.
@@ -1719,7 +1720,7 @@ Proof.
     clear -H0 HT.
     destruct (typ_subst S0 t0); try discriminate.
     elim (HT v). auto.
-  esplit; esplit; esplit; split*. intuition.
+  esplit; esplit; esplit; split2*. intuition.
     intro. rewrite* typ_subst_compose.
     rewrite typ_subst_prebind. apply Hext. congruence.
   intro; intros.
@@ -1744,7 +1745,7 @@ Proof.
   rewrite Heq in H.
   destruct* (unify_kinds_complete _ _ _ _ H H0) as [k [l [HU [Heq' Hke]]]].
   rewrite HU; clear HU.
-  esplit; esplit; esplit; split*. intuition.
+  esplit; esplit; esplit; split2*. intuition.
     intro. rewrite* typ_subst_compose.
     rewrite typ_subst_prebind. apply Hext. congruence.
   intro; intros.
@@ -1769,12 +1770,12 @@ Proof.
     try solve [apply* unify_nv_complete; intros x Hx; discriminate].
       inversions E.
       destruct* (n0 === n0).
-      esplit; esplit; esplit; split*.
+      esplit; esplit; esplit; split2*.
     destruct (v == v0).
-      esplit; esplit; esplit; split*.
+      esplit; esplit; esplit; split2*.
     apply* unify_vars_complete.
   simpl in E; inversions E.
-  esplit; esplit; esplit; split*. intuition.
+  esplit; esplit; esplit; split2*. intuition.
   intro; intros.
   simpl in H; destruct H. inversions* H.
   destruct* H. inversions* H.
@@ -1791,7 +1792,7 @@ Lemma unify_complete0 : forall pairs K0 S0 r,
 Proof.
   introv H Hext Heq WS.
   induction H.
-      esplit; esplit; split*.
+      esplit; esplit; split2*.
     assert (E: typ_subst S T1 = typ_subst S T2) by auto.
     destruct (unify1_complete HK WS Hext T1 T2 E)
       as [K'0 [S'0 [pairs0 [HU1 H']]]].
@@ -1819,7 +1820,7 @@ Proof.
     intro; intros; simpl in H0; destruct* H0.
     inversions* H0.
   rewrite HU in H.
-  esplit; esplit; split*.
+  esplit; esplit; split2*.
 Qed.
 
 End Completeness.

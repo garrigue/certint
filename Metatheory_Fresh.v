@@ -114,6 +114,13 @@ Ltac notin_contradiction :=
 Ltac notin_neq_solve :=
   apply notin_singleton_r; notin_solve.
 
+Ltac fold_notin :=
+  repeat match goal with
+  | H: context [?x \in ?E -> False] |- _ => 
+    fold (not (x \in E)) in H 
+  | |- context [?x \in ?E -> False] => 
+    fold (not (x \in E)) end.
+
 
 (* ********************************************************************** *)
 (** Demo for notin *)
@@ -150,23 +157,16 @@ Qed.
 (***************************************************************************)
 (** Automation: hints to solve "notin" subgoals automatically. *)
 
-Hint Extern 1 (_ \notin _) => notin_solve.
-
-Hint Extern 1 (_ \in _ -> False) =>
-  repeat match goal with
-  | H: context [?x \in ?E -> False] |- _ => 
-    fold (not (x \in E)) in H 
-  | |- context [?x \in ?E -> False] => 
-    fold (not (x \in E)) end.
-
-Hint Extern 1 (_ <> _ :> var) => notin_neq_solve.
-Hint Extern 1 (_ <> _ :> S.elt) => notin_neq_solve.
+Hint Extern 1 (_ \notin _) => notin_solve : core.
+Hint Extern 1 (_ \in _ -> False) => fold_notin : core.
+Hint Extern 1 (_ <> _ :> var) => notin_neq_solve : core.
+Hint Extern 1 (_ <> _ :> S.elt) => notin_neq_solve : core.
 
 
 (* ********************************************************************** *)
 (** ** Tactics for fresh *)
 
-Hint Extern 1 (fresh _ _ _) => simpl.
+Hint Extern 1 (fresh _ _ _) => simpl : core.
 
 Lemma fresh_union_r : forall xs L1 L2 n,
   fresh (L1 \u L2) n xs -> fresh L1 n xs /\ fresh L2 n xs.
@@ -187,7 +187,7 @@ Lemma fresh_union_l : forall xs L1 L2 n,
 Proof.
   induction xs; simpl; intros; destruct n;
   try solve [ contradictions* ]. auto.
-  destruct H. destruct H0. split~.
+  destruct H. destruct H0. split2~.
   forward~ (@IHxs (L1 \u {{a}}) (L2 \u {{a}}) n). 
   intros K.
   rewrite <- (union_same {{a}}).
@@ -304,6 +304,6 @@ Qed.
 (***************************************************************************)
 (** Automation: hints to solve "fresh" subgoals automatically. *)
 
-Hint Extern 1 (fresh _ _ _) => fresh_solve.
+Hint Extern 1 (fresh _ _ _) => fresh_solve : core.
 
 

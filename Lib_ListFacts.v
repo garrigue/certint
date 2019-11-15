@@ -19,7 +19,7 @@ Proof.
   induction ys; simpl; intuition.
 Qed.
 
-Hint Resolve not_in_cons.
+Hint Resolve not_in_cons : core.
 
 Lemma not_In_app :
   forall (A : Type) (xs ys : list A) x,
@@ -29,7 +29,7 @@ Proof.
   case (in_app_or _ _ _ K); auto.
 Qed.
 
-Hint Resolve not_In_app.
+Hint Resolve not_In_app : core.
 
 Lemma elim_not_In_cons :
   forall (A : Type) (y : A) (ys : list A) (x : A),
@@ -55,7 +55,7 @@ Proof.
   intros A xs a H; inversion H.
 Qed.
 
-Hint Resolve incl_nil.
+Hint Resolve incl_nil : core.
 
 Lemma incl_trans :
   forall (A : Type) (xs ys zs : list A),
@@ -64,7 +64,7 @@ Proof.
   unfold incl; firstorder.
 Qed.
 
-Hint Immediate incl_trans.
+Hint Immediate incl_trans : core.
 
 Lemma In_incl :
   forall (A : Type) (x : A) (ys zs : list A),
@@ -73,7 +73,7 @@ Proof.
   unfold incl; auto.
 Qed.
 
-Hint Immediate In_incl.
+Hint Immediate In_incl : core.
 
 Lemma elim_incl_cons :
   forall (A : Type) (x : A) (xs zs : list A),
@@ -97,14 +97,14 @@ Qed.
   It's convenient to also have them in [core].
 *)
 
-Hint Resolve in_eq.
-Hint Resolve in_cons.
-Hint Resolve incl_refl.
-Hint Resolve incl_nil.
-Hint Resolve incl_cons.
-Hint Resolve incl_tl.
-Hint Resolve incl_app.
-Hint Immediate incl_trans.
+Hint Resolve in_eq : core.
+Hint Resolve in_cons : core.
+Hint Resolve incl_refl : core.
+Hint Resolve incl_nil : core.
+Hint Resolve incl_cons : core.
+Hint Resolve incl_tl : core.
+Hint Resolve incl_app : core.
+Hint Immediate incl_trans : core.
 
 (**
   The following tactics can be used to simply hypotheses concerning lists.
@@ -154,9 +154,9 @@ Ltac simpl_list_hyps :=
     | _ => idtac
   end.
 
-Hint Extern 4 (In ?x ?L) => simpl; simpl_list_hyps.
-Hint Extern 4 (~ In ?x ?L) => simpl; simpl_list_hyps.
-Hint Extern 4 (incl ?L1 ?L2) => simpl; simpl_list_hyps.
+Hint Extern 4 (In ?x ?L) => simpl; simpl_list_hyps : core.
+Hint Extern 4 (~ In ?x ?L) => simpl; simpl_list_hyps : core.
+Hint Extern 4 (incl ?L1 ?L2) => simpl; simpl_list_hyps : core.
 
 (* ********************************************************************** *)
 (** * Setoid facts *)
@@ -223,8 +223,8 @@ Hypothesis ltA_not_eqA : forall x y, ltA x y -> x <> y.
 Hypothesis ltA_eqA : forall x y z, ltA x y -> y = z -> ltA x z.
 Hypothesis eqA_ltA : forall x y z, x = y -> ltA y z -> ltA x z.
 
-Hint Resolve ltA_trans.
-Hint Immediate ltA_eqA eqA_ltA.
+Hint Resolve ltA_trans : core.
+Hint Immediate ltA_eqA eqA_ltA : core.
 
 Notation Inf := (lelistA ltA).
 Notation Sort := (sort ltA).
@@ -236,7 +236,7 @@ Proof.
   apply (ltA_not_eqA H).
   auto.
 Qed.
-Hint Resolve strictOrder_ltA.
+Hint Resolve strictOrder_ltA : core.
 
 Lemma not_InA_if_Sort_Inf :
   forall xs a, Sort xs -> Inf a xs -> ~ InA (@eq A) a xs.

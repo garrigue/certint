@@ -5,6 +5,7 @@
 
 Set Implicit Arguments.
 Require Import List Arith Lib_Tactic Lib_FinSet.
+Require Omega.
 Require Import Metatheory_Var.
 Require Import Metatheory_Fresh.
 Require Import Metatheory_Env.
@@ -19,7 +20,7 @@ Ltac case_rewrite H t :=
 
 (** Results on lists *)
 
-Hint Resolve in_or_app.
+Hint Resolve in_or_app : core.
 
 Lemma in_app_mid : forall (A:Set) (x a:A) l1 l2,
   In x (l1 ++ a :: l2) -> a = x \/ In x (l1 ++ l2).
@@ -45,9 +46,9 @@ Section Nth.
   Proof.
     induction Xs; intros. elim H.
     simpl in H; destruct* H.
-      exists 0; rewrite H; simpl; split*. apply lt_O_Sn.
+      exists 0; rewrite H; simpl; split2*. apply lt_O_Sn.
     destruct* IHXs as [n [Hlen EQ]].
-    exists (S n). simpl; split*.
+    exists (S n). simpl; split2*.
     apply* lt_n_S.
   Qed.
 End Nth.
@@ -69,6 +70,8 @@ Section Index.
     destruct* (eq_dec x a). discriminate.
   Qed.
 
+  Import Omega.
+
   Lemma index_ok : forall def a l n,
     index 0 a l = Some n ->
     n < length l /\ nth n l def = a.
@@ -81,7 +84,7 @@ Section Index.
     destruct (eq_dec a a0).
       subst.
       inversions H.
-      split*.
+      split2*.
       replace (n0 - n0) with 0 by omega.
       auto with arith.
     destruct (IHl _ _ H).
@@ -204,7 +207,7 @@ Section Combine.
   Qed.
 End Combine.
 
-Hint Resolve split_length in_map_snd.
+Hint Resolve split_length in_map_snd : core.
 
 
 Section Map.
@@ -306,7 +309,7 @@ Section Forall.
   Qed.
 End Forall.
 
-Hint Resolve list_forall_apply.
+Hint Resolve list_forall_apply : core.
 
 Ltac list_forall_find P l :=
   match goal with
@@ -329,7 +332,7 @@ Ltac list_forall_solve :=
     destruct H; [subst x; list_forall_find P a | list_forall_find P l]
   end.
 
-Hint Extern 1 (list_forall _ _) => solve [list_forall_solve].
+Hint Extern 1 (list_forall _ _) => solve [list_forall_solve] : core.
 
 Section Forall2.
 
@@ -340,7 +343,7 @@ Inductive list_forall2 (A B:Set) (P:A->B->Prop) : list A -> list B -> Prop :=
       list_forall2 P la lb ->
       list_forall2 P (a::la) (b::lb).
 
-Hint Constructors list_forall2.
+Hint Constructors list_forall2 : core.
 
 Variables A B : Set.
 Variable P : A -> B -> Prop.
@@ -447,9 +450,9 @@ Proof.
 Qed.
 End Forall2.
 
-Hint Constructors list_forall2.
+Hint Constructors list_forall2 : core.
 Hint Resolve list_forall2_app list_forall2_length
-  list_forall2_map list_forall2_imp list_forall2_refl.
+  list_forall2_map list_forall2_imp list_forall2_refl : core.
 
 Section Cut.
   Variable A:Set.
@@ -468,6 +471,7 @@ Section Cut.
     n <= length l -> cut n l = (l1, l2) ->
     length l1 = n /\ l = l1 ++ l2.
   Proof.
+    Import Omega.
     induction n; simpl; intros.
       inversions* H0.
     destruct l; simpl in *.
@@ -521,7 +525,7 @@ Proof.
   discriminate.
 Qed.
 
-Hint Resolve mem_3.
+Hint Resolve mem_3 : core.
 
 Lemma in_vars_dec : forall v S, {v \in S}+{v \notin S}.
 Proof.
@@ -572,7 +576,7 @@ Ltac find_in_goal L :=
       | |- _ \in S.diff ?L1 ?L2 =>
         apply S.diff_3; [find_in_goal L | notin_solve]
       | |- _ \in S.remove ?y ?L1 =>
-        let H1 := fresh "HE" in
+        let HE := fresh "HE" in
         apply S.remove_2;
         [try assumption; intro HE; rewrite HE in *; solve [auto]
         | find_in_goal L]
@@ -665,10 +669,10 @@ Proof.
   intros; sets_solve.
 Qed.
 
-Local Hint Extern 1 (_ \in _) => solve [sets_solve].
-Local Hint Extern 1 (_ << _) => solve [sets_solve].
-Local Hint Extern 1 (_ \notin _) => solve [sets_solve].
-Local Hint Extern 1 (disjoint _ _) => solve [sets_solve].
+Local Hint Extern 1 (_ \in _) => solve [sets_solve] : core.
+Local Hint Extern 1 (_ << _) => solve [sets_solve] : core.
+Local Hint Extern 1 (_ \notin _) => solve [sets_solve] : core.
+Local Hint Extern 1 (disjoint _ _) => solve [sets_solve] : core.
 
 (** More results on disjointness *)
 
@@ -703,7 +707,7 @@ Proof.
   rewrite dom_concat in H4.
   use (IHF H2).
 Qed.
-Hint Resolve ok_disjoint.
+Hint Resolve ok_disjoint : core.
 
 Lemma fresh_disjoint : forall n Xs L,
   fresh L n Xs -> disjoint (mkset Xs) L.
@@ -713,7 +717,7 @@ Proof.
   sets_solve.
   apply* (IHn _ _ H0).
 Qed.
-Hint Immediate fresh_disjoint.
+Hint Immediate fresh_disjoint : core.
 
 Lemma neq_disjoint : forall x y, x <> y -> disjoint {{x}} {{y}}.
   auto*.
@@ -745,7 +749,7 @@ Section Env.
   Definition in_or_concat (E F:env A) p H : In p (E & F) :=
     in_or_app F E p H.
 
-  Hint Resolve in_or_concat.
+  Hint Resolve in_or_concat : core.
 
   Lemma ok_cons : forall (E:env A) x (a:A),
     ok E -> x # E -> ok ((x,a) :: E).
@@ -1040,15 +1044,15 @@ Section Fv_in.
     destruct (S.union_1 H); clear H.
       exists v; exists a; auto.
     destruct (IHE H0) as [y [b [Hx Hy]]].
-    esplit. esplit. split*.
+    esplit. esplit. split2*.
   Qed.
 End Fv_in.
 End Env.
 
-Hint Resolve in_ok_binds ok_map0 ok_single.
-Hint Resolve list_forall_env_prop in_or_concat.
-Hint Immediate binds_in.
-Hint Unfold extends.
+Hint Resolve in_ok_binds ok_map0 ok_single : core.
+Hint Resolve list_forall_env_prop in_or_concat : core.
+Hint Immediate binds_in : core.
+Hint Unfold extends : core.
 
 Ltac instantiate_fail :=
   instantiate;
@@ -1076,7 +1080,7 @@ Ltac env_prop_solve :=
   | |- env_prop ?P _ => env_prop_hyps P; env_prop_solve_rec
   end.
 
-Hint Extern 2 (env_prop _ _) => env_prop_solve.
+Hint Extern 2 (env_prop _ _) => env_prop_solve : core.
 
 Lemma env_prop_solve_test : forall P (E F G : env nat) (a b : var),
   env_prop P (E & a ~ 0 & G) -> env_prop P (G & b ~ 0 & E).
@@ -1099,7 +1103,7 @@ Ltac ok_solve :=
   | |- disjoint _ _ => auto 1
   end.
 
-Hint Extern 2 (ok _) => solve [ok_solve].
+Hint Extern 2 (ok _) => solve [ok_solve] : core.
 
 Lemma test_ok_solve : forall E F G : env nat,
   ok (E & F) -> ok (F & G) -> ok (E & G) -> ok (E & F & G).
@@ -1127,7 +1131,7 @@ Lemma fresh_app : forall m Xs' n Xs L,
   fresh L n Xs -> fresh (L \u mkset Xs) m Xs' -> fresh L (n+m) (Xs++Xs').
 Proof.
   induction n; destruct Xs; simpl; intros; try contradiction. auto.
-  destruct H; split*.
+  destruct H; split2*.
 Qed.
 
 Lemma fresh_sub : forall n Xs L1 L2,
@@ -1221,7 +1225,7 @@ Proof.
   union_solve x; auto*.
 Qed.
 
-Hint Resolve notin_mkset.
+Hint Resolve notin_mkset : core.
 
 (** Other results on sets *)
 

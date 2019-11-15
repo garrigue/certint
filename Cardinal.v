@@ -84,9 +84,9 @@ Lemma nodup_notin_split : forall a l2 l1,
   NoDupA S.E.eq (l1 ++ a :: l2) -> ~InA S.E.eq a l1 /\ ~InA S.E.eq a l2.
 Proof.
   induction l1; simpl; intro; inversions H.
-    split*. intro. inversion H0.
+    split2*. intro. inversion H0.
   destruct (IHl1 H3).
-  split*.
+  split2*.
   intro. inversions H4.
     elim H2.
     apply (InA_eqA _ H6 (l:=l1++a::l2)).
@@ -107,6 +107,9 @@ Proof.
     apply* S.remove_2.
   apply S.diff_3.
     apply* S.remove_2.
+    intros Haa0.
+    rewrite Haa0 in H.
+    now elim Hn.
   intro; elim Hn.
   apply* S.remove_3.
 Qed.
@@ -122,7 +125,7 @@ Proof.
   intros. inversions* H.
 Qed.
 
-Hint Resolve sort_tl sort_lelistA.
+Hint Resolve sort_tl sort_lelistA : core.
 
 Lemma sort_split : forall y l2 l1,
   sort S.E.lt (l1 ++ y :: l2) -> sort S.E.lt (l1 ++ l2).
@@ -274,7 +277,7 @@ Proof.
       rewrite Hl in H2.
       use (sort_lt_nodup H2).
       destruct (nodup_notin_split _ _ _ H3).
-      subst; destruct* (InA_app _ H).
+      subst; destruct* (InA_app H).
     apply* S.remove_2.
     apply S.elements_2.
     rewrite Hl.

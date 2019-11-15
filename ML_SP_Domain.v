@@ -7,6 +7,7 @@ Set Implicit Arguments.
 Require Import Lib_FinSet Lib_FinSetImpl Metatheory List ListSet Arith.
 Require Import ML_SP_Inference_wf.
 Require Import ML_SP_Eval.
+Require Import Omega.
 
 Section ListSet.
   Variable A : Type.
@@ -15,13 +16,13 @@ Section ListSet.
   Definition set_incl : forall (s1 s2 : list A),
     sumbool (incl s1 s2) (~incl s1 s2).
     intros.
-    induction s1. left; intros x Hx. elim Hx.
+    induction s1. left*.
     case_eq (set_mem eq_dec a s2); intros.
       destruct IHs1.
-        left; intros x Hx. simpl in Hx; destruct Hx.
+        left*; intros x Hx. simpl in Hx; destruct Hx.
         subst; apply* set_mem_correct1. apply* i.
-      right. intro. elim n. intros x Hx. apply* H0.
-    right. intro; elim (set_mem_complete1 eq_dec _ _ H).
+      right*.
+    right*. intro; elim (set_mem_complete1 eq_dec _ _ H).
     apply* H0.
   Defined.
 End ListSet.
@@ -96,10 +97,10 @@ Module Cstr.
      end).
 
   Lemma ksort_dec : forall s, {s=Kbot} + {s<>Kbot}.
-    intro; destruct* s; right; intro; discriminate.
+    intro; destruct* s; right*; intro; discriminate.
   Qed.
 
-  Hint Resolve incl_tran.
+  Hint Resolve incl_tran : core.
   Lemma entails_lub : forall c1 c2 c,
     (entails c c1 /\ entails c c2) <-> entails c (lub c1 c2).
   Proof.
@@ -110,7 +111,7 @@ Module Cstr.
           destruct* H.
           destruct* H0.
           rewrite <- H, <- H0.
-          right; destruct* (cstr_sort c).
+          right*; destruct* (cstr_sort c).
         intros x Hx; destruct* (set_union_elim _ _ _ _ Hx).
       case_rewrite R1 (cstr_high c1);
       case_rewrite R2 (cstr_high c2);
@@ -158,7 +159,7 @@ Module Cstr.
     intros.
     destruct H as [HS [HL HH]]; destruct H0.
     destruct* HS.
-    rewrite <- H1. split*.
+    rewrite <- H1. split2*.
     case_rewrite R1 (cstr_high c1); case_rewrite R2 (cstr_high c2);
     auto*.
   Qed.
@@ -173,7 +174,7 @@ Section NoDup.
     end.
   Lemma nodup_elts : forall a l, In a l <-> In a (nodup l).
   Proof.
-    induction l; split*; simpl; intro; destruct IHl.
+    induction l; split2*; simpl; intro; destruct IHl.
       destruct H. subst.
         destruct* (In_dec eq_nat_dec a l).
       destruct* (In_dec eq_nat_dec a0 l).
@@ -200,8 +201,8 @@ Module Const.
   Definition arity op :=
     match op with
     | tag _       => 1
-    | matches l _ => length l
-    | record l _  => length l
+    | @matches l _ => length l
+    | @record l _  => length l
     | sub _       => 0
     | recf        => 1
     end.
@@ -231,7 +232,7 @@ Module Delta.
   Lemma valid_tag : forall s t,
     s <> Cstr.Kbot -> Cstr.valid (Cstr.C s (t::nil) None).
   Proof.
-    intros. split*. compute. auto.
+    intros. split2*. compute. auto.
   Qed.
 
   Lemma ksum : Cstr.Ksum <> Cstr.Kbot.
@@ -253,7 +254,7 @@ Module Delta.
   Lemma valid_matches : forall s l,
     s <> Cstr.Kbot -> Cstr.valid (Cstr.C s nil (Some l)).
   Proof.
-    intros; split*. simpl*.
+    intros; split2*. simpl*.
   Qed.
 
   Lemma coherent_matches : forall s n l,
@@ -277,12 +278,12 @@ Module Delta.
     | Const.tag t =>
       Sch (typ_arrow (typ_bvar 0) (typ_bvar 1))
         (None :: Some (Kind (valid_tag t ksum) (@coherent_tag _ t)) :: nil)
-    | Const.matches l ND =>
+    | @Const.matches l ND =>
       Sch (fold_right typ_arrow (typ_arrow (typ_bvar 0) (typ_bvar 1))
              (map matches_arg (seq 2 (length l))))
         (Some (Kind (@valid_matches _ l ksum) (coherent_matches 2 ND)) ::
          map (fun _ => None) (seq 0 (S (length l))))
-    | Const.record l ND =>
+    | @Const.record l ND =>
       Sch (fold_right typ_arrow (typ_bvar 0) (map typ_bvar (seq 1 (length l))))
         (Some (Kind (@valid_matches _ l kprod) (coherent_matches 1 ND)) ::
          map (fun _ => None) (seq 0 (length l)))
@@ -299,7 +300,7 @@ Module Delta.
   Fixpoint record_args (t : trm) tl {struct t} : list nat * list trm :=
     match t with
     | trm_app t1 t2 => record_args t1 (t2 :: tl)
-    | trm_cst (Const.record l _) => (l, tl)
+    | trm_cst (@Const.record l _) => (l, tl)
     | _ => (nil, nil)
     end.
 
@@ -313,7 +314,7 @@ Module Delta.
 
   Definition is_record c :=
     match c with
-    | Const.record _ _ => true
+    | Const.record _ => true
     | _ => false
     end.
 
@@ -328,7 +329,7 @@ Module Delta.
   Definition reduce c tl (vl:list_for_n value (S(Const.arity c)) tl) :=
     match c with
     | Const.tag _ => trm_default
-    | Const.matches l nd =>
+    | @Const.matches l nd =>
       match nth (length l) tl trm_def with
       | trm_app (trm_cst (Const.tag t)) t1 =>
         match index eq_nat_dec 0 t l with
@@ -337,7 +338,7 @@ Module Delta.
         end
       | _ => trm_default
       end
-    | Const.record _ _ => trm_default
+    | Const.record _ => trm_default
     | Const.sub f =>
       match tl with
       | nil    => trm_default
@@ -361,7 +362,7 @@ Module Delta.
     apply (@term_abs {}).
     intros. unfold trm_open; simpl. auto.
   Qed.
-  Hint Resolve term_default.
+  Hint Resolve term_default : core.
 
 
   Lemma value_term : forall e,
@@ -369,7 +370,7 @@ Module Delta.
   Proof.
     intros. destruct H. induction H; auto.
   Qed.
-  Hint Resolve value_term.
+  Hint Resolve value_term : core.
 
   Lemma term : forall c tl vl,
     term (@reduce c tl vl).
@@ -458,7 +459,7 @@ Module Delta.
   Qed.
 
   Hint Extern 1 (Defs.type (nth _ (typ_fvars _) typ_def)) =>
-    solve [apply type_nth_typ_vars; omega].
+    solve [apply type_nth_typ_vars; omega] : core.
 
   Lemma scheme : forall c, scheme (Delta.type c).
   Proof.
@@ -468,7 +469,7 @@ Module Delta.
     (* tag *)
     do 3 (destruct Xs; try discriminate).
     simpl.
-    split*.
+    split2*.
     unfold All_kind_types.
     repeat (constructor; simpl*).
     (* matches *)
@@ -567,7 +568,7 @@ Module SndHyp.
     destruct (IHtl (typ_arrow S T) H4).
     exists (x0 ++ S :: nil).
     rewrite fold_right_app; simpl.
-    split*.
+    split2*.
   Qed.
 
   Lemma map_nth : forall (A B:Set) d1 d2 (f:A->B) k l,
@@ -614,10 +615,10 @@ Module SndHyp.
   Proof.
     intros.
     gen K E T. induction H0; intros.
-        left. esplit; reflexivity.
-      right; exists c; exists (@nil trm).
-      split*.
-      rewrite <- minus_n_n. split*. split*.
+        left*.
+      right*; exists c; exists (@nil trm).
+      split2*.
+      rewrite <- minus_n_n. split2*. split2*.
     clear IHvalu2.
     inversions H; clear H; try discriminate.
     rewrite gc_lower_false in *.
@@ -625,10 +626,10 @@ Module SndHyp.
       destruct H. subst. inversion H0_.
     destruct H as [c [vl [HE [HC HV]]]].
     subst.
-    right; exists c; exists (vl ++ t2 :: nil).
-    rewrite const_app_app. split*.
+    right*; exists c; exists (vl ++ t2 :: nil).
+    rewrite const_app_app. split2*.
     split. omega.
-    destruct HV. split*.
+    destruct HV. split2*.
     assert (value t2) by exists* n2.
     apply* list_forall_app.
   Qed.
@@ -701,7 +702,7 @@ Module SndHyp.
     (* Kprod *)
     rewrite <- app_nil_end in H5.
     exists l. exists n. exists vl.
-    split*. subst. length_hyps. rewrite seq_length in *. omega.
+    split2*. subst. length_hyps. rewrite seq_length in *. omega.
     (* sub *)
     destruct Hvl.
     inversions TypA; try discriminate.
@@ -738,7 +739,7 @@ Module SndHyp.
       replace m with n; auto. rewrite app_nth2.
       replace (n + length TL - length TL) with n by omega.
       auto.  omega. omega.
-    right.
+    right*.
     apply (IHl (S n) i). simpl in H. omega.
     omega.
   Qed.
@@ -926,8 +927,8 @@ Module SndHyp.
 
   Definition reduce_clos c (cl : list clos) :=
     match c with
-    | Const.tag _ | Const.record _ _ => (clos_def, nil)
-    | Const.matches l nd =>
+    | Const.tag _ | Const.record _ => (clos_def, nil)
+    | @Const.matches l nd =>
       match nth (length l) cl clos_def with
       | clos_const (Const.tag t) (cl1 :: nil) =>
         match index eq_nat_dec 0 t l with
@@ -938,7 +939,7 @@ Module SndHyp.
       end
     | Const.sub f =>
       match cl with
-      | clos_const (Const.record l nd) cls :: _ =>
+      | clos_const (@Const.record l nd) cls :: _ =>
         match index eq_nat_dec 0 f l with
         | Some i => (nth i cls clos_def, nil)
         | None => (clos_def, nil)
@@ -1032,7 +1033,7 @@ Module SndHyp.
     list_forall clos_ok cls ->
     list_forall clos_ok (cl' :: cls').
   Proof.
-    Hint Extern 1 (list_forall _ _) => eq_pair.
+    Hint Extern 1 (list_forall _ _) => eq_pair : core.
     destruct c; simpl; intros; auto.
     (* matches *)
     puts (clos_ok_nth (length l) H0). intuition.
@@ -1061,7 +1062,7 @@ Module SndHyp.
     let (cl',arg') := reduce_clos c args' in
     equiv_clos cl cl' /\ list_forall2 equiv_clos arg arg'.
   Proof.
-    Hint Resolve equiv_cl_nth.
+    Hint Resolve equiv_cl_nth : core.
     destruct c; simpl; intros; auto*.
     (* matches *)
     puts (equiv_cl_nth (length l) H).
@@ -1081,4 +1082,4 @@ Module SndHyp.
 End SndHyp.
 
 Module Sound3 := Infer2.MyEval2.Mk3(SndHyp).
-(* Module Sound3 := MyEval2.Mk3(SndHyp). *)
+

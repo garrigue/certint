@@ -10,6 +10,8 @@ Require Import Lib_Tactic Lib_MyFSetInterface.
 (* ********************************************************************** *)
 (** * Interface for Finite Sets *)
 
+Declare Scope set_scope.
+
 Module Type FinSet.
 Declare Module E : UsualOrderedType.
 
@@ -60,7 +62,7 @@ End FinSet.
 Module FinSetFacts (M : FinSet).
 
 Import M.
-Open Local Scope set_scope.
+Local Open Scope set_scope.
 
 (** Interaction of in with constructions *)
 

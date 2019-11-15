@@ -8,6 +8,7 @@
 Set Implicit Arguments.
 Require Import Arith List Metatheory 
   ML_SP_Definitions ML_SP_Infrastructure.
+Require Omega.
 
 Module MkSound(Cstr:CstrIntf)(Const:CstIntf).
 
@@ -34,7 +35,7 @@ Proof.
   apply* ok_combine_fresh.
 Qed.
 
-Hint Resolve ok_kinds_open_vars.
+Hint Resolve ok_kinds_open_vars : core.
 
 (* ********************************************************************** *)
 (** Typing is preserved by weakening *)
@@ -62,7 +63,7 @@ Lemma proper_instance_weaken : forall K K' K'' Ks Us,
   proper_instance (K & K' & K'') Ks Us.
 Proof.
   intros.
-  destruct* H0 as [TM FM]; split*.
+  destruct* H0 as [TM FM]; split2*.
 Qed.
 
 Lemma typing_weaken_kinds : forall gc K K' K'' E t T,
@@ -137,7 +138,7 @@ Proof.
   apply* All_kind_types_imp.
 Qed.
 
-Hint Resolve All_kind_types_subst.
+Hint Resolve All_kind_types_subst : core.
 
 Lemma kenv_ok_subst : forall K K' K'' S,
   env_prop type S ->
@@ -161,7 +162,7 @@ Proof.
   subst*.
 Qed.
 
-Hint Resolve kenv_ok_subst env_ok_subst.
+Hint Resolve kenv_ok_subst env_ok_subst : core.
 
 (* ********************************************************************** *)
 (** Type substitution preserves typing *)
@@ -401,12 +402,12 @@ Proof.
   fold (typing_gc_let K E t2 S) in IHtyping2.
   apply (proj2 (A:=kenv_ok K)).
   induction IHtyping2 using typing_gc_ind.
-    split*; intros; subst.
+    split2*; intros; subst.
     gen H. gen_eq (typ_arrow T0 T) as S.
     fold (typing_gc_let K E t1 S) in IHtyping1.
     apply (proj2 (A:=kenv_ok K)).
     induction IHtyping1 using typing_gc_ind.
-      split*; intros; subst.
+      split2*; intros; subst.
       apply* typing_app.
     split.
       destruct (var_freshes L (length Ks)) as [Xs HXs].
@@ -474,8 +475,6 @@ Proof.
     pick_fresh x. 
     rewrite* (@trm_subst_intro x). 
     apply_empty* (@typing_trm_subst gc).
-      simpl in H0.
-      apply* H0.
     exists {}. intro. unfold kinds_open_vars, sch_open_vars; simpl.
     destruct Xs; simpl*. rewrite* typ_open_vars_nil.
   apply* (@typing_gc (gc,GcAny) Ks L).
@@ -496,6 +495,7 @@ Proof.
   pick_fresh x. rewrite* (@trm_subst_intro x).
    simpl in H1.
    apply_empty* (@typing_trm_subst true).
+   apply* H1.
   (* Let *)
   apply* (@typing_let (true,GcAny) M L1).
   (* Beta *)
@@ -558,7 +558,7 @@ Proof.
   change (exists t', fold_left trm_app (t2::nil) (const_app c vl) --> t').
   unfold const_app; rewrite <- fold_left_app.
   assert (list_for_n value (S(Const.arity c)) (vl ++ t2 :: nil)).
-    split*. apply* list_forall_app.
+    split2*. apply* list_forall_app.
   exists (Delta.reduce H2).
   apply red_delta.
 Qed.
@@ -570,8 +570,8 @@ Proof.
   induction Typ; intros; subst;
     try (pick_freshes (length Ks) Xs; apply* (H0 Xs)).
   inversions H1.
-  left. exists* 0.
-  right. pick_freshes (sch_arity M) Ys.
+  left*. exists* 0.
+  right*. pick_freshes (sch_arity M) Ys.
     destructi~ (@H0 Ys) as [[n Val1] | [t1' Red1]].
       assert (value t1). exists* n.
       exists* (t2 ^^ t1).
@@ -585,24 +585,24 @@ Proof.
       fold (typing_gc_let K E t T) in H.
       apply (proj2 (A:=kenv_ok K)).
       induction H using typing_gc_ind.
-        split*; intros; subst.
+        split2*; intros; subst.
         destruct Val1 as [n Val1]; inversions Val1.
-        right; exists* (t0 ^^ t2).
+        right*; exists* (t0 ^^ t2).
         case_eq (Const.arity c); intros.
-          right. rewrite H0 in Val1.
-          assert (list_for_n value 1 (t2 :: nil)) by split*.
+          right*. rewrite H0 in Val1.
+          assert (list_for_n value 1 (t2 :: nil)) by split2*.
           rewrite <- H0 in H1.
           exists (Delta.reduce H1).
           apply (red_delta H1).
-        left. exists n. rewrite H0 in Val1. destruct* Val2.
+        left*. exists n. rewrite H0 in Val1. destruct* Val2.
         destruct n.
-          right; apply* progress_delta.
-        left. destruct Val2. exists* n.
+          right*; apply* progress_delta.
+        left*. destruct Val2. exists* n.
       destruct (var_freshes L (length Ks)) as [Xs HXs].
       destruct* (H Xs); clear H.
-      right; exists* (trm_app t1' t2).
-    right; exists* (trm_app t1 t2').
-  left; exists* (Const.arity c).
+      right*; exists* (trm_app t1' t2).
+    right*; exists* (trm_app t1 t2').
+  left*; exists* (Const.arity c).
   destruct (var_freshes L (length Ks)) as [Xs HXs].
   apply* (H1 Xs).
 Qed.
@@ -620,7 +620,7 @@ Proof.
      rewrite He in H0; clear He.
      destruct (const_app_eq _ _ _ _ H0). subst.
      clear -vl Hl; destruct vl.
-     omega.
+     Omega.omega.
     elim (IHt1 t1'). exists* (S k). auto.
    elim (IHt2 t2'). exists* n2. auto.
   clear -vl H0.

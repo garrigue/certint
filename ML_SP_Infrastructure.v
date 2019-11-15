@@ -6,7 +6,7 @@
 ***************************************************************************)
 
 Set Implicit Arguments.
-Require Import List Metatheory ML_SP_Definitions.
+Require Import List Omega Metatheory ML_SP_Definitions.
 Require Import ProofIrrelevance.
 
 (* ====================================================================== *)
@@ -32,8 +32,8 @@ Ltac length_hyps :=
     (simpl in *; unfold typ_fvars, kinds_open_vars, kinds_open in *;
       try rewrite map_length in *; try rewrite app_length in *).
 
-Hint Extern 1 (_ = length _) => length_hyps; omega.
-Hint Extern 1 (length _ = _) => length_hyps; omega.
+Hint Extern 1 (_ = length _) => length_hyps; omega : core.
+Hint Extern 1 (length _ = _) => length_hyps; omega : core.
 
 Lemma dom_kinds_open_vars : forall Xs Ks,
   length Ks = length Xs ->
@@ -74,10 +74,10 @@ Ltac disjoint_solve :=
      try (rewrite dom_kinds_open_vars in * by (length_hyps; omega)));
   sets_solve.
 
-Hint Extern 1 (_ \in _) => solve [disjoint_solve].
-Hint Extern 1 (_ << _) => solve [disjoint_solve].
-Hint Extern 1 (_ \notin _) => solve [disjoint_solve].
-Hint Extern 1 (disjoint _ _) => solve [disjoint_solve].
+Hint Extern 1 (_ \in _) => solve [disjoint_solve] : core.
+Hint Extern 1 (_ << _) => solve [disjoint_solve] : core.
+Hint Extern 1 (_ \notin _) => solve [disjoint_solve] : core.
+Hint Extern 1 (disjoint _ _) => solve [disjoint_solve] : core.
 
 Lemma disjoint_fresh : forall n L1 Xs L2,
   fresh L1 n Xs ->
@@ -85,7 +85,7 @@ Lemma disjoint_fresh : forall n L1 Xs L2,
   fresh L2 n Xs.
 Proof.
   induction n; destruct Xs; simpl; intros; auto; try discriminate.
-  split*.
+  split2*.
 Qed.
 
 Ltac env_ok_hyps :=
@@ -104,8 +104,8 @@ Ltac env_ok_solve :=
 Ltac kenv_ok_solve :=
   kenv_ok_hyps; split; [ok_solve | env_prop_solve].
 
-Hint Extern 2 (env_ok _) => solve [env_ok_solve].
-Hint Extern 2 (kenv_ok _) => solve [kenv_ok_solve].
+Hint Extern 2 (env_ok _) => solve [env_ok_solve] : core.
+Hint Extern 2 (kenv_ok _) => solve [kenv_ok_solve] : core.
 
 (* ====================================================================== *)
 (** * Additional Definitions used in the Proofs *)
@@ -201,7 +201,7 @@ Tactic Notation "apply_fresh" "*" constr(T) "as" ident(x) :=
 (* ********************************************************************** *)
 (** ** Automation *)
 
-Hint Constructors type term well_kinded.
+Hint Constructors type term well_kinded : core.
 
 Lemma typ_def_fresh : typ_fv typ_def = {}.
 Proof.
@@ -209,9 +209,9 @@ Proof.
 Qed.
 
 Hint Extern 1 (_ \notin typ_fv typ_def) =>
-  rewrite typ_def_fresh.
+  rewrite typ_def_fresh : core.
 
-Hint Extern 1 (types _ _) => split; auto.
+Hint Extern 1 (types _ _) => split; auto : core.
 
 
 (* ====================================================================== *)
@@ -304,7 +304,7 @@ Proof.
   apply_fresh* term_let as y. rewrite* trm_subst_open_var.
 Qed.
 
-Hint Resolve trm_subst_term.
+Hint Resolve trm_subst_term : core.
 
 (** Conversion from locally closed abstractions and bodies *)
 
@@ -332,7 +332,7 @@ Proof.
   intros. inversion* H.
 Qed.
 
-Hint Resolve body_to_term_abs body_to_term_let.
+Hint Resolve body_to_term_abs body_to_term_let : core.
 
 Hint Extern 1 (term_body ?t) =>
   match goal with 
@@ -340,7 +340,7 @@ Hint Extern 1 (term_body ?t) =>
     apply term_abs_to_body 
   | H: context [trm_let ?t1 t] |- _ => 
     apply (@term_let_to_body t1) 
-  end.
+  end : core.
 
 (** ** Opening a body with a term gives a term *)
 
@@ -350,7 +350,7 @@ Proof.
   intros. destruct H. pick_fresh y. rewrite* (@trm_subst_intro y).
 Qed.
 
-Hint Resolve trm_open_term.
+Hint Resolve trm_open_term : core.
 
 
 (* ====================================================================== *)
@@ -422,8 +422,7 @@ Lemma typ_subst_fresh_trm_fvars : forall S xs,
 Proof.
   intros. apply typ_subst_fresh_list.
   induction xs; intro v; simpls. auto.
-    destruct H.
-    destruct* (eq_var_dec v a).
+  destruct H.
   destruct (fresh_union_r _ _ _ _ H0).
   use (IHxs H1).
 Qed.
@@ -570,7 +569,7 @@ Proof.
   case_eq (get X S); intros; auto*.
 Qed.
 
-Hint Resolve typ_subst_type.
+Hint Resolve typ_subst_type : core.
 
 (** List of types are stable by type substitution *)
 
@@ -679,9 +678,9 @@ Qed.
 
 Lemma entails_refl : forall k, entails k k.
 Proof.
-  intros. split*.
+  intros. split2*.
 Qed.
-Hint Resolve entails_refl.
+Hint Resolve entails_refl : core.
 
 Lemma entails_trans : forall k1 k2 k3,
   entails k1 k2 -> entails k2 k3 -> entails k1 k3.
@@ -707,7 +706,7 @@ Proof.
   rewrite <- e.
   apply* in_map_snd.
 Qed.
-Hint Resolve kind_subst_entails.
+Hint Resolve kind_subst_entails : core.
 
 (** Properties of well-kindedness *)
 
@@ -719,7 +718,7 @@ Proof.
     apply wk_any.
   apply* wk_kind.
 Qed.
-Hint Resolve well_kinded_extend.
+Hint Resolve well_kinded_extend : core.
 
 Lemma well_kinded_comm : forall K K' K'',
   ok (K & K' & K'') ->
@@ -744,7 +743,7 @@ Lemma well_kinded_weaken : forall K K' K'',
 Proof.
   intros. apply* well_kinded_comm.
 Qed.
-Hint Resolve well_kinded_weaken.
+Hint Resolve well_kinded_weaken : core.
 
 (** Well substitutions *)
 
@@ -774,7 +773,7 @@ Proof.
   apply* wk_kind.
   refine (entails_trans H6 _); auto.
 Qed.
-Hint Resolve well_kinded_subst.
+Hint Resolve well_kinded_subst : core.
 
 (** Properties of instantiation and constants *)
 
@@ -814,7 +813,7 @@ Lemma const_app_inv : forall c pl,
 Proof.
   intros.
   destruct* pl.
-  right.
+  right*.
   destruct* (exists_last (l:=t::pl)). intro; discriminate.
   destruct s. rewrite e.
   rewrite const_app_app. simpl.
@@ -828,7 +827,7 @@ Lemma trm_inst_app_inv : forall c pl tl,
 Proof.
   intros.
   destruct* (const_app_inv c pl).
-  right.
+  right*.
   destruct H as [x1 [x2 e]].
   rewrite e.
   exists (trm_inst x1 tl).
@@ -860,7 +859,7 @@ Proof.
   unfold All_kind_types. simpl*.
 Qed.
 
-Hint Resolve All_kind_types_None.
+Hint Resolve All_kind_types_None : core.
 
 Lemma All_kind_types_imp (P P' : typ -> Prop) k:
   (forall x, P x -> P' x) ->
@@ -951,7 +950,7 @@ Proof.
     rewrite* map_length.
   induction Xs; simpl*.
 Qed.
-Hint Immediate types_typ_fvars.
+Hint Immediate types_typ_fvars : core.
 
 (** Schemes are stable by type substitution. *)
 
@@ -1005,7 +1004,7 @@ Proof.
   rewrite* typ_subst_open_vars.
 Qed.
 
-Hint Resolve sch_subst_type.
+Hint Resolve sch_subst_type : core.
 
 (** Scheme arity is preserved by type substitution. *)
 
@@ -1026,14 +1025,14 @@ Proof.
   simpls. apply* typ_open_types.
 Qed.
 
-Hint Resolve sch_open_types.
+Hint Resolve sch_open_types : core.
 
 Definition kenv_ok_is_ok K (H:kenv_ok K) := proj1 H.
 Definition env_ok_is_ok E (H:env_ok E) := proj1 H.
 Definition kenv_ok_env_prop K (H:kenv_ok K) := proj2 H.
 Definition env_ok_env_prop E (H:env_ok E) := proj2 H.
 
-Hint Immediate kenv_ok_is_ok env_ok_is_ok kenv_ok_env_prop env_ok_env_prop.
+Hint Immediate kenv_ok_is_ok env_ok_is_ok kenv_ok_env_prop env_ok_env_prop : core.
 
 Ltac env_hyps T :=
   match T with
@@ -1042,10 +1041,10 @@ Ltac env_hyps T :=
   end.
 
 Hint Extern 2 (@env_prop ?T _ ?E) =>
-  progress env_hyps T; solve [env_prop_solve].
+  progress env_hyps T; solve [env_prop_solve] : core.
 
 Hint Extern 2 (@ok ?T ?E) =>
-  progress env_hyps T; solve [ok_solve].
+  progress env_hyps T; solve [ok_solve] : core.
 
 Lemma env_prop_binds : forall (A:Set) (P:A->Prop) x (a:A) E,
   binds x a E -> env_prop P E -> P a.
@@ -1059,7 +1058,7 @@ Qed.
 Module MkJudgInfra(Delta:DeltaIntf).
 Module Judge := MkJudge(Delta).
 Import Judge.
-Hint Constructors typing valu red.
+Hint Constructors typing valu red : core.
 
 (* ********************************************************************** *)
 (** ** Regularity of relations *)
@@ -1102,7 +1101,7 @@ Proof.
   intros. destruct H. induction H; auto.
 Qed.
 
-Hint Resolve value_regular.
+Hint Resolve value_regular : core.
 
 (** A reduction relation only holds on pairs of locally-closed terms. *)
 
@@ -1141,11 +1140,11 @@ Hint Extern 1 (term ?t) =>
   | H: red t _ |- _ => apply (proj1 (red_regular H))
   | H: red _ t |- _ => apply (proj2 (red_regular H))
   | H: value t |- _ => apply (value_regular H)
-  end.
+  end : core.
 
 Hint Extern 1 (type ?T) => match goal with
   | H: typing _ _ _ _ T |- _ => apply (proj44 (typing_regular H))
-  end.
+  end : core.
 
 End MkJudgInfra.
 

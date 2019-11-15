@@ -279,7 +279,7 @@ Module Type S.
   End Spec.
 
   (* begin hide *)
-  Hint Immediate In_1.
+  Hint Immediate In_1 : sets.
 
   Hint Resolve mem_1 mem_2 equal_1 equal_2 subset_1 subset_2 empty_1
     is_empty_1 is_empty_2 choose_1 choose_2 add_1 add_2 add_3 remove_1

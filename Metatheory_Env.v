@@ -9,6 +9,8 @@ Require Import Lib_Tactic List Decidable Metatheory_Var Metatheory_Fresh.
 (* ********************************************************************** *)
 (** * Definitions of Environments *)
 
+Declare Scope env_scope.
+
 Module Env.
 
 (* ********************************************************************** *)
@@ -66,25 +68,25 @@ End Definitions.
 (* ********************************************************************** *)
 (** ** Notations *)
 
-Implicit Arguments empty [A].
+Arguments empty [A].
 
 (** [x ~ a] is the notation for a singleton environment mapping x to a. *)
 
 Notation "x ~ a" := (single x a)
-  (at level 31, left associativity) : env_scope.
+  (at level 27, left associativity) : env_scope.
 
 (** [E & F] is the notation for concatenation of E and F. *)
 
 Notation "E & F" := (concat E F) 
-  (at level 40, left associativity) : env_scope.
+  (at level 28, left associativity) : env_scope.
 
 (** [x # E] to be read x fresh from E captures the fact that 
     x is unbound in E . *)
 
-Notation "x '#' E" := (x \notin (dom E)) (at level 60) : env_scope.
+Notation "x '#' E" := (x \notin (dom E)) (at level 67) : env_scope.
 
 Bind Scope env_scope with env.
-Open Local Scope env_scope.
+Local Open Scope env_scope.
 
 
 (* ********************************************************************** *)
@@ -127,9 +129,9 @@ End Relations.
 (* ********************************************************************** *)
 (** * Properties of Environemnts *)
 
-Hint Constructors ok.
+Hint Constructors ok : core.
 
-Open Local Scope env_scope.
+Local Open Scope env_scope.
 
 
 (* ********************************************************************** *)
@@ -238,8 +240,8 @@ Qed.
 
 End OpProperties.
 
-Implicit Arguments eq_empty_inv [A x a E F].
-Implicit Arguments eq_push_inv [A E x a E' x' a'].
+Arguments eq_empty_inv [A x a E F].
+Arguments eq_push_inv [A E x a E' x' a'].
 
 (** Simplification tactics *)
 
@@ -253,7 +255,7 @@ Hint Rewrite <- concat_assoc : rew_env.
 Tactic Notation "simpl_env" :=
   autorewrite with rew_env in *.
 
-Hint Extern 1 (_ # _) => simpl_env; notin_solve.
+Hint Extern 1 (_ # _) => simpl_env; notin_solve : core.
 
 (** The [env_fix] tactic is used to convert environments
   from [(x,a)::E] to [E & x ~ a]. *)
@@ -286,7 +288,7 @@ Section OkProperties.
 Variable A : Set.
 Implicit Types E F : env A.
 Implicit Types a b : A.
-Hint Constructors ok.
+Hint Constructors ok : core.
 
 (** Inversion for ok on concat *)
 
@@ -336,7 +338,7 @@ End OkProperties.
 
 (** Automation *)
 
-Hint Resolve fresh_mid ok_map.
+Hint Resolve fresh_mid ok_map : core.
 
 (* Hint Extern 1 (ok (?E & ?G)) =>
   match goal with H: context [E & ?F & G] |- _ =>
@@ -351,7 +353,7 @@ Variable A : Set.
 Implicit Types E F : env A.
 Implicit Types a b : A.
 
-Hint Extern 1 (_ \notin _) => notin_solve.
+Hint Extern 1 (_ \notin _) => notin_solve : core.
 
 (** Binds at head *)
 
@@ -509,15 +511,15 @@ Proof.
   unfold binds. destruct B as [a'|].
   destruct (Dec a a'). subst. 
     left*.
-    right. intros H. congruence.
-  right. intros H. congruence.
+    right*. intros H. congruence.
+  right*. intros H. congruence.
 Qed.
 
 End BindsProperties.
 
-Implicit Arguments binds_concat_inv [A x a E F].
+Arguments binds_concat_inv [A x a E F].
 
-Hint Resolve binds_head binds_tail.
+Hint Resolve binds_head binds_tail : core.
 
 
 (* ********************************************************************** *)
@@ -556,7 +558,7 @@ Qed.
 
 End ExtendsProperties.
 
-Hint Resolve extends_self extends_push extends_binds.
+Hint Resolve extends_self extends_push extends_binds : core.
 
 
 (* ********************************************************************** *)
@@ -593,7 +595,7 @@ Qed.
 
 End IterPush.
 
-Hint Resolve ok_concat_iter_push.
+Hint Resolve ok_concat_iter_push : core.
 
 Section Fv_in.
 
@@ -635,7 +637,7 @@ Opaque binds.
 
 Tactic Notation "binds_get" constr(H) "as" ident(EQ) :=
   match type of H with binds ?z ?a (?E & ?x ~ ?b & ?F) =>
-    let K := fresh in assert (K : ok (E & x ~ b & F)); 
+    let K := fresh "K" in assert (K : ok (E & x ~ b & F)); 
     [ auto | poses EQ (@binds_mid_eq _ z a b E F H K); clear K ] end.
 
 (** [binds_get H] expects an hypothesis [H] of the form 
@@ -682,7 +684,7 @@ Ltac binds_cases H :=
 
 Hint Resolve 
   binds_concat_fresh binds_concat_ok 
-  binds_prepend binds_map.
+  binds_prepend binds_map : core.
 
 
 (* ********************************************************************** *)

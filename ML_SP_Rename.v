@@ -126,7 +126,7 @@ Proof.
   destruct* (IHKs Xs Ys (L \u {{v0}}) Z k) as [Z' [HT HG]].
   exists Z'.
   simpl in HT.
-  split*.
+  split2*.
   destruct* (Z' == v0).
   subst.
   puts (binds_dom HG).
@@ -149,7 +149,7 @@ Proof.
   destruct* (IHKs Xs Ys (L \u {{v}}) Z k) as [Z' [HT HG]].
   exists Z'.
   simpl in HT.
-  split*.
+  split2*.
   destruct* (Z == v).
   subst.
   elim (in_fresh _ _ H0 (in_combine_l _ _ _ _ H1)). auto.
@@ -401,7 +401,7 @@ Proof.
   induction 1; intros; auto*.
   (* Var *)
   apply* typing_var.
-  destruct H2; split*.
+  destruct H2; split2*.
   apply* list_forall2_imp.
   intros.
   inversions* H6.
@@ -580,18 +580,18 @@ Proof.
     eapply wk_kind.
       apply* binds_concat_fresh.
     destruct c as [kc kv kr kh]; simpl in *.
-    destruct H4; split*. clear H.
+    destruct H4; split2*. clear H.
     intros.
     apply H0; clear H0.
     unfold All_kind_types in H8; simpl in *.
     clear -Fr' H8 H H1.
     induction kr; simpl in *. auto.
     inversion_clear H8; destruct* H.
-    clear IHkr; left; subst.
+    clear IHkr; left*; subst.
     rewrite* (typ_open_extra Us (typ_fvars Xs)).
     unfold typ_open_vars in H0.
     apply (typ_open_other_type (typ_fvars Xs')). auto.
-    split*.
+    split2*.
   clear -Fr.
   apply* well_kinded_combine.
 Qed.
@@ -639,7 +639,7 @@ Lemma ok_fresh : forall (A:Set) Xs (Us:list A) L,
   fresh L (length Xs) Xs.
 Proof.
   induction Xs; destruct Us; simpl; intros; try discriminate. auto.
-  split*.
+  split2*.
   inversions H. 
   apply* (IHXs Us).
 Qed.
@@ -681,13 +681,13 @@ Proof.
       apply (in_combine_r _ _ _ _ H8).
     split.
       destruct H2.
-      split*.
+      split2*.
       clear -H7; induction Us; simpl; inversion* H7.
       induction Xs; simpl*.
-    simpl; apply* well_kinded_combine2. simpl in *. split*.
+    simpl; apply* well_kinded_combine2. simpl in *. split2*.
   unfold sch_open. simpl.
   assert (K; E |(false,GcAny)|= trm_fvar x ~: (Sch U Ks) ^^ Us).
-    apply* typing_var. split*.
+    apply* typing_var. split2*.
   assert (type ((Sch U Ks) ^^ Us)) by auto.
   unfold sch_open in H8. simpl in H8.
   rewrite* (typ_open_extra Us (typ_fvars Xs)).
@@ -818,7 +818,7 @@ Proof.
     by (unfold Ks'; apply* scheme_extra).
   destruct* (H2 x Hx' LK (F & x ~ Sch U (Ks ++ Ks'))) as [K2 [HD2 Typ2]];
     clear H2 Hx'.
-  exists K2; split~.
+  exists K2; split2*.
   assert (LenS: length (Ks ++ Ks') = length (Xs ++ list_fst K1)).
     repeat rewrite app_length; unfold list_fst; rewrite map_length.
     unfold Ks', list_snd; repeat rewrite map_length.
@@ -845,7 +845,7 @@ Proof.
           puts (kinds_generalize_disjoint (Xs ++ list_fst K1) (list_snd K1)).
           fold Ks' in H1.
           rewrite mkset_app.
-          unfold sch_fv in *; simpl S.union in *.
+          unfold sch_fv in *; simpl in *.
           rewrite kind_fv_list_app.
           assert (mkset (list_fst K1) = dom K1).
             rewrite <- (dom_combine (list_fst K1) (list_snd K1)).
@@ -926,11 +926,11 @@ Proof.
     exists (nil(A:=kind)). 
     rewrite <- app_nil_end. auto.
   destruct (H1 x Hx' LK _ HF) as [K' [HD Typ]]; clear H1 Hx'.
-    split*. destruct H3; apply* env_prop_concat.
+    split2*. destruct H3; apply* env_prop_concat.
     intro; intros. destruct* H3. inversions H3.
-    intro; intros. simpl. split*. unfold typ_open_vars.
+    intro; intros. simpl. split2*. unfold typ_open_vars.
     clear -H; induction H; simpl*.
-  exists K'; split*.
+  exists K'; split2*.
   apply* (@typing_abs (false,GcAny) (L \u dom F \u trm_fv t1 \u {{x}})).
   intros.
   replace (F & x0 ~ Sch U nil) with (F & x0 ~ Sch U nil & empty)
@@ -960,7 +960,7 @@ Proof.
   destruct (IHtyping2 (LK \u dom K1) F H1 H2) as [K2 [HD2 Typ2]].
   exists (K1 & K2).
   assert (kenv_ok (K & K1 & K2)) by auto.
-  split~.
+  split2*.
   rewrite <- concat_assoc.
   eapply typing_app.
     apply* typing_weaken_kinds'.

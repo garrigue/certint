@@ -34,7 +34,7 @@ Inductive list_forall (A : Set) (P : A -> Prop) : list A -> Prop :=
   | list_forall_cons : forall L x,
        list_forall P L -> P x -> list_forall P (x::L).
 
-Hint Constructors list_forall.
+Hint Constructors list_forall : core.
 
 Lemma list_forall_concat : forall (A : Set) (P : A -> Prop) L1 L2,
   list_forall P L1 -> 
@@ -60,11 +60,11 @@ Qed.
 
 Hint Extern 1 (?n = length ?xs) => 
  match goal with H: list_for_n _ ?n ?xs |- _ => 
-  apply (proj1 H) end.
+  apply (proj1 H) end : more.
 
 Hint Extern 1 (length ?xs = ?n) => 
  match goal with H: list_for_n _ ?n ?xs |- _ => 
-  apply (sym_eq (proj1 H)) end.
+  apply (sym_eq (proj1 H)) end : more.
 
 
 

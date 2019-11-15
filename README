@@ -1,6 +1,6 @@
 
   A Certified Interpreter for ML with Structural Polymorphism
-                  Jacques Garrigue, January 2013
+                  Jacques Garrigue, November 2019
 
 The files in this archive contain a proof of type soundness for structural
 polymorphism based on local constraints [1], together with soundness
@@ -27,8 +27,8 @@ the core ML proof, but were heavily modified.
 Eval, Unify, Inference and Domain are completely new.
 Read the accompanying paper [3] for information on the proof.
 
-All the above development were checked with coq 8.4.
-(Porting to 8.4 is the only change wrt. since the version of september 2010)
+All the above development were checked with coq 8.10.1.
+(Porting to 8.10.1 is the only change wrt. the version of september 2010)
 You can compile them with "sh build.sh"
 
 You can also play with the type checker. It does not work inside Coq
@@ -56,7 +56,8 @@ $ ocaml
     and Stephanie Weirich: Engineering Formal Metatheory. POPL'08.
     http://www.chargueraud.org/arthur/research/2007/binders/
 
-[3] A Certified Interpreter for ML with Structural Polymorphism.
-    Presented at APLAS'10, Shanghai, China, November 2010.
-    Extended version submitted to MSCS.
-    http://www.math.nagoya-u.ac.jp/~garrigue/papers/aplas20120.html
+[3] Jacques Garrigue: A Certified Interpreter of ML with Structural
+                      Polymorphism and Recursive Types
+    Mathematical Structures in Computer Science, November 2014, pages 1-25.
+    Earlier version presented at APLAS'10, Shanghai, China, November 2010.
+    http://www.math.nagoya-u.ac.jp/~garrigue/papers/aplas2010.html

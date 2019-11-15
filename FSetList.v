@@ -239,7 +239,7 @@ Module Raw (X: OrderedType).
   simpl; intros; case (X.compare x a); intuition; inversion H0;
    intuition.
   Qed.
-  Hint Resolve add_Inf.
+  Hint Resolve add_Inf : core.
   
   Lemma add_sort : forall (s : t) (Hs : Sort s) (x : elt), Sort (add x s).
   Proof.
@@ -287,7 +287,7 @@ Module Raw (X: OrderedType).
   simpl; intros; case (X.compare x a); intuition; inversion_clear H0; auto.
   inversion_clear Hs; apply Inf_lt with a; auto.
   Qed.
-  Hint Resolve remove_Inf.
+  Hint Resolve remove_Inf : core.
 
   Lemma remove_sort :
    forall (s : t) (Hs : Sort s) (x : elt), Sort (remove x s).
@@ -365,7 +365,7 @@ Module Raw (X: OrderedType).
   intros i His His'; inversion_clear His; inversion_clear His'.
   case (X.compare x x'); auto.
   Qed.
-  Hint Resolve union_Inf.
+  Hint Resolve union_Inf : core.
  
   Lemma union_sort :
    forall (s s' : t) (Hs : Sort s) (Hs' : Sort s'), Sort (union s s').
@@ -413,7 +413,7 @@ Module Raw (X: OrderedType).
   apply H3; auto.
   apply Inf_lt with x'; auto.
   Qed.
-  Hint Resolve inter_Inf. 
+  Hint Resolve inter_Inf : core.
 
   Lemma inter_sort :
    forall (s s' : t) (Hs : Sort s) (Hs' : Sort s'), Sort (inter s s').
@@ -473,7 +473,7 @@ Module Raw (X: OrderedType).
   apply H10; trivial.
   apply Inf_lt with x'; auto.
   Qed.
-  Hint Resolve diff_Inf. 
+  Hint Resolve diff_Inf : core.
 
   Lemma diff_sort :
    forall (s s' : t) (Hs : Sort s) (Hs' : Sort s'), Sort (diff s s').
@@ -976,7 +976,7 @@ Module Raw (X: OrderedType).
     | lt_cons_eq :
         forall (x y : elt) (s s' : t),
         X.eq x y -> lt s s' -> lt (x :: s) (y :: s').
-  Hint Constructors lt.
+  Hint Constructors lt : core.
    
   Lemma lt_trans : forall s s' s'' : t, lt s s' -> lt s' s'' -> lt s s''.
   Proof. 
@@ -1040,7 +1040,7 @@ Module Raw (X: OrderedType).
   Defined.
 
   End ForNotations. 
-  Hint Constructors lt.
+  Hint Constructors lt : core.
 
 End Raw.
 

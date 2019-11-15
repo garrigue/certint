@@ -6,6 +6,7 @@
 Set Implicit Arguments.
 
 Require Import List Arith Metatheory ML_SP_Domain.
+Require Omega.
 Import Infer2.
 Import MyEval2.
 Import Sound3.
@@ -34,13 +35,11 @@ Definition ok_dec : decidable (@ok sch).
   destruct a; env_fix.
   destruct IHE.
     case_eq (get v E); intros.
-      right; intro.
+      right*; intro.
       elim (binds_fresh H).
       inversions* H0.
     auto.
-  right; intro.
-  elim n.
-  inversion* H.
+  right*.
 Defined.
 
 Inductive type_n (n:nat) : typ -> Prop :=
@@ -48,16 +47,16 @@ Inductive type_n (n:nat) : typ -> Prop :=
   | typn_fvar : forall x, type_n n (typ_fvar x)
   | typn_arrow : forall T1 T2,
       type_n n T1 -> type_n n T2 -> type_n n (typ_arrow T1 T2).
-Hint Constructors type_n.
+Hint Constructors type_n : core.
 
 Definition type_n_dec : forall n , decidable (type_n n).
   introv T; induction* T.
     destruct* (le_lt_dec n n0).
-    right; intro. inversions H. omega.
+    right*; intro. inversions H. Omega.omega.
   destruct IHT1.
     destruct* IHT2.
-    right; intro. inversions* H.
-  right; intro. inversions* H.
+    right*; intro. inversions* H.
+  right*; intro. inversions* H.
 Defined.
 
 Lemma type_n_typ_body : forall T Xs,
@@ -79,7 +78,7 @@ Definition list_forall_dec : forall (A:Set) (P:A->Prop),
   introv HP l; induction l.
     left*.
   destruct* (HP a).
-  right; intro. inversion* H.
+  right*; intro. inversion* H.
 Defined.
   
 Definition scheme_dec : decidable scheme.
@@ -91,11 +90,11 @@ Definition scheme_dec : decidable scheme.
     unfold All_kind_types.
     puts (list_forall_dec (fun k => H (kind_types k))).
     destruct (H0 Ks).
-      left; intuition; subst. apply* (proj1 (type_n_typ_body T Xs)).
+      left*; intuition; subst. apply* (proj1 (type_n_typ_body T Xs)).
       apply* list_forall_imp; intros. simpl in H1.
       apply* list_forall_imp; intros.
       apply* (proj1 (type_n_typ_body x0 Xs)).
-    right; intro.
+    right*; intro.
     elim n0; clear -H1.
     destruct (var_freshes {} n).
     destruct* (H1 x); clear H1.
@@ -103,7 +102,7 @@ Definition scheme_dec : decidable scheme.
     refine (list_forall_imp _ _ H1); intros.
     rewrite (fresh_length _ _ _ f).
     refine (proj2 (type_n_typ_body x1 x) H2); auto*.
-  right; intro.
+  right*; intro.
   elim n0; clear -H.
   destruct (var_freshes {} n).
   destruct* (H x); clear H.
@@ -114,7 +113,7 @@ Defined.
 Definition env_prop_dec : forall (A:Set) (P:A->Prop),
   decidable P -> decidable (env_prop P).
   introv HP E; induction E.
-    left; intro; intros. elim H.
+    left*; intro; intros. elim H.
   destruct a; env_fix.
   destruct* (HP a).
 Defined.
@@ -133,20 +132,20 @@ Definition typinf1 : forall E t,
   case_eq (S.is_empty (env_fv E)); intros.
     assert (Hempty: env_fv E = {}).
       puts (S.is_empty_2 H).
-      apply eq_ext; split*. intro Ha; elim (H0 _ Ha).
+      apply eq_ext; split2*. intro Ha; elim (H0 _ Ha).
     clear H; destruct (ok_dec E).
       destruct (env_prop_dec scheme_dec E).
         case_eq (typinf' E t0); intros.
-          left; exists p. destruct p.
+          left*; exists p. destruct p.
           apply* typinf_sound'.
-        right; right; introv Typ.
+        right*; right*; introv Typ.
         destruct* (Rename2.typing_remove_gc Typ {} (@env_weaker_refl E))
           as [K' [HK' Typ']].
         destruct* (typinf_principal' Hempty Typ') as [K0 [T' [TI]]].
         rewrite H in TI; discriminate.
-      right; right; introv Typ. elim n; auto.
-    right; right; introv Typ. elim n; auto.
-  right; left.
+      right*.
+    right*.
+  right*; left*.
   intro. rewrite H0 in H.
   puts (S.is_empty_1 (S.empty_1)).
   rewrite H1 in H; discriminate.
@@ -155,5 +154,6 @@ Defined.
 Definition eval1 fenv t h := eval fenv h nil nil t nil.
 
 (* Export and try to do this in ocaml *)
+Require Import Extraction.
 Set Extraction AccessOpaque.
 Extraction "typinf" typinf1 eval1.

@@ -8,6 +8,7 @@ Set Implicit Arguments.
 Require Import Arith List Metatheory.
 Require Import ML_SP_Definitions.
 Require Import ML_SP_Rename.
+Require Omega.
 
 Module MkEval(Cstr:CstrIntf)(Const:CstIntf).
 
@@ -48,6 +49,7 @@ Lemma trm_inst_rec_more : forall tl t1 t n,
   list_forall term tl ->
   trm_open_rec n t1 (trm_inst_rec (S n) tl t) = trm_inst_rec n (t1 :: tl) t.
 Proof.
+  Import Omega.
   intros.
   remember (S n + length tl) as z.
   gen n; induction H; intros; subst; auto.
@@ -100,9 +102,9 @@ Inductive clos_ok : clos -> Prop :=
       List.length cls <= Const.arity c ->
       clos_ok (clos_const c cls).
 (* Reset clos_ok_ind. *)
-Hint Constructors clos_ok.
+Hint Constructors clos_ok : core.
 
-Hint Extern 1 (clos_ok ?x) => solve [list_forall_find clos_ok x].
+Hint Extern 1 (clos_ok ?x) => solve [list_forall_find clos_ok x] : core.
 
 Section ClosOkInd.
 Variable  P : clos -> Prop.
@@ -117,7 +119,7 @@ Hypothesis Hconst : forall c cls,
 
 Lemma clos_ok_ind' : forall c, clos_ok c -> P c.
 Proof.
-  Hint Resolve Habs Hconst.
+  Hint Resolve Habs Hconst : core.
   intros c H; induction c using clos_ind'; inversion* H.
 Qed.
 End ClosOkInd.
@@ -152,7 +154,7 @@ Inductive frame_ok : frame -> Prop :=
     list_forall clos_ok app ->
     closed_n (length benv) trm ->
     frame_ok (Frame benv app trm).
-Hint Constructors frame_ok.
+Hint Constructors frame_ok : core.
 
 Definition is_bvar t :=
   match t with trm_bvar _ => true | _ => false end.
@@ -184,7 +186,7 @@ Inductive eval_res : Set :=
 Inductive result_ok : eval_res -> Prop :=
   | rok_R : forall n cl, clos_ok cl -> result_ok (Result n cl)
   | rok_I : forall fl, list_forall frame_ok fl -> result_ok (Inter fl).
-Hint Constructors result_ok.
+Hint Constructors result_ok : core.
 
 Definition res2trm res :=
   match res with
@@ -203,13 +205,13 @@ Proof.
   constructor.
   auto.
 Qed.
-Hint Resolve clos_ok_def.
+Hint Resolve clos_ok_def : core.
 
 Lemma clos_ok_nil : forall c, clos_ok (clos_const c nil).
 Proof.
   intros; constructor; auto. simpl; omega.
 Qed.
-Hint Resolve clos_ok_nil.
+Hint Resolve clos_ok_nil : core.
 
 Definition trm2clos (benv : list clos) (fenv : env clos) t :=
   match t with
@@ -241,7 +243,7 @@ Proof.
   apply (list_forall_out H).
   apply* nth_In.
 Qed.
-Hint Resolve clos_ok_nth.
+Hint Resolve clos_ok_nth : core.
 
 Inductive equiv_clos : clos -> clos -> Prop :=
   | Equiv_clos_abs : forall t benv t' benv',
@@ -250,7 +252,7 @@ Inductive equiv_clos : clos -> clos -> Prop :=
   | Equiv_clos_const : forall c args args',
       list_forall2 equiv_clos args args' ->
       equiv_clos (clos_const c args) (clos_const c args').
-Hint Constructors equiv_clos.
+Hint Constructors equiv_clos : core.
 
 Lemma equiv_cl : forall cl1 cl2,
   equiv_clos cl1 cl2 -> clos2trm cl1 = clos2trm cl2.
@@ -262,7 +264,7 @@ Proof.
   rewrite* (IHlist_forall lb).
   rewrite* (H0 b).
 Qed.
-Hint Resolve equiv_cl.
+Hint Resolve equiv_cl : core.
 
 Lemma equiv_cls : forall cls1 cls2,
   list_forall2 equiv_clos cls1 cls2 ->
@@ -281,7 +283,7 @@ Proof.
   induction cl using clos_ind'; constructor; auto.
   induction H; auto.
 Qed.
-Hint Resolve equiv_clos_refl.
+Hint Resolve equiv_clos_refl : core.
 
 Lemma equiv_cl_nth : forall n cls1 cls2,
   list_forall2 equiv_clos cls1 cls2 ->
@@ -328,7 +330,7 @@ Proof.
   apply* value_app.
   replace (S (n + length L)) with (n + S (length L)) by omega; auto.
 Qed.
-Hint Resolve clos_ok_value.
+Hint Resolve clos_ok_value : core.
 
 Lemma list_for_n_value : forall n cls,
   list_for_n clos_ok n cls ->
@@ -441,7 +443,7 @@ Proof.
   elimtype False; omega.
 Qed.
 
-Hint Constructors closed_n.
+Hint Constructors closed_n : core.
 
 Lemma closed_n_le : forall m n t, closed_n m t -> m <= n -> closed_n n t.
 Proof.
@@ -538,7 +540,7 @@ Proof.
   apply* typing_app_abs_let.
 Qed.
 
-Hint Resolve term_closed_0 clos_ok_term.
+Hint Resolve term_closed_0 clos_ok_term : core.
 
 Lemma term_closed_n : forall n t,
   term t -> closed_n n t.
@@ -547,7 +549,7 @@ Proof.
   apply* (@closed_n_le 0); omega.
 Qed.
 
-Hint Resolve term_closed_n.
+Hint Resolve term_closed_n : core.
 
 Lemma cln_app_trm : forall n t1 t2,
   closed_n n t1 -> closed_n n t2 -> closed_n n (app_trm t1 t2).
@@ -598,7 +600,7 @@ Proof.
   apply* term_app_trm.
 Qed.
 
-Hint Resolve term_app_trm term_app2trm.
+Hint Resolve term_app_trm term_app2trm : core.
 
 Lemma retypable_app_trm : forall E t1 t2 t3 t4,
   is_abs t1 = false ->
@@ -628,7 +630,7 @@ Proof.
   intros.
   destruct t1; simpl*.
 Qed.
-Hint Resolve is_abs_app_trm.
+Hint Resolve is_abs_app_trm : core.
 
 Lemma app2trm_app : forall t l1 l2,
   app2trm t (l1 ++ l2) = app2trm (app2trm t l1) l2.
@@ -649,7 +651,7 @@ Lemma is_abs_app2trm : forall t args,
 Proof.
   intros; unfold app2trm. apply* is_abs_fold_left_app_trm.
 Qed.
-Hint Resolve is_abs_app2trm.
+Hint Resolve is_abs_app2trm : core.
 
 Lemma retypable_app2trm : forall E t1 t2 args,
   is_abs t1 = false ->
@@ -675,7 +677,7 @@ Proof.
     rewrite* map_length.
   apply* list_forall_map.
 Qed.
-Hint Resolve term_inst_closed.
+Hint Resolve term_inst_closed : core.
 
 Lemma is_bvar_term : forall t, term t -> is_bvar t = false.
 Proof. induction 1; simpl*. Qed.
@@ -744,7 +746,7 @@ Proof.
     rewrite* H.
   destruct H; rewrite* H.
 Qed.
-Hint Resolve is_bvar_app_trm.
+Hint Resolve is_bvar_app_trm : core.
 
 Lemma typing_stack2trm_inv : forall K E fl t1 T,
   K; E |Gc|= stack2trm t1 fl ~: T ->
@@ -825,7 +827,7 @@ Proof.
   auto.
 Qed.
 
-Hint Resolve term_const_app.
+Hint Resolve term_const_app : core.
 
 Lemma clos2trm_const_eq : forall cl c tl,
   clos2trm cl = const_app c tl ->
@@ -865,9 +867,9 @@ Proof.
   rewrite <- (map_length clos2trm).
   refine (closed_n_inst_rec _ _ H).
 Qed.
-Hint Immediate closed_n_inst.
+Hint Immediate closed_n_inst : core.
 
-Hint Resolve list_forall_app.
+Hint Resolve list_forall_app : core.
 
 Hint Rewrite map_app fold_left_app : list.
 
@@ -911,7 +913,7 @@ Proof.
     apply (proj1 fenv_ok _ _ (binds_in H)).
   auto.
 Qed.
-Hint Resolve clos_ok_get.
+Hint Resolve clos_ok_get : core.
 
 Lemma trm2clos_regular : forall benv t,
   list_forall clos_ok benv ->
@@ -921,7 +923,7 @@ Proof.
   intros; destruct t; simpl*.
   inversions* H0.
 Qed.
-Hint Resolve trm2clos_regular.
+Hint Resolve trm2clos_regular : core.
 
 Definition eval_restart h fl res :=
   match res with
@@ -988,7 +990,7 @@ Inductive eval_cont : clos -> list frame -> eval_res -> Prop :=
   | Eval_Frame : forall cl benv args t fl,
       eval_cont cl (Frame benv args t :: fl)
                     (Inter (Frame benv (cl::args) t :: fl)).
-Hint Constructors eval_cont.
+Hint Constructors eval_cont : core.
 
 Lemma eval_cont_ok : forall cl fl,
   eval_cont cl fl (eval_restart 0 fl (Result 0 cl)).
@@ -1039,7 +1041,7 @@ Inductive eval_spec : eval_res -> eval_res -> Prop :=
       eval_spec (Result n cl) (Result (S n) cl)
   | Eval_error : eval_spec (Inter nil) (Inter nil).
 
-Hint Constructors eval_cont eval_spec.
+Hint Constructors eval_cont eval_spec : core.
 
 Lemma eval_spec_ok : forall r,
   result_ok r ->
@@ -1159,7 +1161,7 @@ Proof.
   inversions H0.
   inversions* H4.
 Qed.
-Hint Resolve eval_cont_regular.
+Hint Resolve eval_cont_regular : core.
 
 Lemma eval_regular1 : forall r r',
   result_ok r ->
@@ -1210,7 +1212,7 @@ Proof.
   refine (eval_regular1 H _).
   apply* eval_spec_ok.
 Qed.
-Hint Resolve eval_regular.
+Hint Resolve eval_regular : core.
 
 Lemma concat_empty : forall (A:Set) (K:env A), empty & K = K.
 Proof. intros; symmetry; apply (app_nil_end K). Qed.
@@ -1298,7 +1300,7 @@ Proof.
   destruct t; try discriminate.
         rewrite* inst_n.
         simpl in *. rewrite* H.
-      left; constructor.
+      left*; constructor.
     rewrite* <- H.
   rewrite* <- H.
 Qed.
@@ -1325,7 +1327,7 @@ Proof.
   induction l using rev_ind; auto.
   rewrite* const_app_app.
 Qed.
-Hint Resolve is_abs_const_app.
+Hint Resolve is_abs_const_app : core.
 
 Lemma eval_cont_sound : forall cl fl r K T,
   K; E |Gc|= stack2trm (clos2trm cl) fl ~: T ->
@@ -1394,7 +1396,7 @@ Proof.
   apply* eval_cont_sound.
   rewrite <- H11. clear H12.
   refine (retypable_stack2trm _ _ _ H1); auto.
-  unfold app2trm. simpl fold_left_app.
+  unfold app2trm.
   intro; intros.
   apply* retypable_clos.
   (* const *)
@@ -1519,9 +1521,9 @@ Proof.
   intros.
   unfold inst, trm_inst in H. simpl in H. rewrite <- minus_n_O in H.
   destruct (le_lt_dec (length (List.map clos2trm benv)) n).
-    right. rewrite nth_overflow in H; auto.
+    right*. rewrite nth_overflow in H; auto.
   rewrite <- (map_nth clos2trm).
-  left.
+  left*.
   rewrite (nth_indep _ _ (trm_bvar n) l). auto.
 Qed.
 
@@ -1568,11 +1570,11 @@ Proof.
   gen t; induction Val; intros.
       destruct t; try discriminate; exists 1; simpl;
         destruct l; simpl in Hlen; try solve [elimtype False; omega];
-          esplit; split*.
+          esplit; split2*.
       simpl.
       destruct (inst_clos2trm _ _ Heqt1). congruence. discriminate.
     exists 1; exists (clos_const c l).
-    split*.
+    split2*.
     apply* eval_cst_args.
     simpl.
     destruct t; try discriminate; simpl.
@@ -1585,7 +1587,7 @@ Proof.
   destruct t; try discriminate.
     destruct (inst_clos2trm _ _ Heqt1); try discriminate.
     exists 1; simpl.
-    destruct l. esplit; split*.
+    destruct l. esplit; split2*.
     destruct (nth n0 benv clos_def); try discriminate.
     simpl.
     rewrite <- plus_n_Sm.
@@ -1597,7 +1599,7 @@ Proof.
       rewrite map_length in H1.
       omega.
     simpl.
-    esplit; split*.
+    esplit; split2*.
     simpl. unfold const_app. rewrite map_app; rewrite fold_left_app. simpl.
     rewrite* H.
   unfold trm_inst in Heqt1; simpl in Heqt1.
@@ -1614,7 +1616,7 @@ Proof.
   rewrite Eq2.
   simpl.
   rewrite Eq1.
-  esplit; split*.
+  esplit; split2*.
   rewrite Eq1'. simpl. rewrite* Eq2'.
 Qed.
 
@@ -1684,7 +1686,7 @@ Proof.
   rewrite* map_length.
   apply* list_forall_map.
 Qed.
-Hint Resolve equiv_trm_abs.
+Hint Resolve equiv_trm_abs : core.
 
 Inductive equiv_result : eval_res -> eval_res -> Prop :=
   | Equiv_result : forall n cl1 cl2,
@@ -1693,7 +1695,7 @@ Inductive equiv_result : eval_res -> eval_res -> Prop :=
   | Equiv_inter  : forall fl1 fl2,
       list_forall2 equiv_frame fl1 fl2 ->
       equiv_result (Inter fl1) (Inter fl2).
-Hint Constructors equiv_result.
+Hint Constructors equiv_result : core.
 
 Lemma clos2trm_equiv : forall cl1 cl2,
   clos2trm cl1 = clos2trm cl2 ->
@@ -1712,7 +1714,7 @@ Proof.
   inversions H2.
   auto*.
 Qed.
-Hint Immediate clos2trm_equiv.
+Hint Immediate clos2trm_equiv : core.
 
 Lemma map_clos2trm_equiv : forall l1 l2,
   List.map clos2trm l1 = List.map clos2trm l2 ->
@@ -1721,12 +1723,12 @@ Proof.
   induction l1; destruct l2; simpl; intros; try discriminate; auto.
   inversions* H.
 Qed.
-Hint Resolve map_clos2trm_equiv.
+Hint Resolve map_clos2trm_equiv : core.
 
-Hint Extern 1 (equiv_result _ _) => solve [constructor; simpl; auto].
-Hint Extern 1 (list_forall2 _ _ _) => solve [constructor; simpl; auto].
-Hint Extern 1 (equiv_clos _ _) => solve [constructor; simpl; auto].
-Hint Extern 1 (equiv_frame _ _) => solve [constructor; simpl; auto].
+Hint Extern 1 (equiv_result _ _) => solve [constructor; simpl; auto] : core.
+Hint Extern 1 (list_forall2 _ _ _) => solve [constructor; simpl; auto] : core.
+Hint Extern 1 (equiv_clos _ _) => solve [constructor; simpl; auto] : core.
+Hint Extern 1 (equiv_frame _ _) => solve [constructor; simpl; auto] : core.
 
 Definition eval_res_cont r :=
   match r with
@@ -1765,10 +1767,10 @@ Proof.
       destruct (const_app_eq _ _ _ _ H); subst; clear H.
       destruct l; try discriminate.
       exists (trm_bvar n). exists 0.
-      split*.
+      split2*.
     inversions HI; clear HI.
     exists (trm_cst c); exists 0.
-    split*.
+    split2*.
   rewrite const_app_app in HI.
   destruct t; try discriminate.
     clear IHtl.
@@ -1779,7 +1781,7 @@ Proof.
     destruct (const_app_eq _ _ _ _ H); subst; clear H.
     exists l; exists (@nil clos).
     exists (trm_bvar n); exists 0.
-    split*. split*. split*.
+    split2*. split2*. split2*.
     clear -H1.
     rename l into cls1. rewrite <- app_nil_end. gen cls1.
     induction (tl++x::nil); intros; destruct cls1; try discriminate.
@@ -1793,13 +1795,13 @@ Proof.
     as [cls1 [cls2 [t1' [h1 [eq1 [fv1 [eq1' eq1'']]]]]]].
   exists cls1. exists (cls2 ++ cl2 :: nil).
   exists t1'; exists (S h2 + h1).
-  split*.
-  split*.
+  split2*.
+  split2*.
   simpl.
   rewrite <- eval_restart_ok'.
   rewrite eq2a. simpl.
   rewrite app_ass.
-  split*.
+  split2*.
   rewrite <- app_ass.
   rewrite map_app. simpl.
   rewrite eq1''; rewrite* eq2'.
@@ -1812,35 +1814,35 @@ Proof.
   constructor.
   clear -H H2. gen l0; induction H; intros; inversions H2; auto.
 Qed.
-Hint Immediate equiv_clos_sym.
+Hint Immediate equiv_clos_sym : core.
 
 Lemma equiv_cls_sym : forall cl1 cl2,
   list_forall2 equiv_clos cl1 cl2 -> list_forall2 equiv_clos cl2 cl1.
 Proof.
   induction 1; auto.
 Qed.
-Hint Immediate equiv_cls_sym.
+Hint Immediate equiv_cls_sym : core.
 
 Lemma equiv_frame_sym : forall f1 f2,
   equiv_frame f1 f2 -> equiv_frame f2 f1.
 Proof.
   intros [benv1 args1 t1] [benv2 args2 t2] [Ht Hargs]; split; simpl in *; auto.
 Qed.
-Hint Immediate equiv_frame_sym.
+Hint Immediate equiv_frame_sym : core.
 
 Lemma equiv_fl_sym : forall f1 f2,
   list_forall2 equiv_frame f1 f2 -> list_forall2 equiv_frame f2 f1.
 Proof.
   induction 1; auto.
 Qed.
-Hint Immediate equiv_fl_sym.
+Hint Immediate equiv_fl_sym : core.
 
 Lemma equiv_result_sym : forall r1 r2,
   equiv_result r1 r2 -> equiv_result r2 r1.
 Proof.
   induction 1; constructor; auto.
 Qed.
-Hint Immediate equiv_result_sym.
+Hint Immediate equiv_result_sym : core.
 
 Lemma eval_bisim_sym : forall r1 r2,
   (exists h1, exists h2,
@@ -2003,11 +2005,11 @@ Proof.
   inversions H; clear H.
     exists h0; exists h0; intuition.
   gen a b la lb; induction h0; intros.
-    exists 0; exists 0; split*; split*.
+    exists 0; exists 0; split2*; split2*.
     unfold eval_restart; simpl.
     destruct a; destruct b; destruct H0.
     simpl in *. auto.
-  destruct* (IHh0 _ _ H0 _ Hr _ H1 Hr') as [h [h' [Hh [Hh' Eqr]]]]; clear IHh0.
+  destruct* (IHh0 _ _ H0 _ Hr _ Hr') as [h [h' [Hh [Hh' Eqr]]]]; clear IHh0.
   destruct a as [benv args t]; destruct b as [benv' args' t'].
   destruct H0 as [Eqt Eqargs]. simpl in *.
   repeat rewrite <- app_nil_end in *.
@@ -2133,7 +2135,7 @@ Proof.
   introv Hcls HI.
   gen args t; induction cls using rev_ind; simpl; intros.
     exists (@nil trm); exists (@nil clos); exists t; exists 0.
-    simpl. split*.
+    simpl. split2*.
   rewrite map_app in HI.
   rewrite fold_left_app in HI.
   destruct t; try discriminate.
@@ -2266,11 +2268,11 @@ Proof.
           inversions H4; clear H4.
           puts (trm2clos_regular Hbenv' Ht'). rewrite <- H2 in H4.
           inversions H4; clear H4.
-          left; apply* equiv_result_restart0.
+          left*; apply* equiv_result_restart0.
         inversions H13; inversions H10; clear H10 H13 H9 H12.
         inversions H14; inversions H11; clear H11 H14.
-        left; apply* equiv_result_restart0.
-      right; esplit; esplit; split*. esplit; split*.
+        left*; apply* equiv_result_restart0.
+      right*; esplit; esplit; split2*. esplit; split2*.
       rewrite* <- app_nil_end.
     clear IHargs1'.
     poses Eqt' Eqt.
@@ -2278,7 +2280,7 @@ Proof.
     destruct t; try discriminate.
     rewrite inst_n in *; auto. simpl.
     destruct (nth n benv clos_def); try discriminate.
-    right; esplit; esplit; split*.
+    right*; esplit; esplit; split2*.
     clear Eqt'.
     simpl in Eqt; unfold const_app in Eqt.
     destruct t'; try discriminate.
@@ -2575,7 +2577,7 @@ Proof.
        destruct Hcls3 as [Hcls3]. subst cls4.
        assert (CLS: list_for_n clos_ok (S(Const.arity c)) cls3).
          clear Typ Typ' Typ''.
-         split*.
+         split2*.
          rewrite Hcls3.
          clear -Eq1 H2 fenv_ok Hbenv.
          inversions H2; clear H2.
@@ -2904,7 +2906,7 @@ Proof.
     replace (@nil trm) with (List.map clos2trm nil) in H1 by auto.
     destruct (eval_value _ _ H1) as [h [cl [Eq Hcl]]].
     unfold inst in Hcl. simpl in Hcl. rewrite trm_inst_nil in Hcl.
-    esplit; esplit; split*.
+    esplit; esplit; split2*.
   puts (preservation_result (typing_gc_any H2) H).
   destruct (typing_remove_gc H3 {} (F:=E)) as [K' [_ Typ]].
       intro; intros. exists (@nil kind). rewrite* <- app_nil_end.
@@ -2927,7 +2929,7 @@ Proof.
   rewrite <- eval_restart_ok' in H4. simpl eval in H4.
   puts (eval_count_rev _ H5 (sym_equal H4)).
   simpl in H7.
-  esplit; esplit; split*.
+  esplit; esplit; split2*.
 Qed.
 
 End Soundness.

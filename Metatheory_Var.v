@@ -28,7 +28,7 @@ Declare Module Var_as_OT : UsualOrderedType with Definition t := var.
 (** We can form sets of variables. *)
 
 Declare Module Import VarSet : FinSet with Module E := Var_as_OT.
-Open Local Scope set_scope.
+Local Open Scope set_scope.
 
 Definition vars := VarSet.S.t.
 
@@ -51,7 +51,7 @@ End VARIABLES.
 
 Module Variables : VARIABLES.
 
-Open Scope Z_scope.
+Local Open Scope Z_scope.
 
 Definition var := Z.
 
@@ -65,16 +65,18 @@ Module Var_as_OT : UsualOrderedType with Definition t := var := Z_as_OT.
 Module Import VarSet : FinSet with Module E := Var_as_OT :=
   Lib_FinSetImpl.Make Var_as_OT.
 
-Open Local Scope set_scope.
+Local Open Scope set_scope.
 
 Definition vars := VarSet.S.t.
 
+Import ZArith.
+
 Lemma max_lt_l :
-  forall (x y z : Z), x <= y -> x <= Zmax y z.
+  forall (x y z : Z), x <= y -> x <= Z.max y z.
 Proof.
   intros.
-  apply (Zle_trans _ _ _ H).
-  apply Zle_max_l.
+  apply (Z.le_trans _ _ _ H).
+  apply Z.le_max_l.
 Qed.
 
 Lemma finite_nat_list_max : forall (l : list Z),
@@ -83,8 +85,8 @@ Proof.
   induction l as [ | l ls IHl ].
   exists 0; intros x H; inversion H.
   inversion IHl as [x H].
-  exists (Zmax x l); intros y J; simpl in J; inversion J.
-    subst; apply Zle_max_r.
+  exists (Z.max x l); intros y J; simpl in J; inversion J.
+    subst; apply Z.le_max_r.
     assert (y <= x); auto using max_lt_l.
 Qed.
 
@@ -149,7 +151,7 @@ Fixpoint fresh (L : vars) (n : nat) (xs : list var) {struct xs} : Prop :=
   | _,_ => False
   end.
 
-Hint Extern 1 (fresh _ _ _) => simpl.
+Hint Extern 1 (fresh _ _ _) => simpl : core.
 
 (** Triviality : If a list xs contains n fresh variables, then
     the length of xs is n. *)
