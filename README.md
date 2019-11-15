@@ -57,7 +57,7 @@ $ ocaml
     [link](http://www.chargueraud.org/arthur/research/2007/binders/)
 
 [3] Jacques Garrigue: A Certified Interpreter of ML with Structural
-                      Polymorphism and Recursive Types
+                      Polymorphism and Recursive Types.
     Mathematical Structures in Computer Science, November 2014, pages 1-25.
     Earlier version presented at APLAS'10, Shanghai, China, November 2010.
     [link](http://www.math.nagoya-u.ac.jp/~garrigue/papers/aplas2010.html)
