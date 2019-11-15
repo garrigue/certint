@@ -1,5 +1,5 @@
-# A Certified Interpreter for ML with Structural Polymorphism
-## Jacques Garrigue, updated November 2019
+## A Certified Interpreter for ML with Structural Polymorphism
+### Jacques Garrigue, updated November 2019
 
 The files in this archive contain a proof of type soundness for structural
 polymorphism based on local constraints [1], together with soundness
@@ -9,17 +9,17 @@ Chargueraud, which accompanied "Engineering formal metatheory" [2].
 The library files (Lib_* and Metatheory*) are almost untouched.
 For compatibility we also copied FSetList.v from Coq 8.2.
 The new files are as follows.
-* Metatheory_SP: new generic lemmas used in developments
-* Cardinal: lemmas about finite set cardinals
-* ML_SP_Definitions: basic definitions
-* ML_SP_Infrastructure: structural lemmas on kinds and types
-* ML_SP_Soundness: lemmas on derivations and proof of type soundness
-* ML_SP_Eval: proof of type soundness for a stack-based evaluator
-* ML_SP_Rename: renaming lemmas, and Gc elimination
-* ML_SP_Unify: soundness and completeness of unification
-* ML_SP_Inference: soundness and principality of type inference
-* ML_SP_Domain: instantiation of all the above proofs to polymorphic variants
-* ML_SP_Unify/Inference_wf: termination counters are in Prop
+* `Metatheory_SP`: new generic lemmas used in developments
+* `Cardinal`: lemmas about finite set cardinals
+* `ML_SP_Definitions`: basic definitions
+* `ML_SP_Infrastructure`: structural lemmas on kinds and types
+* `ML_SP_Soundness`: lemmas on derivations and proof of type soundness
+* `ML_SP_Eval`: proof of type soundness for a stack-based evaluator
+* `ML_SP_Rename`: renaming lemmas, and Gc elimination
+* `ML_SP_Unify`: soundness and completeness of unification
+* `ML_SP_Inference`: soundness and principality of type inference
+* `ML_SP_Domain`: instantiation of all the above proofs to polymorphic variants
+* `ML_SP_Unify/Inference_wf`: termination counters are in Prop
 
 Of the above, Definitions, Infrastructure and Soundness are base on
 the core ML proof, but were heavily modified.
