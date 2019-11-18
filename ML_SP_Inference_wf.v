@@ -1362,8 +1362,6 @@ Proof.
   intros. unfold close_fvk. apply close_fvars_subset.
 Qed.
 
-Require Import Cardinal.
-
 Lemma cardinal_env : forall (A:Set) (K:env A),
   ok K -> S.cardinal (dom K) = length K.
 Proof.
