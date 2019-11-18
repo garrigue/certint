@@ -9,6 +9,7 @@ Require Import Arith List Metatheory.
 Require Import ML_SP_Definitions.
 Require Import ML_SP_Rename.
 Require Omega.
+Require Import Relations.
 
 Module MkEval(Cstr:CstrIntf)(Const:CstIntf).
 
@@ -341,7 +342,7 @@ Proof.
 Qed.
 
 Module Type SndHypIntf2.
-  Include Type SndHypIntf.
+  Include SndHypIntf.
   Parameter reduce_clos : Const.const -> list clos -> clos * list clos.
   Parameter reduce_clos_regular : forall c cls cl' cls',
     reduce_clos c cls = (cl', cls') ->
@@ -1488,8 +1489,6 @@ Proof.
   unfold app2trm; simpl.
   unfold inst; rewrite* trm_inst_nil.
 Qed.
-
-Require Import Relations.
 
 Definition is_app t := match t with trm_app _ _ => true | _ => false end.
 Lemma trm_inst_inv_app : forall benv t t1 t2,
