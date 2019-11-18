@@ -68,7 +68,7 @@ End Definitions.
 (* ********************************************************************** *)
 (** ** Notations *)
 
-Arguments empty [A].
+Arguments empty {A}.
 
 (** [x ~ a] is the notation for a singleton environment mapping x to a. *)
 
