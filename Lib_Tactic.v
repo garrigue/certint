@@ -254,10 +254,7 @@ Tactic Notation "destructi" constr(T) "as" simple_intropattern(I) :=
 
 (** [destructs T] calls [destruct] recursively on [T] as long as possible *) 
 
-Ltac destructs H :=
-  let X := fresh in let Y := fresh in  
-  first [ destruct H as [X Y]; destructs X; destructs Y | idtac ].
-
+Ltac destructs H := repeat destruct H.
 
 (* ********************************************************************** *)
 (** * Introduction *)
