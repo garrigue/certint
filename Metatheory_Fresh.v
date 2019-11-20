@@ -9,7 +9,7 @@ Require Import Lib_Tactic List Metatheory_Var.
 
 Ltac fresh_simpl_to_notin_in_context :=
   repeat (match goal with H: fresh _ _ _ |- _ =>
-    progress (simpl in H; destructs H) end).
+    progress (simpl in H; destruct H) end).
 
 
 (* ********************************************************************** *)
