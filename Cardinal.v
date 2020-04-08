@@ -56,7 +56,7 @@ Proof.
     inversion H3.
   destruct (S.E.compare a a0).
       elim (sort_lt_notin H1 (cons_leA _ _ _ _ l1)).
-      apply* (proj1 (H2 a)).
+      apply* (proj1 (H2 a)). auto with ordered_type.
     rewrite <- e in *. clear e a0.
     rewrite* (IHSorted l0).
     intro; split; intro.
@@ -71,7 +71,7 @@ Proof.
     use (proj2 (H2 a0) (InA_cons_tl a H5)).
     inversions* H6.
   elim (sort_lt_notin (cons_sort H H0) (cons_leA _ _ _ _ l1)).
-  apply* (proj2 (H2 a0)).
+  apply* (proj2 (H2 a0)). auto with ordered_type.
 Qed.
 
 Lemma remove_union : forall a L1 L2,
@@ -226,7 +226,7 @@ Proof.
       apply S.elements_1.
       apply* S.remove_2.
       apply S.elements_2.
-      rewrite* <- Heqelts.
+      rewrite* <- Heqelts. auto with ordered_type.
     inversions H. elim n0; auto.
     eauto with sets.
   rewrite* <- (@elements_tl a0 elts L).
@@ -250,6 +250,7 @@ Proof.
   assert (a \in L2).
     apply S.elements_2.
     rewrite* <- Heqelts2.
+    auto with ordered_type.
   assert (InA S.E.eq a elts).
     subst.
     auto with sets.
@@ -343,6 +344,7 @@ Proof.
     apply H.
     apply S.elements_2.
     rewrite* <- Heqelts1.
+    auto with ordered_type.
   rewrite <- (cardinal_remove H3).
   omega.
 Qed.
@@ -353,7 +355,7 @@ Proof.
   case_eq (S.elements {}); intros. simpl*.
   assert (In e (e::l)) by auto.
   rewrite <- H in H0.
-  assert (e \in {}). auto with sets.
+  assert (e \in {}). auto with sets ordered_type.
   elim (in_empty H1).
 Qed.
 

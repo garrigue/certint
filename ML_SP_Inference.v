@@ -1146,7 +1146,7 @@ Proof.
   elim (sort_lt_notin H0 H).
   puts (mkset_in _ Hy').
   clear -H1.
-  induction l; auto.
+  induction l; auto with ordered_type.
 Qed.
 
 Lemma typing_let_fresh : forall T1 l l0 K' e e0 e1 e2 fvT1 fvE,
@@ -2267,7 +2267,7 @@ Proof.
   unfold vars_subst.
   remember (S.elements {}) as l.
   destruct* l.
-  assert (SetoidList.InA E.eq e (e::l)) by auto.
+  assert (SetoidList.InA E.eq e (e::l)) by auto with ordered_type.
   rewrite Heql in H.
   puts (S.elements_2 H). elim (in_empty H0).
 Qed.

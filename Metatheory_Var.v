@@ -69,8 +69,6 @@ Local Open Scope set_scope.
 
 Definition vars := VarSet.S.t.
 
-Import ZArith.
-
 Lemma max_lt_l :
   forall (x y z : Z), x <= y -> x <= Z.max y z.
 Proof.
@@ -326,5 +324,3 @@ Tactic Notation "inst_notin" constr(lemma) constr(var)
 Tactic Notation "inst_notin" "*" constr(lemma) constr(var)
                 "as" ident(hyp_name) :=
   inst_notin lemma var as hyp_name; auto*.
-
-

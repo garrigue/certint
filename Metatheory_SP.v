@@ -1281,9 +1281,9 @@ Proof.
   rewrite <- Heql in H1.
   inversions H1. inversions H5.
   assert (e \in {{x}}). apply S.elements_2.
-    rewrite* <- Heql.
+    rewrite* <- Heql. auto with ordered_type.
   assert (e0 \in {{x}}). apply S.elements_2.
-    rewrite* <- Heql.
+    rewrite* <- Heql. auto with ordered_type.
   rewrite <- (S.singleton_1 H2) in H3.
   rewrite <- (S.singleton_1 H6) in H3.
   elim (E.lt_not_eq _ _ H3). reflexivity.
