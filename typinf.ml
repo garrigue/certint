@@ -119,7 +119,7 @@ module Nat =
             | S _ -> Right)
     | S n0 -> (match m with
                | O -> Right
-               | S m0 -> eq_dec n0 m0)
+               | S n1 -> eq_dec n0 n1)
  end
 
 (** val nth : nat -> 'a1 list -> 'a1 -> 'a1 **)
@@ -184,7 +184,7 @@ let rec le_lt_dec n m =
   | O -> Left
   | S n0 -> (match m with
              | O -> Right
-             | S m0 -> le_lt_dec n0 m0)
+             | S n1 -> le_lt_dec n0 n1)
 
 type positive =
 | XI of positive
@@ -378,12 +378,12 @@ module Z =
     | Z0 -> (match y with
              | Z0 -> Left
              | _ -> Right)
-    | Zpos x0 -> (match y with
-                  | Zpos p0 -> Pos.eq_dec x0 p0
-                  | _ -> Right)
-    | Zneg x0 -> (match y with
-                  | Zneg p0 -> Pos.eq_dec x0 p0
-                  | _ -> Right)
+    | Zpos p -> (match y with
+                 | Zpos p0 -> Pos.eq_dec p p0
+                 | _ -> Right)
+    | Zneg p -> (match y with
+                 | Zneg p0 -> Pos.eq_dec p p0
+                 | _ -> Right)
  end
 
 type 'x compare0 =
@@ -735,10 +735,10 @@ module Raw =
     | Cons (y, l0) ->
       (match s' with
        | Nil -> GT
-       | Cons (a', l') ->
-         (match X.compare y a' with
+       | Cons (a, l1) ->
+         (match X.compare y a with
           | LT -> LT
-          | EQ -> (match compare l0 l' with
+          | EQ -> (match compare l0 l1 with
                    | LT -> LT
                    | EQ -> EQ
                    | GT -> GT)
@@ -1260,8 +1260,8 @@ module MkDefs =
   (** val ckind_map_spec : (typ -> typ) -> ckind -> ckind **)
 
   let ckind_map_spec f k =
-    let { kind_cstr = kc; kind_rel = kr } = k in
-    { kind_cstr = kc; kind_rel = (map_snd f kr) }
+    let { kind_cstr = kind_cstr0; kind_rel = kind_rel0 } = k in
+    { kind_cstr = kind_cstr0; kind_rel = (map_snd f kind_rel0) }
 
   (** val ckind_map : (typ -> typ) -> ckind -> ckind **)
 
@@ -1593,16 +1593,16 @@ module MkEval =
       clos list -> 'a1) -> clos -> 'a1 **)
 
   let clos_rect f f0 = function
-  | Coq_clos_abs (x, x0) -> f x x0
-  | Coq_clos_const (x, x0) -> f0 x x0
+  | Coq_clos_abs (t0, l) -> f t0 l
+  | Coq_clos_const (c0, l) -> f0 c0 l
 
   (** val clos_rec :
       (Rename.Sound.Infra.Defs.trm -> clos list -> 'a1) -> (Const.const ->
       clos list -> 'a1) -> clos -> 'a1 **)
 
   let clos_rec f f0 = function
-  | Coq_clos_abs (x, x0) -> f x x0
-  | Coq_clos_const (x, x0) -> f0 x x0
+  | Coq_clos_abs (t0, l) -> f t0 l
+  | Coq_clos_const (c0, l) -> f0 c0 l
 
   (** val clos2trm : clos -> Rename.Sound.Infra.Defs.trm **)
 
@@ -1680,15 +1680,15 @@ module MkEval =
       (nat -> clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1 **)
 
   let eval_res_rect f f0 = function
-  | Result (x, x0) -> f x x0
-  | Inter x -> f0 x
+  | Result (n, c) -> f n c
+  | Inter l -> f0 l
 
   (** val eval_res_rec :
       (nat -> clos -> 'a1) -> (frame list -> 'a1) -> eval_res -> 'a1 **)
 
   let eval_res_rec f f0 = function
-  | Result (x, x0) -> f x x0
-  | Inter x -> f0 x
+  | Result (n, c) -> f n c
+  | Inter l -> f0 l
 
   (** val res2trm : eval_res -> Rename.Sound.Infra.Defs.trm **)
 
@@ -1968,7 +1968,7 @@ module MkUnify =
       -> 'a1) -> 'a1 -> unif_res -> 'a1 **)
 
   let unif_res_rect f f0 = function
-  | Uok (x, x0, x1) -> f x x0 x1
+  | Uok (l, k, s) -> f l k s
   | Ufail -> f0
 
   (** val unif_res_rec :
@@ -1978,7 +1978,7 @@ module MkUnify =
       -> 'a1) -> 'a1 -> unif_res -> 'a1 **)
 
   let unif_res_rec f f0 = function
-  | Uok (x, x0, x1) -> f x x0 x1
+  | Uok (l, k, s) -> f l k s
   | Ufail -> f0
 
   (** val unify_vars :
@@ -2200,7 +2200,7 @@ module MkInfer =
     let unify_dep t1 t2 k s =
       let o = Unify.unify (Cons ((Pair (t1, t2)), Nil)) k s in
       (match o with
-       | Some p -> Inleft p
+       | Some a -> Inleft a
        | None -> Inright)
 
     (** val close_fvars :
@@ -2571,7 +2571,7 @@ module Cstr =
      | Left -> Right
      | Right ->
        (match c.cstr_high with
-        | Some l -> set_incl Nat.eq_dec c.cstr_low l
+        | Some a -> set_incl Nat.eq_dec c.cstr_low a
         | None -> Left))
  end
 
@@ -2589,10 +2589,10 @@ module Const =
       -> __ -> 'a1) -> (Cstr.attr -> 'a1) -> 'a1 -> ops -> 'a1 **)
 
   let ops_rect f f0 f1 f2 f3 = function
-  | Coq_tag x -> f x
-  | Coq_matches x -> f0 x __
-  | Coq_record x -> f1 x __
-  | Coq_sub x -> f2 x
+  | Coq_tag a -> f a
+  | Coq_matches l -> f0 l __
+  | Coq_record l -> f1 l __
+  | Coq_sub a -> f2 a
   | Coq_recf -> f3
 
   (** val ops_rec :
@@ -2600,10 +2600,10 @@ module Const =
       -> __ -> 'a1) -> (Cstr.attr -> 'a1) -> 'a1 -> ops -> 'a1 **)
 
   let ops_rec f f0 f1 f2 f3 = function
-  | Coq_tag x -> f x
-  | Coq_matches x -> f0 x __
-  | Coq_record x -> f1 x __
-  | Coq_sub x -> f2 x
+  | Coq_tag a -> f a
+  | Coq_matches l -> f0 l __
+  | Coq_record l -> f1 l __
+  | Coq_sub a -> f2 a
   | Coq_recf -> f3
 
   type const = ops
@@ -2839,9 +2839,9 @@ type 'a decidable0 = 'a -> sumbool
 let rec ok_dec = function
 | Nil -> Left
 | Cons (y, l0) ->
-  let Pair (v, _) = y in
+  let Pair (a, _) = y in
   (match ok_dec l0 with
-   | Left -> (match Env.get v l0 with
+   | Left -> (match Env.get a l0 with
               | Some _ -> Right
               | None -> Left)
    | Right -> Right)
@@ -2872,16 +2872,16 @@ let rec list_forall_dec hP = function
     Infer.Unify.MyEval.Rename.Sound.Infra.Defs.sch decidable0 **)
 
 let scheme_dec x =
-  let { Infer.Unify.MyEval.Rename.Sound.Infra.Defs.sch_type = t0;
-    Infer.Unify.MyEval.Rename.Sound.Infra.Defs.sch_kinds = ks } = x
+  let { Infer.Unify.MyEval.Rename.Sound.Infra.Defs.sch_type = sch_type0;
+    Infer.Unify.MyEval.Rename.Sound.Infra.Defs.sch_kinds = sch_kinds0 } = x
   in
-  let n = length ks in
-  let s = type_n_dec n t0 in
+  let n = length sch_kinds0 in
+  let s = type_n_dec n sch_type0 in
   (match s with
    | Left ->
      let h = list_forall_dec (type_n_dec n) in
      list_forall_dec (fun k ->
-       h (Infer.Unify.MyEval.Rename.Sound.Infra.Defs.kind_types k)) ks
+       h (Infer.Unify.MyEval.Rename.Sound.Infra.Defs.kind_types k)) sch_kinds0
    | Right -> Right)
 
 (** val env_prop_dec : 'a1 decidable0 -> 'a1 Env.env decidable0 **)
@@ -2889,8 +2889,8 @@ let scheme_dec x =
 let rec env_prop_dec hP = function
 | Nil -> Left
 | Cons (y, l) ->
-  let Pair (_, a) = y in
-  let s = hP a in (match s with
+  let Pair (_, b) = y in
+  let s = hP b in (match s with
                    | Left -> env_prop_dec hP l
                    | Right -> Right)
 
@@ -2911,7 +2911,7 @@ let typinf1 e t0 =
        (match s0 with
         | Left ->
           (match Infer2.typinf' e t0 with
-           | Some p -> Inl p
+           | Some a -> Inl a
            | None -> Inr Right)
         | Right -> Inr Right)
      | Right -> Inr Right)
